@@ -1,148 +1,197 @@
 # Reporting Dashboard Handbook
 
 ## 1. Overview
-The eSTORE® Common App Reporting Dashboard brings together the bank's production, deposit, lending, and document insights in one guided workspace. Sidebar groupings such as “Basic,” “Reports,” and “Loans & Deposits Reports” map business roles to the pages they open, while the fixed header keeps the brand and page filters in view for every decision-maker.【F:src/Components/SidebarComponent.jsx†L24-L111】【F:src/App.jsx†L493-L507】
-
-The handbook is written for branch leaders, market executives, analysts, and any business stakeholder who tracks KPI movement without touching SQL or code. Each section below explains the experience these users see and the insight they can gather from the dashboard cards, charts, and tables.
+The eSTORE® Common App Reporting Dashboard gives business teams a single workspace that switches views through the `showPage` state machine in `App.jsx`, so every navigation command resolves to the correct report screen without reloading the application.【F:src/App.jsx†L35-L143】 The navigation catalog returned by `ReportHeaderComponent` lists every page, icon, and command in one place, allowing analysts to reach analytics, lending, deposits, and operational tables with a single click.【F:src/Components/reportHeaderComponent.jsx†L9-L138】 Sidebar groupings such as “Basic,” “Reports,” and “Loans & Deposits Reports” mirror the intended audiences—analysts, branch leaders, and executives—while the sidebar welcome message personalizes the workspace for signed-in users.【F:src/Components/SidebarComponent.jsx†L24-L107】 Every page ends with the `ReportFooterComponent`, which anchors the handbook in First National Bank branding for an official look and feel.【F:src/Components/reportFooterComponent.jsx†L4-L11】
 
 ## 2. Login & Access
-The landing screen offers two sign-in paths: a form-based username and password workflow plus Microsoft single sign-on (SSO). Both options sit inside a branded welcome panel that acknowledges successful authentication and error conditions in plain language.【F:src/Components/reportLoginComponent.jsx†L22-L218】
+**Standard login.** Users enter a username and password that post to `/login`, where successful validation stores a token, expiration timestamp, and display name in local storage for reuse across page loads.【F:src/Services/AuthorizationService.jsx†L15-L68】 Behind the scenes, the Flask service binds to the corporate LDAP server, authenticates with NTLM, retrieves display information, assigns a role, and returns a signed JWT so downstream chart calls respect access scope.【F:api-server/serve.py†L260-L307】 Role assignment differentiates the administrator and user experiences by inspecting membership in `grp_SSO_DIS_ITBSReportAdmin` and `grp_SSO_DIS_ITBSReportUser`, ensuring the handbook can describe elevated export or data privileges in plain language.【F:api-server/role_filter.py†L3-L35】
 
-* **Standard login** – Credentials post to the `/login` endpoint. Successful validation stores a time-bounded token, the user’s display name, and a calculated expiration timestamp in browser storage so the session persists across page loads.【F:src/Services/AuthorizationService.jsx†L10-L33】
-* **Microsoft SSO** – Business users can launch a Microsoft popup, reuse an already cached account, and sign out when done. The flow sets the same display name, token, and expiration markers before refreshing the app so the rest of the dashboard opens immediately.【F:src/Components/reportLoginComponent.jsx†L63-L218】
+**Microsoft SSO.** The login panel also restores cached Microsoft accounts, opens an SSO popup when needed, prevents double interactions with a busy state, and supports sign-out directly from the dashboard.【F:src/Components/reportLoginComponent.jsx†L30-L219】 These flows use the MSAL helpers to initialize the client, listen for login/logout events, recover cached identities, and fall back to redirects if popups are blocked; all configuration is pulled from the `/msalConfig` endpoint so environment-specific IDs stay centralized.【F:src/Services/msalInstance.jsx†L1-L131】【F:api-server/serve.py†L234-L247】
 
-### Session handling and caching in plain terms
-* **What is stored?** The browser keeps your security token, its expiration time, your preferred start/end dates, and whether you filtered for consumer or business metrics, so the dashboard remembers your context the next time you open it.【F:src/App.jsx†L35-L76】【F:src/Services/AuthorizationService.jsx†L26-L58】
-* **How long is it valid?** Each login sets a timer based on the configured session timeout minutes. When that timer passes, the token is cleared and you will be prompted to sign in again to protect secure data.【F:src/Services/AuthorizationService.jsx†L26-L58】
-* **Why does caching help?** Frequently viewed chart data is temporarily saved on the server for up to 24 hours. That means repeat visits feel fast, while longer refreshes only occur when data is recalculated or filters change.【F:api-server/cache_manager.py†L10-L44】【F:api-server/serve.py†L124-L208】
-* **Balancing freshness vs. speed** – When you adjust dates or apply a new branch filter, the system requests a fresh dataset. Otherwise it serves the cached copy, striking a balance between up-to-the-minute numbers and responsive navigation.【F:src/Services/ChartDataService.jsx†L1-L35】【F:api-server/serve.py†L158-L208】
+**Session handling & saved filters.** Tokens and expiration timestamps live in local storage and are cleared once the timeout passes, so periodic reauthentication is expected to protect sensitive data.【F:src/Services/AuthorizationService.jsx†L26-L68】 After each login the app refreshes, regenerating valid tokens before any chart calls fire.【F:src/Components/reportLoginComponent.jsx†L69-L219】 Start/end dates and the consumer-versus-business toggle persist through the same storage mechanism, meaning page filters reflect the last-used context every time the dashboard opens.【F:src/App.jsx†L35-L76】 Chart requests automatically attach those values when calling `/charts/<name>` so the server receives the right scope on every fetch.【F:src/Services/ChartDataService.jsx†L1-L37】
 
-## 3. Dashboard Components
-The application shell is assembled in `App.jsx`. Each major component below contributes to the end-user experience.
+## 3. Dashboard Components (from App.jsx)
+`App.jsx` wires each navigation page into the layout; the table below summarizes the major building blocks business readers encounter.【F:src/App.jsx†L35-L508】
 
-| Component | Purpose & Experience | Visual Form | Interactions |
+| Component | Purpose & Audience Emphasis | Data & Visualization Form | Notable Interactions |
 | --- | --- | --- | --- |
-| **SidebarLayout** | Organizes navigation into business-friendly sections, shows a collapsible menu, and displays welcome text sourced from the signed-in user’s name.【F:src/Components/SidebarComponent.jsx†L4-L138】 | Layout container | Collapse/expand, sectioned buttons, metrics teaser |
-| **ReportHeaderComponent** | Supplies the date range picker, consumer vs. business filter, page navigation buttons, and sign-out control that drive the rest of the content.【F:src/Components/reportHeaderComponent.jsx†L1-L138】 | Toolbar widgets | Calendar, dropdown, navigation commands |
-| **AnalyticsReportComponent** | Presents the year-to-date, quarterly, and current-quarter application mix in pie, line, and table pairings for quick trend checks.【F:src/Components/analyticsReportComponent.jsx†L1-L78】 | Cards containing charts & tables | Opens detail dialogs via ChartCard |
-| **ChartCard** | Wraps any chart/table in a consistent card, opens a larger dialog, and lets users capture a screenshot for reporting decks.【F:src/Utils/Components/ChartCard.jsx†L1-L94】 | Card with dialog | Click to expand, “Take Screenshot” button |
-| **FNB* visualization widgets** | Reusable chart components (bar, stacked bar, line, pie, combo, tables, flip cards, multi-tables) normalize colors, legends, and loading states across the dashboard.【F:src/App.jsx†L15-L33】【F:src/Utils/Components/FNBStackedBarChart.jsx†L1-L110】【F:src/Utils/Components/CardReport.jsx†L1-L200】 | Charts, tables, KPI cards | Loading spinners, legends, CSV exports |
-| **BORAsync / BOR** | Fetches branch-level abandonment and business deposit detail asynchronously, showing progress, branch selectors, and drill-down dialogs.【F:src/Utils/Components/BORAsync.jsx†L1-L196】【F:src/App.jsx†L97-L142】 | Accordion + tables | Branch filter, dialogs, progress meter |
-| **MultiFilterTable** | Offers a self-service filter workspace where users can slice transactions through multi-select filters and view the resulting table immediately.【F:src/App.jsx†L301-L307】 | Interactive table | Column filters, downloadable data |
-| **CardReport** | Summarizes KPI cards and exposes underlying detail via export and view buttons, making KPI rollups auditable.【F:src/Utils/Components/CardReport.jsx†L12-L200】 | KPI tiles | Refresh, export CSV, detail dialog |
-| **ReportFooterComponent** | Reinforces branding at the bottom of every page to signal the official nature of the dashboard.【F:src/App.jsx†L493-L507】 | Footer | Static |
+| **SidebarLayout** | Left navigation with grouped sections (“Basic,” “Reports,” etc.) that mirror how analysts, branch leaders, and executives browse content; includes a welcome message keyed to the signed-in user.【F:src/Components/SidebarComponent.jsx†L24-L107】 | Collapsible sidebar plus top bar with logo and quick links. | Collapse/expand button, active-state highlighting, quick link buttons, embedded profile menu. |
+| **ReportHeaderComponent** | Navigation catalog that sets the active page, exposes the date range picker, and toggles consumer/business filters so every reader controls their slice of data.【F:src/Components/reportHeaderComponent.jsx†L9-L138】 | Toolbar widgets across the top bar. | Calendar range selector, consumer/business dropdown, profile display, sign-out link. |
+| **AnalyticsReportComponent** | Year-to-date, quarterly, and current-quarter application mix presented in chart/table pairs so executives can review the funnel at a glance.【F:src/Components/analyticsReportComponent.jsx†L23-L142】 | ChartCard collections wrapping pie charts, line charts, and summary tables. | Open cards in dialogs, capture screenshots, and scan table totals. |
+| **ChartCard** | Consistent wrapper for charts/tables that can expand into dialogs and download screenshots for presentations.【F:src/Utils/Components/ChartCard.jsx†L11-L92】 | Card shell with fullscreen dialog. | Click-to-expand, “Take Screenshot” camera control. |
+| **BORAsync** | Async branch performance fetcher that supports branch selectors, application-type filters, and drilldown dialogs—ideal for branch leadership investigations.【F:src/Utils/Components/BORAsync.jsx†L14-L220】 | Accordion with data tables. | Progress meter, branch multi-select, detail dialogs, application-type dropdown. |
+| **FNBReport** | Advanced asynchronous report runner used in Abandonment to step through branch lists, show progress, and surface accordion drilldowns for abandonment and deposit behavior.【F:src/Utils/Components/FNBReport.jsx†L14-L210】 | Accordion-driven KPI cards and tables. | Application-type toggle, progress tracking, dialog exports, branch filtering. |
+| **MultiFilterTable** | Interactive sandbox for analysts to combine filters, view summaries, and build custom slices in real time, with space reserved for future chart extensions.【F:src/Utils/Components/MultiFilterTable.jsx†L45-L200】 | Multi-select controls plus filter-aware data table. | Multi-select filters, clear button, natural-language summary, “work in progress” chart hook. |
+| **CardReport** | KPI card grids that aggregate metrics, allow CSV exports, and open drilldown dialogs so leadership can audit totals.【F:src/Utils/Components/CardReport.jsx†L12-L209】 | Card layout with optional detail dialogs. | Refresh button, export/download controls, fullscreen dialog view. |
+| **ReportFooterComponent** | Reinforces official FNB branding at the bottom of every page.【F:src/Components/reportFooterComponent.jsx†L4-L11】 | Static footer banner. | Persistent logo and copyright notice. |
+
+**FNB visual components.** Reusable visualization widgets provide consistent behavior across the dashboard: bar charts with legends and empty-state messaging for rankings,【F:src/Utils/Components/FNBBarChart.jsx†L8-L133】 stacked bars for customer mix comparisons,【F:src/Utils/Components/FNBStackedBarChart.jsx†L7-L109】 line charts with quarter markers for trend detection,【F:src/Utils/Components/FNBLineChart.jsx†L1-L138】 pie charts with datalabels for product share,【F:src/Utils/Components/FNBPieChart.jsx†L1-L110】 combo bar+line charts for dual KPIs,【F:src/Utils/Components/FNBBarWithLineChart.jsx†L7-L101】 data tables with CSV export,【F:src/Utils/Components/FNBDataTable.jsx†L11-L149】 multi-table canvases with fold/unfold controls,【F:src/Utils/Components/FNBMultiTable.jsx†L6-L200】 flip cards for side-by-side comparisons,【F:src/Utils/Components/FlipCard.jsx†L6-L85】 and the card report layout for KPI tiles and drilldowns.【F:src/Utils/Components/CardReport.jsx†L89-L209】
 
 ## 4. Chart Overview
-The dashboard relies on a repeatable chart vocabulary:
+* **Pie charts** explain product mix share—ideal when comparing the balance of lending, deposit, and mixed applications across lifecycle stages.【F:src/Components/analyticsReportComponent.jsx†L23-L142】  
+  * 📸 Insert screenshot of “Application Volume By Product (All Started Apps) – Year to Date.”
+* **Line charts** surface month-over-month momentum, helping analysts spot surges or slowdowns in submitted and approved volumes.【F:src/Components/analyticsReportComponent.jsx†L47-L70】  
+  * 📸 Insert screenshot of “Application Volume By Product (All Submitted Apps).”
+* **Stacked bar charts** compare new vs. existing customers, secured vs. unsecured balances, and other segment splits to highlight share of each channel.【F:src/App.jsx†L150-L339】【F:src/Utils/Components/FNBStackedBarChart.jsx†L7-L109】  
+  * 📸 Insert screenshot of “New vs Existing Customer Report.”
+* **Bar charts** rank top cross-sell combinations, abandonment reasons, and other categorical KPIs so outliers stand out quickly.【F:src/App.jsx†L113-L270】  
+  * 📸 Insert screenshot of “Top 10 Multi-Product Combinations.”
+* **Combo bar + line charts** pair volume with rates in loan commitments, conveying how counts and commitment sizes move together.【F:src/App.jsx†L343-L392】【F:src/Utils/Components/FNBBarWithLineChart.jsx†L7-L101】  
+  * 📸 Insert screenshot of “Loan Accounts and Commitments.”
+* **KPI card grids** summarize totals and averages while keeping one-click exports ready for audit.【F:src/Utils/Components/CardReport.jsx†L89-L209】  
+  * 📸 Insert screenshot of “Spot & Current Balance Account Insights.”
+* **Data tables** anchor every chart with export-ready detail so teams can reconcile numbers offline.【F:src/App.jsx†L190-L486】【F:src/Utils/Components/FNBDataTable.jsx†L75-L149】  
+  * 📸 Insert screenshot of “Monthly Business Deposits.”
 
-* **Pie and donut charts** show product mix share for started, submitted, and approved applications—ideal for spotting which offerings drive volume.【F:src/Components/analyticsReportComponent.jsx†L16-L63】
-  * 📸 Insert screenshot of “Application Volume By Product (All Started Apps) – Year to Date” here for illustration.
-* **Line charts** track trajectories such as monthly application counts or decline rates, helping users see momentum and seasonality.【F:src/Components/analyticsReportComponent.jsx†L32-L77】
-  * 📸 Insert screenshot of “Application Volume By Product (All Submitted Apps)” here for illustration.
-* **Stacked bar charts** compare categories like new vs. existing customers, secured vs. unsecured commitments, or balance types across channels.【F:src/App.jsx†L150-L339】【F:src/Utils/Components/FNBStackedBarChart.jsx†L1-L110】
-  * 📸 Insert screenshot of “New vs Existing Customer Report” here for illustration.
-* **Bar charts** support ranking views (top multi-product combinations, abandonment reasons) so teams can quickly identify leaders and outliers.【F:src/App.jsx†L113-L270】
-  * 📸 Insert screenshot of “Top 10 Multi-Product Combinations” here for illustration.
-* **Combo bar + line charts** show counts alongside rate lines for loan commitments, blending two KPIs in one panel.【F:src/App.jsx†L343-L392】
-  * 📸 Insert screenshot of “Loan Accounts and Commitments” here for illustration.
-* **KPI card grids** provide quick totals and averages with one-click exports for deeper audit trails.【F:src/Utils/Components/CardReport.jsx†L90-L174】
-  * 📸 Insert screenshot of “Spot & Current Balance Account Insights” cards here for illustration.
-* **Detailed tables** translate every chart into sortable rows ready for export, ensuring quantitative validation is available.【F:src/App.jsx†L423-L486】【F:src/Utils/Components/CardReport.jsx†L175-L200】
-  * 📸 Insert screenshot of “Monthly Business Deposits” table here for illustration.
+`ChartCard` and `FlipCard` already include fullscreen dialogs and screenshot buttons, making it easy to capture consistent visuals for handbook appendices without extra tooling.【F:src/Utils/Components/ChartCard.jsx†L68-L92】【F:src/Utils/Components/FlipCard.jsx†L70-L85】
 
-## 5. Chart-by-Chart Explanation
-This section mirrors the navigation pages. Every bullet highlights the business question, metric, reading guide, and interactivity.
+## 5. Chart-by-Chart Explanation (Main Section)
+Organize review sessions by the pages returned from `getPage` in `App.jsx`.
 
 ### Analytics (Graphs)
-* **Application Volume by Product – Year to Date**: Three pie/table pairs cover started, submitted, and opened applications, showing product mix share and raw counts. Review the legend to see which offerings dominate the funnel; hover or open the dialog for table-level numbers.【F:src/Components/analyticsReportComponent.jsx†L16-L36】
-  * 📸 Insert screenshot of “Application Volume By Product (All Started Apps) – Year to Date” here.
-* **Application Volume by Product – Rolling Trends**: Line charts plot monthly activity for each stage, helping analysts identify surges or dips in specific product lines.【F:src/Components/analyticsReportComponent.jsx†L37-L63】
-  * 📸 Insert screenshot of “Application Volume By Product (All Submitted Apps)” here.
-* **Quarterly Mix Views**: Quarterly pies and tables summarize segment share for leadership scorecards, while quarter-by-quarter line charts reveal seasonality.【F:src/Components/analyticsReportComponent.jsx†L64-L78】
-  * 📸 Insert screenshot of “Application Volume By Product Quarterly (All Started Apps)” here.
-* **Current Quarter Spotlight**: Current-quarter pies and tables spotlight the latest activity to monitor goal attainment mid-quarter.【F:src/Components/analyticsReportComponent.jsx†L69-L78】
-  * 📸 Insert screenshot of “Application Volume by Product Current Quarter (All Submitted Apps)” here.
+
+#### Application Volume by Product – Year to Date
+The year-to-date Application Volume pies and tables aggregate every started, submitted, and approved application from January through the current day, splitting the totals into loan, deposit, and mixed combinations while filtering out bot traffic and zero-product records so leaders read clean production counts.【F:api-server/charts.py†L71-L220】 Monthly averages and products-per-application ratios are calculated by dividing cumulative counts against month spans, helping analysts diagnose whether mix shifts stem from more customers or deeper cross-sell adoption.【F:api-server/charts.py†L115-L218】 `AnalyticsReportComponent` wraps the datasets in ChartCards so readers can expand the visuals, export the underlying tables, and narrate the funnel health across all three stages in one sitting.【F:src/Components/analyticsReportComponent.jsx†L23-L118】
+* 📸 Insert screenshot of “Application Volume By Product (All Started Apps) – Year to Date.”
+
+#### Application Volume by Product – Rolling Trends
+The rolling trend view produces a 12-month timeline for each funnel stage, labeling months with SQL Server end-of-month formatting and counting how many started, submitted, or approved applications fell in every window per product type.【F:api-server/charts.py†L227-L360】 Because the backend repeats the same filters used in the YTD snapshot, the lines track authentic customer behavior rather than pipeline noise, and the dataset map organizes series so Chart.js renders loan, deposit, and mixed trajectories side-by-side for seasonality reviews.【F:api-server/charts.py†L279-L360】【F:src/Components/analyticsReportComponent.jsx†L47-L70】 Use the accompanying tables inside the component to call out inflection points when presenting to executives and to confirm totals before escalating to remedial actions.
+* 📸 Insert screenshot of “Application Volume By Product (All Submitted Apps).”
+
+#### Quarterly Mix Views
+Quarterly mix charts compress four fully completed quarters plus the latest quarter-to-date into pies and detail tables, letting leaders compare today’s distribution against the same period last year while still honoring the consumer/business toggle and product filters set in the header.【F:api-server/charts.py†L571-L690】 The server calculates change metrics by subtracting last year’s quarter from the most recent quarter and converting the deltas into percentage shifts for both apps and product counts, exposing whether volume increases are matched by richer product bundles.【F:api-server/charts.py†L613-L663】 On the front end these responses load into the quarterly tabs of `AnalyticsReportComponent`, where the dialog view pairs the pie, table, and computed “Q Change” strings for quarterly business reviews.【F:src/Components/analyticsReportComponent.jsx†L71-L118】
+* 📸 Insert screenshot of “Application Volume By Product Quarterly (All Started Apps).”
+
+#### Current Quarter Spotlight
+Current-quarter views focus on in-flight activity by restricting the aggregation window to the start and end dates of the active quarter, keeping the same product filters and zero-product exclusions so pacing discussions rely on apples-to-apples counts.【F:api-server/charts.py†L988-L1077】 For each product lane the backend totals applications, sums associated product counts, and computes products-per-application ratios, producing a totals row that highlights whether the team is meeting multi-product goals before the quarter closes.【F:api-server/charts.py†L1002-L1074】 `AnalyticsReportComponent` renders these results inside ChartCards so managers can pop them into fullscreen mode, annotate screenshot exports, or drill into the tables when updating leadership scorecards mid-quarter.【F:src/Components/analyticsReportComponent.jsx†L119-L142】
+* 📸 Insert screenshot of “Application Volume by Product Current Quarter (All Submitted Apps).”
 
 ### In-Branch Originated & Business Deposit Reports
-* **In-Branch Originated Report**: Accordion-driven tables reveal branch-by-branch totals for started, submitted, and opened apps with interactive dialogs for deeper cell data. Use the branch selector to focus on a region or the entire network.【F:src/App.jsx†L97-L111】【F:src/Utils/Components/BORAsync.jsx†L1-L196】
-  * 📸 Insert screenshot of “In-Branch Originated Report” here.
-* **Business Deposit Reports**: Mirrors the BOR experience but filters to deposit-specific metrics and offers an application-type toggle for banker-assisted vs. online views.【F:src/App.jsx†L103-L111】【F:src/Utils/Components/BORAsync.jsx†L1-L83】
-  * 📸 Insert screenshot of “Business Deposit Reports” here.
+
+#### In-Branch Originated Report
+The In-Branch Originated Report uses the BORAsync component to queue asynchronous calls for each branch, surfacing progress meters while totals, drilldowns, and accordion panels populate so field leaders can monitor load status in real time.【F:src/Utils/Components/BORAsync.jsx†L14-L220】 The backend `get_bor_reports` routine enumerates branch IDs, applies consumer transaction filters, excludes bot and zero-product traffic, and tallies lending, deposit, mixed, multi-product, and single-product counts across started, submitted, and opened stages for every branch row.【F:api-server/report_modules/BOR.py†L21-L100】 Those same filters feed printable datasets that power the detail dialogs, ensuring exports mirror the summary numbers managers discuss in huddles.【F:api-server/report_modules/BOR.py†L72-L99】 App.jsx wires the finished payloads into ChartCards so teams can collapse sections, change the tracked branch, or snapshot totals straight from the dashboard navigation.【F:src/App.jsx†L97-L111】
+* 📸 Insert screenshot of “In-Branch Originated Report.”
+
+#### Business Deposit Reports
+Business Deposit Reports reuse the BORAsync workflow but swap in business-transaction filters and optional banker-assisted or online application types, letting treasury teams isolate deposit-heavy performance without leaving the same accordion experience.【F:src/Utils/Components/BORAsync.jsx†L14-L220】【F:api-server/report_modules/business_deposit_reports.py†L20-L101】 The service counts stage totals for lending, deposit, mixed, multi, and single applications, and prepares printable drilldowns per branch so deposit specialists can export abandonments or successes for follow-up calls.【F:api-server/report_modules/business_deposit_reports.py†L73-L100】 The App.jsx configuration keeps this report adjacent to the in-branch view, enabling leaders to flip between consumer and business deposit stories with shared filters and screenshots during performance reviews.【F:src/App.jsx†L103-L111】
+* 📸 Insert screenshot of “Business Deposit Reports.”
 
 ### Multi Product Reports
-* **Top 10 Multi-Product Combinations / Cross Sell / Single Product + Cross Sell**: Ranked bars and paired tables surface the most common product bundles. Use the dialog view for full data exports and apply other dashboard filters to see how mix shifts by timeframe.【F:src/App.jsx†L113-L142】
-  * 📸 Insert screenshot of “Top 10 Cross Sell Products” here.
+
+#### Top 10 Multi-Product Combinations
+The multi-product combination report ranks the ten most popular bundled product set IDs by counting applications where multiple products were selected and translating each ID into human-readable names before presenting bar and table views.【F:api-server/report_modules/multiProduct.py†L192-L220】 The backend filters out bot traffic, zero-product submissions, and low-volume results, and also captures online versus banker-assisted splits so sales leaders understand whether branches or digital campaigns drive the pairing success.【F:api-server/report_modules/multiProduct.py†L197-L220】 App.jsx maps the response into side-by-side ChartCards, allowing analysts to toggle between the chart and table when briefing cross-sell wins during product council meetings.【F:src/App.jsx†L113-L131】
+* 📸 Insert screenshot of “Top 10 Multi-Product Combinations.”
+
+#### Top 10 Multi-Product Cross Sell
+Cross-sell combinations focus on applications that already included more than one product, surfacing which complementary offers most often accompany the base bundle and providing online versus banker-assisted breakdowns for each row.【F:api-server/report_modules/multiProduct.py†L7-L89】 The bar chart uses the same filtered dataset to highlight magnitude, while the table reveals the precise product mix string so marketers can replicate successful pairings in campaigns.【F:api-server/report_modules/multiProduct.py†L35-L50】 Because the component wiring in App.jsx keeps the chart, table, and screenshot tools aligned, teams can quickly capture evidence for executive presentations or export the ranked list for targeted outreach lists.【F:src/App.jsx†L131-L140】
+* 📸 Insert screenshot of “Top 10 Cross Sell Products.”
+
+#### Top 10 Single Product with Cross Sell
+This view isolates applications that started with a single primary product and then added cross-sell items, letting leaders measure how often staff or digital prompts successfully attach add-ons to otherwise single-product journeys.【F:api-server/report_modules/multiProduct.py†L93-L185】 The service again enforces date filters, bot exclusions, and minimum count thresholds, and it calculates online versus banker-assisted splits so training teams can spot branches that consistently attach add-ons.【F:api-server/report_modules/multiProduct.py†L142-L185】 App.jsx renders both chart and table outputs together, making it simple to compare which anchor products generate the highest conversion to bundle conversations when refining incentive plans.【F:src/App.jsx†L140-L148】
+* 📸 Insert screenshot of “Top 10 Single Product with Cross Sell Products.”
 
 ### Customer & Product Reports
-* **New vs Existing Customer Report**: A stacked bar chart compares new vs. existing customers, backed by a table for precise counts and percentages. Read the x-axis as the timeframe and each bar segment as customer status.【F:src/App.jsx†L150-L162】
-  * 📸 Insert screenshot of “New vs Existing Customer Report” here.
-* **Declined Report**: Line and bar views display decline trends and root reasons, with downloadable tables for audit follow-up. Examine the line chart for trajectory and the bar chart for categorical comparisons.【F:src/App.jsx†L163-L188】
-  * 📸 Insert screenshot of “Declined Report” here.
-* **Funding Type Report**: Combines a line chart and detailed table with million-dollar subheaders, highlighting funding sources over time. Use the table to pivot by category and the line to monitor trends.【F:src/App.jsx†L282-L299】
-  * 📸 Insert screenshot of “Funding Type Report” here.
-* **Lending & Deposit Control Report**: A multi-table canvas capturing lending and deposit compliance metrics with consistent column widths for readability. Export sections for regulatory reviews.【F:src/App.jsx†L277-L280】
-  * 📸 Insert screenshot of “Lending & Deposit Control Report” here.
-* **Loan Commitments**: KPI cards summarize started, submitted, and approved volumes. Flip cards reveal alternate time horizons, while combo and stacked charts split secured vs. unsecured commitments with supportive tables for averages and totals.【F:src/App.jsx†L343-L392】【F:src/Utils/Components/CardReport.jsx†L90-L174】
-  * 📸 Insert screenshot of “Loan Accounts and Commitment – Quarterly Analysis” here.
-* **Spot & Current Balance Amounts**: KPI cards feed into stacked charts for both online and in-branch applications, showing opening deposits vs. current balances by channel.【F:src/App.jsx†L308-L339】
-  * 📸 Insert screenshot of “Spot & Current Balance Amounts” here.
+
+#### New vs Existing Customer Report
+This report transforms every month in the selected range into paired counts of new versus existing customers, using the `NewCustomer` flag and shared filter helpers to keep the stacked bars aligned with header date and application-type selections.【F:api-server/report_modules/newVExistingReports.py†L11-L66】 The service also builds a tabular variant with the same monthly columns so retention teams can copy data directly into cohort spreadsheets or export snapshots for leadership decks.【F:api-server/report_modules/newVExistingReports.py†L35-L53】 In App.jsx the chart and table render together, letting analysts compare mix trends, download CSVs, and reference screenshot placeholders whenever they prepare growth-versus-retention narratives.【F:src/App.jsx†L150-L161】
+* 📸 Insert screenshot of “New vs Existing Customer Report.”
+
+#### Declined Report
+Declined Reports aggregate monthly decline counts across the statuses defined by the underwriting team, then compute companion tables and charts that visualize the trend line and expose the detailed reason distribution collected from the EDW decline reason master tables.【F:api-server/report_modules/declined_report.py†L6-L147】 The backend first counts declines per month from the transactional database, then pulls correlated application IDs from the EDW service to explain which reasons dominated the period, making the tables audit-ready for compliance.【F:api-server/report_modules/declined_report.py†L12-L137】 App.jsx layers a line chart, bar chart, and table together so managers can narrate trends, investigate spikes, and capture screenshots or exports for regulatory follow-ups in one location.【F:src/App.jsx†L163-L188】
+* 📸 Insert screenshot of “Declined Report.”
+
+#### Funding Type Report
+Funding Type Reports measure how approved, multi-product deposit applications were funded, pairing counts with dollar amounts for ACH, internal transfers, card funding, and the overall total so treasury specialists see both volume and balance impact.【F:api-server/report_modules/fundingType.py†L7-L88】 The generator builds alternating columns for counts and formatted currency, rolling through every month in the selected range and doubling the interval list so each period contributes both metrics, which is why the table alternates between totals and month-over-month change columns.【F:api-server/report_modules/fundingType.py†L12-L104】 App.jsx combines that rich table with a rolling trend line to show how funding mix shifts, and ChartCard controls keep exports handy for liquidity planning updates.【F:src/App.jsx†L282-L299】
+* 📸 Insert screenshot of “Funding Type Report.”
+
+#### Lending & Deposit Control Report
+The Lending & Deposit Control Report assembles a multi-table dashboard that catalogs loan application statuses, product counts, and success versus abandonment metrics, relying on dozens of reusable predicates to capture in-progress, submitted, approved, expired, and missing categories across both application counts and product totals.【F:api-server/report_modules/lendingAndDepositControl.py†L1-L200】 For each interval the backend calculates totals, change indicators, and multi-product splits, giving risk and operations teams a 360-degree view of pipeline health along with CSV-ready exports for audit documentation.【F:api-server/report_modules/lendingAndDepositControl.py†L200-L360】 The `FNBMultiTable` component renders these grids with fold/unfold affordances inside App.jsx, making it easy to focus on a single segment while preserving branding and export buttons.【F:src/App.jsx†L277-L280】【F:src/Utils/Components/FNBMultiTable.jsx†L6-L200】
+* 📸 Insert screenshot of “Lending & Deposit Control Report.”
+
+#### Loan Commitments
+Loan Commitments pull data from both the transactional store and the EDW to show the entire funnel: counts of started, submitted, and approved commitments, stacked bars for secured versus unsecured balances, combo charts comparing quarterly volumes and amounts, and tables summarizing averages per branch or product.【F:api-server/report_modules/loan_account_apps_and_commitments.py†L7-L160】 The service collects submitted tracking codes, queries EDW for approved amounts, and aligns the responses into the standardized card report payload so CardReport widgets can surface KPIs, flip cards, and exports without additional plumbing.【F:api-server/report_modules/loan_account_apps_and_commitments.py†L17-L120】【F:src/Utils/Components/CardReport.jsx†L89-L209】 App.jsx orchestrates the layout into KPI grids, combo charts, and tables that suit executive scorecards, complete with refresh buttons for live conversations.【F:src/App.jsx†L343-L392】
+* 📸 Insert screenshot of “Loan Accounts and Commitment – Quarterly Analysis.”
+
+#### Spot & Current Balance Amounts
+Spot & Current Balance Amounts reuse the card-report framework to summarize opening balances and current balances for online versus banker-assisted journeys, while the backend digs into raw JSON payloads to extract account numbers before querying CAMEDW for authoritative balance data.【F:api-server/report_modules/spotAndCurrentBalanceAccount.py†L1-L120】 The helper functions normalize account numbers, batch IN clause lookups, and format million-dollar outputs so leadership immediately sees trends in funding without manual conversions.【F:api-server/report_modules/spotAndCurrentBalanceAccount.py†L59-L118】 App.jsx presents mirrored charts and tables for each audience, helping digital and branch leaders compare how their channels drive balances and screenshot results for financial reviews.【F:src/App.jsx†L308-L339】
+* 📸 Insert screenshot of “Spot & Current Balance Amounts.”
 
 ### Operational Tables
-* **All Transactions**: Full-detail table of every transaction in scope, ready for export and additional filtering offline.【F:src/App.jsx†L190-L197】
-  * 📸 Insert screenshot of “All Transactions” here.
-* **All Filters Table**: Interactive sandbox for analysts to mix filters and instantly view results, ideal for custom what-if questions.【F:src/App.jsx†L301-L307】
-  * 📸 Insert screenshot of “All Filters Table” here.
-* **Monthly Report Tables**: Dropdown-controlled tables cover in-branch, consumer-facing, business deposits, BPM/CRIF entries, and eCA vs. BPM comparisons for year-to-date monitoring.【F:src/App.jsx†L400-L476】
-  * 📸 Insert screenshot of “Monthly Report – Common App (In Branch)” here.
-* **Customer Document Center**: Two tables summarize document center activity and monthly insights, highlighting adoption of digital document workflows.【F:src/App.jsx†L480-L486】
-  * 📸 Insert screenshot of “Customer Document Center” here.
+
+#### All Transactions
+The All Transactions table calls the dedicated `TransactionService`, which forwards the saved date range, consumer/business toggle, and bearer token to the `/transactions` endpoint so the grid always reflects the same scope as the charts.【F:src/Services/TransactionService.jsx†L4-L82】 The component streams paginated JSON into a data table with export options, letting analysts reconcile individual application rows, confirm statuses, or download CSVs for offline pivot tables.【F:src/Utils/Components/FNBDataTable.jsx†L75-L149】 App.jsx positions the table alongside the analytics pages so teams can jump from trend charts straight into transactional evidence without losing their filter context.【F:src/App.jsx†L190-L197】
+* 📸 Insert screenshot of “All Transactions.”
+
+#### All Filters Table
+The All Filters workspace lets power users enter condition names that map directly to reusable predicates in `condition_utils`, which the backend collects, validates, and pushes into a single `Q` query so ad hoc slices reuse production-grade filters instead of handwritten SQL.【F:api-server/report_modules/all_filter_report.py†L5-L38】 Results stream back as headers and rows or as CSV strings, which the React component renders in a MultiFilterTable with summaries explaining which filters were applied for future reference.【F:src/Utils/Components/MultiFilterTable.jsx†L70-L198】 App.jsx keeps this tool in the Reports section, giving analysts a sandbox for custom what-if analysis without jeopardizing the curated dashboards.【F:src/App.jsx†L301-L307】
+* 📸 Insert screenshot of “All Filters Table.”
+
+#### Monthly Report Tables
+Monthly report tables wrap five related datasets—branch, consumer-facing, business deposits, BPM/CRIF, and in-branch versus BPM/CRIF comparisons—each built from helper functions that apply the right channel filters, bot exclusions, and monthly intervals before returning standardized headers and rows.【F:api-server/report_modules/monthlyReports.py†L1-L120】 The backend also calculates share-of-total percentages and month-over-month changes for BPM versus in-branch performance, helping leaders understand channel adoption and conversion rates at a glance.【F:api-server/report_modules/monthlyReports.py†L13-L90】 App.jsx exposes a dropdown to switch between variants while reusing FNBDataTable for consistent exports, turning the section into a comprehensive monthly production review kit.【F:src/App.jsx†L398-L476】
+* 📸 Insert screenshot of “Monthly Report – Common App (In Branch).”
+
+#### Customer Document Center
+Customer Document Center reports connect to the dedicated document center database to summarize annual upload counts, distinct users, and monthly volumes, filtering out deleted records so adoption metrics stay trustworthy.【F:api-server/report_modules/documentCenterReports.py†L1-L76】 The module also offers a monthly breakdown that counts unique uploaders and documents for every month in the selected range, returning headers and rows that FNBDataTable renders with export buttons for operational follow-up.【F:api-server/report_modules/documentCenterReports.py†L78-L118】【F:src/Utils/Components/FNBDataTable.jsx†L75-L149】 App.jsx places these tables at the end of the navigation catalog, supporting document center owners who need quick snapshots or CSVs for compliance reviews.【F:src/App.jsx†L480-L486】
+* 📸 Insert screenshot of “Customer Document Center.”
 
 ### Abandonment Suite
-* **Abandonment Report**: The main card surfaces abandonment summaries with branch-level drill-downs. Additional cards break down abandonment by week, month, year, type, and zero-product follow-up, all responsive to the application-type selector at the top.【F:src/App.jsx†L200-L270】
-  * 📸 Insert screenshot of “Abandonment Report by Week” here.
+
+#### Abandonment Report (Accordion)
+The primary Abandonment Report uses the FNBReport component to orchestrate asynchronous fetches for every branch, respecting the selected application type, applying bot and zero-product exclusions, and counting each abandonment status while also preparing drilldown exports for further investigation.【F:src/Utils/Components/FNBReport.jsx†L14-L210】【F:api-server/report_modules/abandonment.py†L1-L160】 Branch rows display totals plus embedded SQL templates for each abandonment reason so operations teams can open dialogs and review the exact applications behind the counts without leaving the dashboard.【F:api-server/report_modules/abandonment.py†L31-L170】 App.jsx places this accordion at the top of the page, pairing it with filters that let analysts isolate banker-assisted versus online journeys before consulting the summary charts below.【F:src/App.jsx†L199-L270】
+* 📸 Insert screenshot of “Abandonment Report – Branch Accordion.”
+
+#### Abandonment Report by Week
+The weekly chart builds four rolling week labels using SQL Server date math, then counts how many applications ended in an abandonment status within each week, honoring the current application-type selection and excluding bot interactions for accuracy.【F:api-server/charts.py†L3109-L3143】 Because the helper reuses the same filter set as the accordion, leadership can trust that the bars match the branch totals shown above, making it easy to narrate recent spikes or improvements in weekly abandonment behavior.【F:api-server/charts.py†L3130-L3143】 App.jsx renders the result inside a ChartCard so teams can expand the view, download screenshots, or export the supporting table when preparing weekly stand-ups.【F:src/App.jsx†L211-L220】
+* 📸 Insert screenshot of “Abandonment Report by Week.”
+
+#### Abandonment Report by Month
+Monthly abandonment uses the last four months of data, formatting each month label and counting the number of abandoned applications per month for the active channel, again filtering out bot traffic and respecting the tracking code scope provided by the header.【F:api-server/charts.py†L3144-L3175】 The consistent filtering ensures that the chart aligns with the accordion totals, enabling analysts to spot seasonality or month-to-month improvements when presenting to senior leadership.【F:api-server/charts.py†L3156-L3175】 ChartCard wrappers in App.jsx provide fullscreen and screenshot controls so teams can drop the visualization straight into monthly business reviews.【F:src/App.jsx†L221-L229】
+* 📸 Insert screenshot of “Abandonment Report by Month.”
+
+#### Abandonment Report by Year
+The yearly view stretches to the last four calendar years, labeling each year and tallying abandonment counts per year with the same application-type filters and bot exclusions used throughout the suite, giving executives a long-term lens on abandonment progress.【F:api-server/charts.py†L3176-L3208】 By comparing the current year-to-date number with prior years, leaders can determine whether abandonment reduction programs are delivering sustained impact beyond seasonal swings.【F:api-server/charts.py†L3188-L3208】 App.jsx positions the chart alongside the monthly and weekly views so presenters can move from long-term trend to recent cadence without changing context or losing filter selections.【F:src/App.jsx†L231-L238】
+* 📸 Insert screenshot of “Abandonment Report by Year.”
+
+#### Abandonment Report by Types of Abandonment
+The types chart enumerates every abandonment sub-status, from acknowledgements through vouched transitions, counting occurrences under the active filter set so analysts can pinpoint where applicants exit the flow most often.【F:api-server/charts.py†L3209-L3278】 The backend iterates through each status string using the same `ecaTrackingCodeFilter` and application-type condition, guaranteeing consistency with the accordion totals and exposing which step—identity, funding, demographic, etc.—needs UX or staff attention.【F:api-server/charts.py†L3220-L3278】 App.jsx displays the bar chart in a ChartCard, allowing teams to capture screenshots for usability workshops or export detail dialogs to share with product owners.【F:src/App.jsx†L239-L248】
+* 📸 Insert screenshot of “Abandonment Report by Types of Abandonment.”
+
+#### Zero Product Applications
+Zero Product Applications highlight cases where users started but did not select any product, using monthly buckets over the past year to count those scenarios and reveal whether particular channels struggle to convert shoppers into applicants.【F:api-server/charts.py†L3280-L3360】 The same function powers a companion table so branch leaders can export zero-product instances and trigger follow-up outreach or training refreshers aimed at improving product selection rates.【F:api-server/charts.py†L3320-L3358】 App.jsx places this chart after the abandonment breakdowns, reinforcing the connection between abandonment analytics and zero-product clean-up activities while providing screenshot hooks for journey-mapping workshops.【F:src/App.jsx†L251-L269】
+* 📸 Insert screenshot of “Zero Product Applications.”
 
 ## 6. Chart Generation Logic (Business Explanation)
-Each chart follows the same flow:
-1. **User context** – The calendar, consumer/business toggle, and page settings store your chosen filters in local storage so they travel with every data request.【F:src/App.jsx†L35-L76】【F:src/Services/ChartDataService.jsx†L1-L35】
-2. **Chart request** – The front-end service appends dates, branch IDs, and other parameters to the `/charts/<name>` endpoint using the saved token for secure access.【F:src/Services/ChartDataService.jsx†L1-L35】
-3. **Server orchestration** – The Flask service checks whether a matching chart is already cached. If not, it coordinates one “owner” request to fetch fresh numbers while others wait, ensuring accuracy without duplicate workloads.【F:api-server/serve.py†L124-L208】【F:api-server/helper/chat_serve.py†L1-L73】
-4. **Standardized output** – `charts.py` assembles responses through helper builders (pie, line, tables) so each visualization receives predictable labels, datasets, and rows.【F:api-server/charts.py†L1-L33】
-5. **Caching** – Results are saved with a 24-hour lifetime, giving fast responses until filters change or the cache expires.【F:api-server/cache_manager.py†L10-L44】
+1. **Filter capture** – The header calendar and consumer/business toggle write choices into local storage so every chart request inherits the same scope.【F:src/App.jsx†L35-L76】
+2. **Chart request** – `ChartDataService` builds the `/charts/<name>` URL, injects dates, branch, and application filters, and sends the stored token on each fetch.【F:src/Services/ChartDataService.jsx†L1-L37】
+3. **Server orchestration** – The Flask endpoint checks the cache, coordinates in-flight requests so only one owner computes a chart, and verifies tokens or API keys before work begins.【F:api-server/serve.py†L122-L233】
+4. **Standardized output** – `charts.py` applies helper builders like `getPieChart`, `getLineChart`, and `getBasicTable` so the frontend always receives predictable shapes.【F:api-server/charts.py†L1-L106】
+5. **Caching** – Results persist for 24 hours to keep navigation fast while still refreshing whenever filters change or the cache expires.【F:api-server/cache_manager.py†L10-L64】
 
-### Accuracy, freshness, and reliability
-* Shared helper functions in `charts.py` reuse filters and calculations across reports, reducing the risk of inconsistent numbers.【F:api-server/charts.py†L1-L33】
-* Cache coordination prevents partially computed charts from leaking into the UI and automatically retries if a prior attempt failed.【F:api-server/serve.py†L158-L208】【F:api-server/helper/chat_serve.py†L1-L73】
-* Build deployments or manual cache clears regenerate stored results, guaranteeing that new data or fixes reach business users promptly.【F:api-server/cache_manager.py†L45-L121】
+Shared helpers guard accuracy (for example, using the same CorB filters) and cache coordination prevents partially computed charts from leaking into the UI.【F:api-server/charts.py†L53-L135】【F:api-server/helper/chat_serve.py†L10-L107】 Cache warmers and manual refreshes keep long-running reports responsive when filters or deployments shift.【F:api-server/cache_manager.py†L95-L145】
 
-## 7. Overall Flow of the App
-1. **Log in** via standard credentials or Microsoft SSO to unlock the dashboard workspace.【F:src/Components/reportLoginComponent.jsx†L22-L218】
-2. **Set filters** using the header calendar and consumer/business toggle; preferences persist until changed.【F:src/Components/reportHeaderComponent.jsx†L1-L138】【F:src/App.jsx†L35-L76】
-3. **Fetch data** as you navigate pages—each view triggers chart API calls with your chosen filters and stored token.【F:src/Services/ChartDataService.jsx†L1-L35】【F:src/App.jsx†L86-L486】
-4. **Review visuals** inside ChartCards, tables, and KPI tiles. Expand any card for fullscreen review or export snapshots for presentations.【F:src/Utils/Components/ChartCard.jsx†L65-L94】【F:src/Utils/Components/CardReport.jsx†L90-L174】
-5. **Stay current** as caching keeps performance high while nightly refreshes and manual cache clears ensure data accuracy. Logout resets the session when you are done.【F:api-server/cache_manager.py†L10-L121】【F:src/Services/AuthorizationService.jsx†L61-L68】
+## 7. Overall Flow of the Code (High-Level Explanation)
+1. Users authenticate via standard credentials or Microsoft SSO and land inside the sidebar layout.【F:src/Components/reportLoginComponent.jsx†L22-L222】【F:src/App.jsx†L80-L508】
+2. The header stores date and consumer/business filters, which persist until changed.【F:src/Components/reportHeaderComponent.jsx†L9-L138】【F:src/App.jsx†L35-L76】
+3. Navigation triggers `getPage`, which issues chart API calls with the saved token and parameters for each active component.【F:src/App.jsx†L86-L486】【F:src/Services/ChartDataService.jsx†L1-L37】
+4. Charts render inside `ChartCard`, `FlipCard`, tables, and KPI tiles, each offering fullscreen dialogs, exports, or screenshots.【F:src/Utils/Components/ChartCard.jsx†L68-L92】【F:src/Utils/Components/FlipCard.jsx†L70-L85】【F:src/Utils/Components/FNBDataTable.jsx†L75-L149】【F:src/Utils/Components/CardReport.jsx†L89-L209】
+5. Cache maintenance endpoints and refresh actions keep data fresh while nightly expiration maintains performance, and sign-out clears the session when work is complete.【F:api-server/cache_manager.py†L10-L145】【F:src/Utils/Components/CardReport.jsx†L89-L109】【F:src/Services/AuthorizationService.jsx†L61-L68】
 
-## 8. `chart.py` – Business Perspective
-`chart.py` is the dashboard’s chart library. It pulls in domain-specific modules (BOR, abandonment, funding type, monthly reports, new vs. existing customers, and more) and outputs standardized chart shapes so every visualization on the dashboard is consistent.【F:api-server/charts.py†L1-L33】
-
-* **What it does** – Converts raw transaction results into pie slices, line series, stacked bars, or table rows depending on the chart name requested.
-* **How it works conceptually** – When the server calls `getChartData`, the function checks which chart is needed, applies the same filters you set in the UI, and packages the results with clear labels and headers.【F:api-server/charts.py†L1-L33】
-* **Supported visualizations** – Pie charts for product mix, line charts for trends, bar and stacked bar charts for comparisons, tables for detail, and KPI structures for card reports, mirroring what you see in the dashboard pages.【F:src/App.jsx†L86-L486】
-* **Business benefits** – Because each chart uses the same builders, numbers stay consistent across pages, and new charts can reuse established logic. For example, loan commitment KPIs and tables use shared helpers to ensure totals, averages, and secured vs. unsecured splits reconcile automatically.【F:src/App.jsx†L343-L392】【F:api-server/charts.py†L1-L33】
-
-> Example: “chart.py automatically converts raw application counts into the ‘Application Volume by Product’ pies and tables, so leaders see updated product share without touching the underlying SQL.”
+## 8. `chart.py` – In-Depth Section
+`chart.py` serves as the business rules engine for every chart request, importing specialized modules for BOR, abandonment, funding type, declined reports, multi-product combinations, monthly reports, and new-vs-existing customer analysis.【F:api-server/charts.py†L1-L13】 For each chart name, `getChartData` normalizes request parameters, applies application-type and CorB filters, and returns standardized dictionaries containing labels, dataset maps, headers, and rows.【F:api-server/charts.py†L53-L135】 Typical transformations include converting raw application rows into counts, averages, and ratios per product category—exactly how Application Volume by Product aggregates year-to-date loan, deposit, and mixed apps.【F:api-server/charts.py†L70-L135】 Because every branch reuses the same helpers (for example, `getPieChart` and `getBasicTable`), card reports and tables stay synchronized, whether they calculate loan commitments, abandonment trends, or monthly compliance stats.【F:api-server/charts.py†L14-L135】 Consistency in filters (such as `CorBFilter` and application-type conditions) ensures leadership sees the same mix across analytics, lending, deposits, and abandonment pages.【F:api-server/charts.py†L61-L93】
 
 ## 9. Maintenance and Updates
-* **Refresh cadence** – Charts refresh instantly when you change filters or when the 24-hour cache expires. KPI cards include a Refresh button to pull the latest numbers on demand.【F:src/Utils/Components/CardReport.jsx†L90-L111】【F:api-server/cache_manager.py†L10-L44】
-* **Knowing data is current** – Loading spinners, progress bars, and “No data” messages inform you when data is fetching or if the selection returns zero results, signaling that the system is working and simply awaiting results.【F:src/Utils/Components/BORAsync.jsx†L19-L96】【F:src/Utils/Components/FNBStackedBarChart.jsx†L7-L56】
-* **When something looks wrong** – If a chart stays blank or shows outdated numbers, first try the refresh/export controls, then reach out to the analytics support contact. Support can trigger cache clears or review the chart builder logs via the `/clear_cache` and logging utilities on the server.【F:api-server/serve.py†L209-L280】【F:api-server/cache_manager.py†L45-L121】
+* **Refresh cadence** – Charts refresh automatically when filters change or when the 24-hour cache expires; KPI card refresh buttons trigger immediate reloads for time-sensitive conversations.【F:api-server/cache_manager.py†L10-L64】【F:src/Utils/Components/CardReport.jsx†L89-L109】
+* **Progress & loading feedback** – Components like BORAsync, FNBReport, stacked charts, and bar charts display progress meters, spinners, or “Chart did not have any numbers to show” messages so users know whether data is loading or simply not available under the current filters.【F:src/Utils/Components/BORAsync.jsx†L23-L117】【F:src/Utils/Components/FNBReport.jsx†L24-L139】【F:src/Utils/Components/FNBStackedBarChart.jsx†L23-L109】【F:src/Utils/Components/FNBBarChart.jsx†L39-L60】
+* **Cache management** – Cached results live for 24 hours, `/clear_cache` purges stale entries, and cache warmers iterate date ranges, branches, and application types to prebuild heavy charts when needed.【F:api-server/cache_manager.py†L10-L145】【F:api-server/serve.py†L315-L326】
+* **Support guidance** – If visuals stay blank, leverage built-in reload/export buttons first, then contact the analytics or IT owner to clear caches or review server logs using the published endpoints; “No data” or “Loading…” responses reflect intentional empty states in the UI.【F:src/Utils/Components/FNBDataTable.jsx†L46-L55】【F:api-server/serve.py†L249-L369】
 
 ## 10. Optional Enhancements
-* **Screenshot appendix** – Use the built-in “Take Screenshot” button inside each ChartCard to capture current-state images for a visual appendix that stays aligned with the live dashboard.【F:src/Utils/Components/ChartCard.jsx†L65-L94】
-* **Chart legend glossary** – Document the color legends used by stacked bars and pies so business teams interpret colors consistently across reports.【F:src/Utils/Components/FNBStackedBarChart.jsx†L58-L109】
-* **Mini FAQ suggestions**:
-  * *Why does a chart show “No data”?* – It means no records met the selected criteria; try broadening the date range or removing filters.【F:src/Utils/Components/FNBStackedBarChart.jsx†L32-L56】
-  * *What if an export button does nothing?* – Ensure the card’s detail dialog opens; export buttons rely on the same data service that feeds the dialog view.【F:src/Utils/Components/CardReport.jsx†L56-L170】
-  * *How do I confirm my filters applied?* – The header dropdowns and branch selectors display the active choice, and cards like BORAsync summarize the selected branches above the results.【F:src/Components/reportHeaderComponent.jsx†L90-L138】【F:src/Utils/Components/BORAsync.jsx†L70-L119】
+* **Annotated screenshot appendix** – Use ChartCard and FlipCard screenshot buttons to capture up-to-date visuals for every major chart, ensuring the handbook mirrors the production dashboards.【F:src/Utils/Components/ChartCard.jsx†L68-L92】【F:src/Utils/Components/FlipCard.jsx†L70-L85】
+* **Legend glossary** – Document the color palettes used by bar, stacked bar, and pie charts so teams interpret legends consistently across pages.【F:src/Utils/Components/FNBBarChart.jsx†L87-L133】【F:src/Utils/Components/FNBStackedBarChart.jsx†L58-L109】【F:src/Utils/Components/FNBPieChart.jsx†L55-L110】
+* **FAQ additions** –
+  * *“Why does a chart show ‘No data’?”* — It indicates the current filters returned no qualifying records, matching the UI’s empty-state messaging.【F:src/Utils/Components/FNBBarChart.jsx†L55-L60】
+  * *“What happens if my export button doesn’t respond?”* — CSV exports are tied to the same data services that feed dialogs and tables; ensure the detail dialog loads successfully before retrying the export.【F:src/Utils/Components/FNBDataTable.jsx†L75-L149】【F:src/Utils/Components/CardReport.jsx†L149-L167】
+  * *“How do I know my filters applied?”* — Review the header selectors, MultiFilterTable summary text, and branch/application-type selectors inside BOR and Abandonment reports for confirmation of active filters.【F:src/Components/reportHeaderComponent.jsx†L9-L138】【F:src/Utils/Components/MultiFilterTable.jsx†L85-L198】【F:src/Utils/Components/BORAsync.jsx†L14-L146】【F:src/Utils/Components/FNBReport.jsx†L24-L188】
 
 ---
-Use this handbook as the quick-reference companion for day-to-day dashboard use. Pair it with fresh screenshots and quarterly KPI notes to keep leadership briefings current and actionable.
+Use this handbook as the quick-reference companion for day-to-day dashboard use, pairing it with fresh screenshots and KPI commentary to keep leadership briefings timely and actionable.
