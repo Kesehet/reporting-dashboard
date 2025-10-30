@@ -1,0 +1,15 @@
+.p-button{
+    background-color: transparent !important;
+    color: #003975 !important;
+    border-color: transparent !important;
+  }
+
+.p-button:hover {
+    background-color: #003975 !important;
+    color: white !important;
+    border-color: #003975 !important;
+}
+
+.p-button-outline{
+    border-color: #003975 !important;
+}

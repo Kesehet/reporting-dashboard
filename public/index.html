@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <title>ITBS Digital - Reports</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="stylesheet" href="https://www.w3schools.com/w3css/4/w3.css">
+  
+</head>
+
+<body>
+  <script src="./src/App.js" type="text/jsx"></script>
+  <div id="root"></div>
+
+  <script>
+    setInterval(() => {
+      // find all dom elements with class "table-wrapper-with-black-text"
+      const elements = document.querySelectorAll('.p-datatable-table');
+      // loop through each element and get the table tag in its children 
+      elements.forEach(element => {
+        // get all the td tags in the element
+        const tds = element.querySelectorAll('td');
+        // loop through each td tag and set its color to black
+        tds.forEach(td => {
+          // set the color to black
+          td.style.color = 'black';
+          let childrens = td.children
+          // loop through each child of td and set its color to black
+          for (let i = 0; i < childrens.length; i++) {
+            if (childrens[i].tagName === 'SPAN' && childrens[i].style.color == "rgb(157, 157, 157)") {
+              childrens[i].style.color = 'black';
+            }
+          }
+        });
+        // get all the th tags in the element
+        const ths = element.querySelectorAll('th');
+        // loop through each th tag and set its color to black
+        ths.forEach(th => {
+          // set the color to black
+          th.style.color = 'black';
+          // set text to align to center
+          th.style.textAlign = 'center';
+        });
+      });
+    }, 2000);
+  </script>
+  <style>
+    /* Container with perspective, height auto */
+.flip-card-container {
+  perspective: 1000px;
+  width: 100%;
+  height: auto; /* auto height based on content */
+}
+
+/* Use CSS Grid to stack faces on top of each other */
+.flip-card {
+  width: 100%;
+  display: grid;                /* stack faces */
+  transition: transform 0.6s;
+  transform-style: preserve-3d;
+  will-change: transform;
+}
+
+/* Flip trigger */
+.flip-card-container.flipped .flip-card {
+  transform: rotateY(180deg);
+}
+
+/* Faces: overlap via grid-area, NOT absolute */
+.flip-card-front,
+.flip-card-back {
+  grid-area: 1 / 1;             /* both occupy the same grid cell */
+  padding: 1rem;
+  box-sizing: border-box;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+
+/* Face styling */
+.flip-card-front {
+  background-color: #fff;
+  z-index: 2;
+}
+
+.flip-card-back {
+  background-color: #f9f9f9;
+  transform: rotateY(180deg);
+}
+
+/* Helpful for media inside faces */
+.flip-card-front img,
+.flip-card-back img {
+  max-width: 100%;
+  height: auto;
+  display: block;
+}
+
+
+  </style>
+</body>
+
+</html>
