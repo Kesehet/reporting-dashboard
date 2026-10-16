@@ -1,562 +1,78 @@
-from DB import Transaction, SQLConn
-from datetime import datetime
-from dateutil.relativedelta import relativedelta
+from DB import Transaction, SQLConn, Q
 from report_modules.condition_utils import *
+from concurrent.futures import ThreadPoolExecutor
+from utils import get_list_of_months_between, get_header
 
-def get_lending_and_deposit_reports(start_date, end_date):
-    sql = SQLConn()
-    sql.connect()
-    transaction = Transaction(sql)
+def get_lending_and_deposit_reports(start_date, end_date, params):
     intervals = get_list_of_months_between(start_date, end_date)
+
+    PRODUCTS = "Products"
+    APPLICATIONS = "Applications"
 
     CONSUMER_LOAN_APPLICATIONS_HEADERS, CONSUMER_LOAN_APPLICATIONS_ROWS = generate_report(
         intervals, 
-        [
-            #----------------------------------------------------------------------CONSUMER LOAN APPLICATIONS---------------------------------------------------------------------------------------------------------------------------------------,
-            {
-                "sql": f"Select Count(*) as data from {table} where {excludeBotData} AND {excludeZeroProductApps} AND {loanApps} AND {applicationsInProgressAbandoned}",
-                "label": "Applications In Progress (Abandoned)",
-            },
-            {
-                "sql": f"Select Count(*) as data from {table} where {excludeBotData} AND {excludeZeroProductApps} AND {loanApps} AND {applicationsSubmittedError}",
-                "label": "Applications Submitted (Error)",
-            },
-            {
-                "sql": f"Select Count(*) as data from {table} where {excludeBotData} AND {excludeZeroProductApps} AND {loanApps} AND {applicationsDeclined}",
-                "label":"Applications Declined",
-            },
-            {
-                "sql": f"Select Count(*) as data from {table} where {excludeBotData} AND {excludeZeroProductApps} AND {loanApps} AND {applicationsExpired}",
-                "label":"Applications Expired",
-            },
-            {
-                "sql": f"Select Count(*) as data from {table} where {excludeBotData} AND {excludeZeroProductApps} AND {loanApps} AND ({applicationsInProgressAbandoned} OR {applicationsSubmittedError} OR {applicationsDeclined} OR {applicationsExpired})",
-                "label":"Total Unsuccessful Applications",
-            },
-            {
-                "sql": f"Select Count(*) as data from {table} where {excludeBotData} AND {excludeZeroProductApps} AND {loanApps} AND {applicationsInProgressStarted}", 
-                "label":"Applications In Progress (Started)",
-            },
-            {
-                "sql": f"Select Count(*) as data from {table} where {excludeBotData} AND {excludeZeroProductApps} AND {loanApps} AND {applicationsInProgressSaved}",
-                "label":"Applications In Progress (Saved)",
-            },
-            {
-                "sql": f"Select Count(*) as data from {table} where {excludeBotData} AND {excludeZeroProductApps} AND {loanApps} AND {applicationsSubmittedUnderReview}", 
-                "label":"Applications Submitted(Under Review)",
-            },
-            {
-                "sql": f"Select Count(*) as data from {table} where {excludeBotData} AND {excludeZeroProductApps} AND {loanApps} AND {applicationsApprovedAwaitingEntry}",
-                "label":"Applications Approved(Awaiting Entry)",
-            },
-            {
-                "sql": f"Select Count(*) as data from {table} where {excludeBotData} AND {excludeZeroProductApps} AND {loanApps} AND {applicationsApprovedInUnderwriting}",
-                "label":"Applications Approved(In Underwriting)",
-            },
-            {
-                "sql": f"Select Count(*) as data from {table} where {excludeBotData} AND {excludeZeroProductApps} AND {loanApps} AND {applicationsApprovedFundingOngoing}",
-                "label":"Applications Approved(Funding Ongoing)",
-            },
-            {
-                "sql": f"Select Count(*) as data from {table} where {excludeBotData} AND {excludeZeroProductApps} AND {loanApps} AND {applicationsApprovedOnboarded}",
-                "label":"Applications Approved(Onboarded)",
-            },
-            {
-                "sql": f"Select Count(*) as data from {table} where {excludeBotData} AND {excludeZeroProductApps} AND {loanApps} AND ({applicationsInProgressStarted} OR {applicationsInProgressSaved} OR {applicationsSubmittedUnderReview} OR {applicationsApprovedAwaitingEntry} OR {applicationsApprovedInUnderwriting} OR {applicationsApprovedFundingOngoing} OR {applicationsApprovedOnboarded})",
-                "label":"Total Successful Applications",
-            },
-            {
-                "sql": f"Select Count(*) as data from {table} where {excludeBotData} AND {excludeZeroProductApps} AND {loanApps} AND {applicationsMissing}",
-                "label":"Applications Missing", 
-            },
-            {
-                "sql": f"Select Count(*) as data from {table} where {excludeBotData} AND {excludeZeroProductApps} AND {loanApps} AND ({applicationsInProgressAbandoned} OR {applicationsSubmittedError} OR {applicationsDeclined} OR {applicationsExpired} OR {applicationsInProgressStarted} OR {applicationsInProgressSaved} OR {applicationsSubmittedUnderReview} OR {applicationsApprovedAwaitingEntry} OR {applicationsApprovedInUnderwriting} OR {applicationsApprovedFundingOngoing} OR {applicationsApprovedFundingOngoing} OR {applicationsMissing})",
-                "label":"Total Applications Started",
-            },
-            {
-                "sql": f"",
-                "label": "Change in Applicatons Started",
-            },
-            {
-                "sql": f"Select Count(*) as data from {table} where {excludeBotData} AND {excludeZeroProductApps} AND {multiLoanApps} AND ({applicationsInProgressAbandoned} OR {applicationsSubmittedError} OR {applicationsDeclined} OR {applicationsExpired} OR {applicationsInProgressStarted} OR {applicationsInProgressSaved} OR {applicationsSubmittedUnderReview} OR {applicationsApprovedAwaitingEntry} OR {applicationsApprovedInUnderwriting} OR {applicationsApprovedFundingOngoing} OR {applicationsApprovedFundingOngoing} OR {applicationsMissing})",
-                "label":"Multi Product Applications (Started)",
-            },
-            {
-                "sql": f"Select Count(*) as data from {table} where {excludeBotData} AND {excludeZeroProductApps} AND {singleLoanApps} AND ({applicationsInProgressAbandoned} OR {applicationsSubmittedError} OR {applicationsDeclined} OR {applicationsExpired} OR {applicationsInProgressStarted} OR {applicationsInProgressSaved} OR {applicationsSubmittedUnderReview} OR {applicationsApprovedAwaitingEntry} OR {applicationsApprovedInUnderwriting} OR {applicationsApprovedFundingOngoing} OR {applicationsApprovedFundingOngoing} OR {applicationsMissing})",
-                "label":"Single Product Applications (Started)",
-            },
-            {
-                "sql": f"Select Count(*) as data from {table} where {excludeBotData} AND {excludeZeroProductApps} AND {loanApps} AND ({applicationsSubmittedUnderReview} OR {applicationsApprovedAwaitingEntry} OR {applicationsApprovedInUnderwriting} OR {applicationsApprovedFundingOngoing} OR {applicationsApprovedFundingOngoing})",
-                "label":"Total Applications Submitted",
-            },
-            {
-                "sql": f"",
-                "label": "Change in Applications Submitted",
-            },
-            {
-                "sql": f"Select Count(*) as data from {table} where {excludeBotData} AND {excludeZeroProductApps} AND {multiLoanApps} AND ({applicationsSubmittedUnderReview} OR {applicationsApprovedAwaitingEntry} OR {applicationsApprovedInUnderwriting} OR {applicationsApprovedFundingOngoing} OR {applicationsApprovedFundingOngoing})",
-                "label":"Multi Product Applications (Submitted)",
-            },
-            {
-                "sql": f"Select Count(*) as data from {table} where {excludeBotData} AND {excludeZeroProductApps} AND {singleLoanApps} AND ({applicationsSubmittedUnderReview} OR {applicationsApprovedAwaitingEntry} OR {applicationsApprovedInUnderwriting} OR {applicationsApprovedFundingOngoing} OR {applicationsApprovedFundingOngoing})",
-                "label":"Single Product Applictaions (Submitted)",
-            },
-        ]) 
+        get_template_list([
+            loanApps, # base
+            singleLoanApps,# single
+            multiLoanApps, # # multi
+        ], countColumn, product_or_application=APPLICATIONS),
+        params
+        )
+    
+    sum_num_lending_products = f"SUM(NumlendingProducts) as data"
     CONSUMER_LOAN_PRODUCT_HEADERS, CONSUMER_LOAN_PRODUCT_ROWS = generate_report(
         intervals, 
-        [
-            #----------------------------------------------------------------------CONSUMER LOAN PRODUCTS---------------------------------------------------------------------------------------------------------------------------------------
-            {
-                "sql": f"Select SUM(NumlendingProducts) as data from {table} where {excludeBotData} AND {excludeZeroProductApps} AND {loanApps} AND {applicationsInProgressAbandoned}",
-                "label": "Applications In Progress (Abandoned)",
-            },
-            {
-                "sql": f"Select SUM(NumlendingProducts) as data from {table} where {excludeBotData} AND {excludeZeroProductApps} AND {loanApps} AND {applicationsSubmittedError}",
-                "label": "Applications Submitted (Error)",
-            },
-            {
-                "sql": f"Select SUM(NumlendingProducts) as data from {table} where {excludeBotData} AND {excludeZeroProductApps} AND {loanApps} AND {applicationsDeclined}",
-                "label":"Applications Declined",
-            },
-            {
-                "sql": f"Select SUM(NumlendingProducts) as data from {table} where {excludeBotData} AND {excludeZeroProductApps} AND {loanApps} AND {applicationsExpired}",
-                "label":"Applications Expired",
-            },
-            {
-                "sql": f"Select SUM(NumlendingProducts) as data from {table} where {excludeBotData} AND {excludeZeroProductApps} AND {loanApps} AND ({applicationsInProgressAbandoned} OR {applicationsSubmittedError} OR {applicationsDeclined} OR {applicationsExpired})",
-                "label":"Total Unsuccessful Applications",
-            },
-            {
-                "sql": f"Select SUM(NumlendingProducts) as data from {table} where {excludeBotData} AND {excludeZeroProductApps} AND {loanApps} AND {applicationsInProgressStarted}", 
-                "label":"Applications In Progress (Started)",
-            },
-            {
-                "sql": f"Select SUM(NumlendingProducts) as data from {table} where {excludeBotData} AND {excludeZeroProductApps} AND {loanApps} AND {applicationsInProgressSaved}",
-                "label":"Applications In Progress (Saved)",
-            },
-            {
-                "sql": f"Select SUM(NumlendingProducts) as data from {table} where {excludeBotData} AND {excludeZeroProductApps} AND {loanApps} AND {applicationsSubmittedUnderReview}", 
-                "label":"Applications Submitted(Under Review)",
-            },
-            {
-                "sql": f"Select SUM(NumlendingProducts) as data from {table} where {excludeBotData} AND {excludeZeroProductApps} AND {loanApps} AND {applicationsApprovedAwaitingEntry}",
-                "label":"Applications Approved(Awaiting Entry)",
-            },
-            {
-                "sql": f"Select SUM(NumlendingProducts) as data from {table} where {excludeBotData} AND {excludeZeroProductApps} AND {loanApps} AND {applicationsApprovedInUnderwriting}",
-                "label":"Applications Approved(In Underwriting)",
-            },
-            {
-                "sql": f"Select SUM(NumlendingProducts) as data from {table} where {excludeBotData} AND {excludeZeroProductApps} AND {loanApps} AND {applicationsApprovedFundingOngoing}",
-                "label":"Applications Approved(Funding Ongoing)",
-            },
-            {
-                "sql": f"Select SUM(NumlendingProducts) as data from {table} where {excludeBotData} AND {excludeZeroProductApps} AND {loanApps} AND {applicationsApprovedOnboarded}",
-                "label":"Applications Approved(Onboarded)",
-            },
-            {
-                "sql": f"Select SUM(NumlendingProducts) as data from {table} where {excludeBotData} AND {excludeZeroProductApps} AND {loanApps} AND ({applicationsInProgressStarted} OR {applicationsInProgressSaved} OR {applicationsSubmittedUnderReview} OR {applicationsApprovedAwaitingEntry} OR {applicationsApprovedInUnderwriting} OR {applicationsApprovedFundingOngoing} OR {applicationsApprovedOnboarded})",
-                "label":"Total Successful Applications",
-            },
-            {
-                "sql": f"Select SUM(NumlendingProducts) as data from {table} where {excludeBotData} AND {excludeZeroProductApps} AND {loanApps} AND {applicationsMissing}",
-                "label":"Applications Missing", 
-            },
-            {
-                "sql": f"Select SUM(NumlendingProducts) as data from {table} where {excludeBotData} AND {excludeZeroProductApps} AND {loanApps} AND ({applicationsInProgressAbandoned} OR {applicationsSubmittedError} OR {applicationsDeclined} OR {applicationsExpired} OR {applicationsInProgressStarted} OR {applicationsInProgressSaved} OR {applicationsSubmittedUnderReview} OR {applicationsApprovedAwaitingEntry} OR {applicationsApprovedInUnderwriting} OR {applicationsApprovedFundingOngoing} OR {applicationsApprovedFundingOngoing} OR {applicationsMissing})",
-                "label":"Total Applications Started",
-            },
-            {
-                "sql": f"",
-                "label": "Change in Products Started",
-            },
-            {
-                "sql": f"Select SUM(NumlendingProducts) as data from {table} where {excludeBotData} AND {excludeZeroProductApps} AND {multiLoanApps} AND ({applicationsInProgressAbandoned} OR {applicationsSubmittedError} OR {applicationsDeclined} OR {applicationsExpired} OR {applicationsInProgressStarted} OR {applicationsInProgressSaved} OR {applicationsSubmittedUnderReview} OR {applicationsApprovedAwaitingEntry} OR {applicationsApprovedInUnderwriting} OR {applicationsApprovedFundingOngoing} OR {applicationsApprovedFundingOngoing} OR {applicationsMissing})",
-                "label":"Multi Product Applications (Started)",
-            },
-            {
-                "sql": f"Select SUM(NumlendingProducts) as data from {table} where {excludeBotData} AND {excludeZeroProductApps} AND {singleLoanApps} AND ({applicationsInProgressAbandoned} OR {applicationsSubmittedError} OR {applicationsDeclined} OR {applicationsExpired} OR {applicationsInProgressStarted} OR {applicationsInProgressSaved} OR {applicationsSubmittedUnderReview} OR {applicationsApprovedAwaitingEntry} OR {applicationsApprovedInUnderwriting} OR {applicationsApprovedFundingOngoing} OR {applicationsApprovedFundingOngoing} OR {applicationsMissing})",
-                "label":"Single Product Applications (Started)",
-            },
-            {
-                "sql": f"Select SUM(NumlendingProducts) as data from {table} where {excludeBotData} AND {excludeZeroProductApps} AND {loanApps} AND ({applicationsSubmittedUnderReview} OR {applicationsApprovedAwaitingEntry} OR {applicationsApprovedInUnderwriting} OR {applicationsApprovedFundingOngoing} OR {applicationsApprovedFundingOngoing})",
-                "label":"Total Applications Submitted",
-            },
-            {
-                "sql": f"",
-                "label": "Change in Products Submitted",
-            },
-            {
-                "sql": f"Select SUM(NumlendingProducts) as data from {table} where {excludeBotData} AND {excludeZeroProductApps} AND {multiLoanApps} AND ({applicationsSubmittedUnderReview} OR {applicationsApprovedAwaitingEntry} OR {applicationsApprovedInUnderwriting} OR {applicationsApprovedFundingOngoing} OR {applicationsApprovedFundingOngoing})",
-                "label":"Multi Product Applications (Submitted)",
-            },
-            {
-                "sql": f"Select SUM(NumlendingProducts) as data from {table} where {excludeBotData} AND {excludeZeroProductApps} AND {singleLoanApps} AND ({applicationsSubmittedUnderReview} OR {applicationsApprovedAwaitingEntry} OR {applicationsApprovedInUnderwriting} OR {applicationsApprovedFundingOngoing} OR {applicationsApprovedFundingOngoing})",
-                "label":"Single Product Applictaions (Submitted)",
-            },
-        ])
+        get_template_list([
+            loanApps, # base
+            singleLoanApps,# single
+            multiLoanApps, # # multi
+        ], sum_num_lending_products, product_or_application=PRODUCTS),
+        params
+    )
+    
     CONSUMER_DEPOSIT_APPLICATIONS_HEADERS, CONSUMER_DEPOSIT_APPLICATIONS_ROWS = generate_report(
         intervals, 
-        [
-            #----------------------------------------------------------------------CONSUMER DEPOSIT APPLICATIONS---------------------------------------------------------------------------------------------------------------------------------------,
-            {
-                "sql": f"Select Count(*) as data from {table} where {excludeBotData} AND {excludeZeroProductApps} AND {depositApps} AND {applicationsInProgressAbandoned}",
-                "label": "Applications In Progress (Abandoned)",
-            },
-            {
-                "sql": f"Select Count(*) as data from {table} where {excludeBotData} AND {excludeZeroProductApps} AND {depositApps} AND {applicationsSubmittedError}",
-                "label": "Applications Submitted (Error)",
-            },
-            {
-                "sql": f"Select Count(*) as data from {table} where {excludeBotData} AND {excludeZeroProductApps} AND {depositApps} AND {applicationsDeclined}",
-                "label":"Applications Declined",
-            },
-            {
-                "sql": f"Select Count(*) as data from {table} where {excludeBotData} AND {excludeZeroProductApps} AND {depositApps} AND {applicationsExpired}",
-                "label":"Applications Expired",
-            },
-            {
-                "sql": f"Select Count(*) as data from {table} where {excludeBotData} AND {excludeZeroProductApps} AND {depositApps} AND ({applicationsInProgressAbandoned} OR {applicationsSubmittedError} OR {applicationsDeclined} OR {applicationsExpired})",
-                "label":"Total Unsuccessful Applications",
-            },
-            {
-                "sql": f"Select Count(*) as data from {table} where {excludeBotData} AND {excludeZeroProductApps} AND {depositApps} AND {applicationsInProgressStarted}", 
-                "label":"Applications In Progress (Started)",
-            },
-            {
-                "sql": f"Select Count(*) as data from {table} where {excludeBotData} AND {excludeZeroProductApps} AND {depositApps} AND {applicationsInProgressSaved}",
-                "label":"Applications In Progress (Saved)",
-            },
-            {
-                "sql": f"Select Count(*) as data from {table} where {excludeBotData} AND {excludeZeroProductApps} AND {depositApps} AND {applicationsSubmittedUnderReview}", 
-                "label":"Applications Submitted(Under Review)",
-            },
-            {
-                "sql": f"Select Count(*) as data from {table} where {excludeBotData} AND {excludeZeroProductApps} AND {depositApps} AND {applicationsApprovedAwaitingEntry}",
-                "label":"Applications Approved(Awaiting Entry)",
-            },
-            {
-                "sql": f"Select Count(*) as data from {table} where {excludeBotData} AND {excludeZeroProductApps} AND {depositApps} AND {applicationsApprovedInUnderwriting}",
-                "label":"Applications Approved(In Underwriting)",
-            },
-            {
-                "sql": f"Select Count(*) as data from {table} where {excludeBotData} AND {excludeZeroProductApps} AND {depositApps} AND {applicationsApprovedFundingOngoing}",
-                "label":"Applications Approved(Funding Ongoing)",
-            },
-            {
-                "sql": f"Select Count(*) as data from {table} where {excludeBotData} AND {excludeZeroProductApps} AND {depositApps} AND {applicationsApprovedOnboarded}",
-                "label":"Applications Approved(Onboarded)",
-            },
-            {
-                "sql": f"Select Count(*) as data from {table} where {excludeBotData} AND {excludeZeroProductApps} AND {depositApps} AND ({applicationsInProgressStarted} OR {applicationsInProgressSaved} OR {applicationsSubmittedUnderReview} OR {applicationsApprovedAwaitingEntry} OR {applicationsApprovedInUnderwriting} OR {applicationsApprovedFundingOngoing} OR {applicationsApprovedOnboarded})",
-                "label":"Total Successful Applications",
-            },
-            {
-                "sql": f"Select Count(*) as data from {table} where {excludeBotData} AND {excludeZeroProductApps} AND {depositApps} AND {applicationsMissing}",
-                "label":"Applications Missing", 
-            },
-            {
-                "sql": f"Select Count(*) as data from {table} where {excludeBotData} AND {excludeZeroProductApps} AND {depositApps} AND ({applicationsInProgressAbandoned} OR {applicationsSubmittedError} OR {applicationsDeclined} OR {applicationsExpired} OR {applicationsInProgressStarted} OR {applicationsInProgressSaved} OR {applicationsSubmittedUnderReview} OR {applicationsApprovedAwaitingEntry} OR {applicationsApprovedInUnderwriting} OR {applicationsApprovedFundingOngoing} OR {applicationsApprovedFundingOngoing} OR {applicationsMissing})",
-                "label":"Total Applications Started",
-            },
-            {
-                "sql": f"",
-                "label": "Change in Applicatons Started",
-            },
-            {
-                "sql": f"Select Count(*) as data from {table} where {excludeBotData} AND {excludeZeroProductApps} AND {multiDepositApps} AND ({applicationsInProgressAbandoned} OR {applicationsSubmittedError} OR {applicationsDeclined} OR {applicationsExpired} OR {applicationsInProgressStarted} OR {applicationsInProgressSaved} OR {applicationsSubmittedUnderReview} OR {applicationsApprovedAwaitingEntry} OR {applicationsApprovedInUnderwriting} OR {applicationsApprovedFundingOngoing} OR {applicationsApprovedFundingOngoing} OR {applicationsMissing})",
-                "label":"Multi Product Applications (Started)",
-            },
-            {
-                "sql": f"Select Count(*) as data from {table} where {excludeBotData} AND {excludeZeroProductApps} AND {singleDepositApps} AND ({applicationsInProgressAbandoned} OR {applicationsSubmittedError} OR {applicationsDeclined} OR {applicationsExpired} OR {applicationsInProgressStarted} OR {applicationsInProgressSaved} OR {applicationsSubmittedUnderReview} OR {applicationsApprovedAwaitingEntry} OR {applicationsApprovedInUnderwriting} OR {applicationsApprovedFundingOngoing} OR {applicationsApprovedFundingOngoing} OR {applicationsMissing})",
-                "label":"Single Product Applications (Started)",
-            },
-            {
-                "sql": f"Select Count(*) as data from {table} where {excludeBotData} AND {excludeZeroProductApps} AND {depositApps} AND ({applicationsSubmittedUnderReview} OR {applicationsApprovedAwaitingEntry} OR {applicationsApprovedInUnderwriting} OR {applicationsApprovedFundingOngoing} OR {applicationsApprovedFundingOngoing})",
-                "label":"Total Applications Submitted",
-            },
-            {
-                "sql": f"",
-                "label": "Change in Applications Submitted",
-            },
-            {
-                "sql": f"Select Count(*) as data from {table} where {excludeBotData} AND {excludeZeroProductApps} AND {multiDepositApps} AND ({applicationsSubmittedUnderReview} OR {applicationsApprovedAwaitingEntry} OR {applicationsApprovedInUnderwriting} OR {applicationsApprovedFundingOngoing} OR {applicationsApprovedFundingOngoing})",
-                "label":"Multi Product Applications (Submitted)",
-            },
-            {
-                "sql": f"Select Count(*) as data from {table} where {excludeBotData} AND {excludeZeroProductApps} AND {singleDepositApps} AND ({applicationsSubmittedUnderReview} OR {applicationsApprovedAwaitingEntry} OR {applicationsApprovedInUnderwriting} OR {applicationsApprovedFundingOngoing} OR {applicationsApprovedFundingOngoing})",
-                "label":"Single Product Applictaions (Submitted)",
-            },
-        ]) 
+        get_template_list([
+            depositApps, # base
+            singleDepositApps,# single
+            multiDepositApps, # multi
+        ], countColumn, product_or_application=APPLICATIONS),
+        params
+    )
+    
+    sum_num_deposit_products = f"SUM(NumDepositProducts) as data"    
+    
     CONSUMER_DEPOSIT_PRODUCTS_HEADERS, CONSUMER_DEPOSIT_PRODUCTS_ROWS = generate_report(
         intervals, 
-        [
-            #----------------------------------------------------------------------CONSUMER DEPOSIT PRODUCTS---------------------------------------------------------------------------------------------------------------------------------------
-            {
-                "sql": f"Select SUM(NumDepositProducts) as data from {table} where {excludeBotData} AND {excludeZeroProductApps} AND {depositApps} AND {applicationsInProgressAbandoned}",
-                "label": "Applications In Progress (Abandoned)",
-            },
-            {
-                "sql": f"Select SUM(NumDepositProducts) as data from {table} where {excludeBotData} AND {excludeZeroProductApps} AND {depositApps} AND {applicationsSubmittedError}",
-                "label": "Applications Submitted (Error)",
-            },
-            {
-                "sql": f"Select SUM(NumDepositProducts) as data from {table} where {excludeBotData} AND {excludeZeroProductApps} AND {depositApps} AND {applicationsDeclined}",
-                "label":"Applications Declined",
-            },
-            {
-                "sql": f"Select SUM(NumDepositProducts) as data from {table} where {excludeBotData} AND {excludeZeroProductApps} AND {depositApps} AND {applicationsExpired}",
-                "label":"Applications Expired",
-            },
-            {
-                "sql": f"Select SUM(NumDepositProducts) as data from {table} where {excludeBotData} AND {excludeZeroProductApps} AND {depositApps} AND ({applicationsInProgressAbandoned} OR {applicationsSubmittedError} OR {applicationsDeclined} OR {applicationsExpired})",
-                "label":"Total Unsuccessful Applications",
-            },
-            {
-                "sql": f"Select SUM(NumDepositProducts) as data from {table} where {excludeBotData} AND {excludeZeroProductApps} AND {depositApps} AND {applicationsInProgressStarted}", 
-                "label":"Applications In Progress (Started)",
-            },
-            {
-                "sql": f"Select SUM(NumDepositProducts) as data from {table} where {excludeBotData} AND {excludeZeroProductApps} AND {depositApps} AND {applicationsInProgressSaved}",
-                "label":"Applications In Progress (Saved)",
-            },
-            {
-                "sql": f"Select SUM(NumDepositProducts) as data from {table} where {excludeBotData} AND {excludeZeroProductApps} AND {depositApps} AND {applicationsSubmittedUnderReview}", 
-                "label":"Applications Submitted(Under Review)",
-            },
-            {
-                "sql": f"Select SUM(NumDepositProducts) as data from {table} where {excludeBotData} AND {excludeZeroProductApps} AND {depositApps} AND {applicationsApprovedAwaitingEntry}",
-                "label":"Applications Approved(Awaiting Entry)",
-            },
-            {
-                "sql": f"Select SUM(NumDepositProducts) as data from {table} where {excludeBotData} AND {excludeZeroProductApps} AND {depositApps} AND {applicationsApprovedInUnderwriting}",
-                "label":"Applications Approved(In Underwriting)",
-            },
-            {
-                "sql": f"Select SUM(NumDepositProducts) as data from {table} where {excludeBotData} AND {excludeZeroProductApps} AND {depositApps} AND {applicationsApprovedFundingOngoing}",
-                "label":"Applications Approved(Funding Ongoing)",
-            },
-            {
-                "sql": f"Select SUM(NumDepositProducts) as data from {table} where {excludeBotData} AND {excludeZeroProductApps} AND {depositApps} AND {applicationsApprovedOnboarded}",
-                "label":"Applications Approved(Onboarded)",
-            },
-            {
-                "sql": f"Select SUM(NumDepositProducts) as data from {table} where {excludeBotData} AND {excludeZeroProductApps} AND {depositApps} AND ({applicationsInProgressStarted} OR {applicationsInProgressSaved} OR {applicationsSubmittedUnderReview} OR {applicationsApprovedAwaitingEntry} OR {applicationsApprovedInUnderwriting} OR {applicationsApprovedFundingOngoing} OR {applicationsApprovedOnboarded})",
-                "label":"Total Successful Applications",
-            },
-            {
-                "sql": f"Select SUM(NumDepositProducts) as data from {table} where {excludeBotData} AND {excludeZeroProductApps} AND {depositApps} AND {applicationsMissing}",
-                "label":"Applications Missing", 
-            },
-            {
-                "sql": f"Select SUM(NumDepositProducts) as data from {table} where {excludeBotData} AND {excludeZeroProductApps} AND {depositApps} AND ({applicationsInProgressAbandoned} OR {applicationsSubmittedError} OR {applicationsDeclined} OR {applicationsExpired} OR {applicationsInProgressStarted} OR {applicationsInProgressSaved} OR {applicationsSubmittedUnderReview} OR {applicationsApprovedAwaitingEntry} OR {applicationsApprovedInUnderwriting} OR {applicationsApprovedFundingOngoing} OR {applicationsApprovedFundingOngoing} OR {applicationsMissing})",
-                "label":"Total Applications Started",
-            },
-            {
-                "sql": f"",
-                "label": "Change in Products Started",
-            },
-            {
-                "sql": f"Select SUM(NumDepositProducts) as data from {table} where {excludeBotData} AND {excludeZeroProductApps} AND {multiDepositApps} AND ({applicationsInProgressAbandoned} OR {applicationsSubmittedError} OR {applicationsDeclined} OR {applicationsExpired} OR {applicationsInProgressStarted} OR {applicationsInProgressSaved} OR {applicationsSubmittedUnderReview} OR {applicationsApprovedAwaitingEntry} OR {applicationsApprovedInUnderwriting} OR {applicationsApprovedFundingOngoing} OR {applicationsApprovedFundingOngoing} OR {applicationsMissing})",
-                "label":"Multi Product Applications (Started)",
-            },
-            {
-                "sql": f"Select SUM(NumDepositProducts) as data from {table} where {excludeBotData} AND {excludeZeroProductApps} AND {singleDepositApps} AND ({applicationsInProgressAbandoned} OR {applicationsSubmittedError} OR {applicationsDeclined} OR {applicationsExpired} OR {applicationsInProgressStarted} OR {applicationsInProgressSaved} OR {applicationsSubmittedUnderReview} OR {applicationsApprovedAwaitingEntry} OR {applicationsApprovedInUnderwriting} OR {applicationsApprovedFundingOngoing} OR {applicationsApprovedFundingOngoing} OR {applicationsMissing})",
-                "label":"Single Product Applications (Started)",
-            },
-            {
-                "sql": f"Select SUM(NumDepositProducts) as data from {table} where {excludeBotData} AND {excludeZeroProductApps} AND {depositApps} AND ({applicationsSubmittedUnderReview} OR {applicationsApprovedAwaitingEntry} OR {applicationsApprovedInUnderwriting} OR {applicationsApprovedFundingOngoing} OR {applicationsApprovedFundingOngoing})",
-                "label":"Total Applications Submitted",
-            },
-            {
-                "sql": f"",
-                "label": "Change in Products Submitted",
-            },
-            {
-                "sql": f"Select SUM(NumDepositProducts) as data from {table} where {excludeBotData} AND {excludeZeroProductApps} AND {multiDepositApps} AND ({applicationsSubmittedUnderReview} OR {applicationsApprovedAwaitingEntry} OR {applicationsApprovedInUnderwriting} OR {applicationsApprovedFundingOngoing} OR {applicationsApprovedFundingOngoing})",
-                "label":"Multi Product Applications (Submitted)",
-            },
-            {
-                "sql": f"Select SUM(NumDepositProducts) as data from {table} where {excludeBotData} AND {excludeZeroProductApps} AND {singleDepositApps} AND ({applicationsSubmittedUnderReview} OR {applicationsApprovedAwaitingEntry} OR {applicationsApprovedInUnderwriting} OR {applicationsApprovedFundingOngoing} OR {applicationsApprovedFundingOngoing})",
-                "label":"Single Product Applictaions (Submitted)",
-            },
-        ])
+        get_template_list([
+            depositApps, # base
+            singleDepositApps,# single
+            multiDepositApps, # multi
+        ], sum_num_deposit_products, product_or_application=PRODUCTS),
+        params
+    )
     
     CONSUMER_MIXED_APPLICATIONS_HEADERS, CONSUMER_MIXED_APPLICATIONS_ROWS = generate_report(
         intervals, 
-        [
-            #----------------------------------------------------------------------CONSUMER MIXED APPLICATIONS---------------------------------------------------------------------------------------------------------------------------------------
-            
-            {
-                "sql": f"Select Count(*) as data from {table} where {excludeBotData} AND {excludeZeroProductApps} AND {mixedApps} AND {applicationsInProgressAbandoned}",
-                "label": "Applications In Progress (Abandoned)",
-            },
-            {
-                "sql": f"Select Count(*) as data from {table} where {excludeBotData} AND {excludeZeroProductApps} AND {mixedApps} AND {applicationsSubmittedError}",
-                "label": "Applications Submitted (Error)",
-            },
-            {
-                "sql": f"Select Count(*) as data from {table} where {excludeBotData} AND {excludeZeroProductApps} AND {mixedApps} AND {applicationsDeclined}",
-                "label":"Applications Declined",
-            },
-            {
-                "sql": f"Select Count(*) as data from {table} where {excludeBotData} AND {excludeZeroProductApps} AND {mixedApps} AND {applicationsExpired}",
-                "label":"Applications Expired",
-            },
-            {
-                "sql": f"Select Count(*) as data from {table} where {excludeBotData} AND {excludeZeroProductApps} AND {mixedApps} AND ({applicationsInProgressAbandoned} OR {applicationsSubmittedError} OR {applicationsDeclined} OR {applicationsExpired})",
-                "label":"Total Unsuccessful Applications",
-            },
-            {
-                "sql": f"Select Count(*) as data from {table} where {excludeBotData} AND {excludeZeroProductApps} AND {mixedApps} AND {applicationsInProgressStarted}", 
-                "label":"Applications In Progress (Started)",
-            },
-            {
-                "sql": f"Select Count(*) as data from {table} where {excludeBotData} AND {excludeZeroProductApps} AND {mixedApps} AND {applicationsInProgressSaved}",
-                "label":"Applications In Progress (Saved)",
-            },
-            {
-                "sql": f"Select Count(*) as data from {table} where {excludeBotData} AND {excludeZeroProductApps} AND {mixedApps} AND {applicationsSubmittedUnderReview}", 
-                "label":"Applications Submitted(Under Review)",
-            },
-            {
-                "sql": f"Select Count(*) as data from {table} where {excludeBotData} AND {excludeZeroProductApps} AND {mixedApps} AND {applicationsApprovedAwaitingEntry}",
-                "label":"Applications Approved(Awaiting Entry)",
-            },
-            {
-                "sql": f"Select Count(*) as data from {table} where {excludeBotData} AND {excludeZeroProductApps} AND {mixedApps} AND {applicationsApprovedInUnderwriting}",
-                "label":"Applications Approved(In Underwriting)",
-            },
-            {
-                "sql": f"Select Count(*) as data from {table} where {excludeBotData} AND {excludeZeroProductApps} AND {mixedApps} AND {applicationsApprovedFundingOngoing}",
-                "label":"Applications Approved(Funding Ongoing)",
-            },
-            {
-                "sql": f"Select Count(*) as data from {table} where {excludeBotData} AND {excludeZeroProductApps} AND {mixedApps} AND {applicationsApprovedOnboarded}",
-                "label":"Applications Approved(Onboarded)",
-            },
-            {
-                "sql": f"Select Count(*) as data from {table} where {excludeBotData} AND {excludeZeroProductApps} AND {mixedApps} AND ({applicationsInProgressStarted} OR {applicationsInProgressSaved} OR {applicationsSubmittedUnderReview} OR {applicationsApprovedAwaitingEntry} OR {applicationsApprovedInUnderwriting} OR {applicationsApprovedFundingOngoing} OR {applicationsApprovedOnboarded})",
-                "label":"Total Successful Applications",
-            },
-            {
-                "sql": f"Select Count(*) as data from {table} where {excludeBotData} AND {excludeZeroProductApps} AND {mixedApps} AND {applicationsMissing}",
-                "label":"Applications Missing", 
-            },
-            {
-                "sql": f"Select Count(*) as data from {table} where {excludeBotData} AND {excludeZeroProductApps} AND {mixedApps} AND ({applicationsInProgressAbandoned} OR {applicationsSubmittedError} OR {applicationsDeclined} OR {applicationsExpired} OR {applicationsInProgressStarted} OR {applicationsInProgressSaved} OR {applicationsSubmittedUnderReview} OR {applicationsApprovedAwaitingEntry} OR {applicationsApprovedInUnderwriting} OR {applicationsApprovedFundingOngoing} OR {applicationsApprovedFundingOngoing} OR {applicationsMissing})",
-                "label":"Total Applications Started",
-            },
-            {
-                "sql": f"",
-                "label": "Change in Applicatons Started",
-            },
-            {
-                "sql": f"Select Count(*) as data from {table} where {excludeBotData} AND {excludeZeroProductApps} AND {mixedApps} AND ({applicationsInProgressAbandoned} OR {applicationsSubmittedError} OR {applicationsDeclined} OR {applicationsExpired} OR {applicationsInProgressStarted} OR {applicationsInProgressSaved} OR {applicationsSubmittedUnderReview} OR {applicationsApprovedAwaitingEntry} OR {applicationsApprovedInUnderwriting} OR {applicationsApprovedFundingOngoing} OR {applicationsApprovedFundingOngoing} OR {applicationsMissing})",
-                "label":"Multi Product Applications (Started)",
-            },
-            {
-                "sql": f"Select Count(*) as data from {table} where {excludeBotData} AND {excludeZeroProductApps} AND {mixedApps} AND ({applicationsSubmittedUnderReview} OR {applicationsApprovedAwaitingEntry} OR {applicationsApprovedInUnderwriting} OR {applicationsApprovedFundingOngoing} OR {applicationsApprovedFundingOngoing})",
-                "label":"Total Applications Submitted",
-            },
-            {
-                "sql": f"",
-                "label": "Change in Applications Submitted",
-            },
-            {
-                "sql": f"Select Count(*) as data from {table} where {excludeBotData} AND {excludeZeroProductApps} AND {mixedApps} AND ({applicationsSubmittedUnderReview} OR {applicationsApprovedAwaitingEntry} OR {applicationsApprovedInUnderwriting} OR {applicationsApprovedFundingOngoing} OR {applicationsApprovedFundingOngoing})",
-                "label":"Multi Product Applications (Submitted)",
-            },
-        ])
+        get_template_list([
+            mixedApps, # base
+            mixedApps ,# single
+            mixedApps, # multi
+        ], countColumn, product_or_application=APPLICATIONS),
+        params
+        )
+    
+
     CONSUMER_MIXED_PRODUCTS_HEADERS, CONSUMER_MIXED_PRODUCTS_ROWS = generate_report(
         intervals, 
-        [
-            #----------------------------------------------------------------------CONSUMER MIXED PRODUCTS---------------------------------------------------------------------------------------------------------------------------------------
-            {
-                "sql": f"Select SUM(NumDepositProducts) as data from {table} where {excludeBotData} AND {excludeZeroProductApps} AND {mixedApps} AND {applicationsInProgressAbandoned}",
-                "label": "Applications In Progress (Abandoned)",
-            },
-            {
-                "sql": f"Select SUM(NumDepositProducts) as data from {table} where {excludeBotData} AND {excludeZeroProductApps} AND {mixedApps} AND {applicationsSubmittedError}",
-                "label": "Applications Submitted (Error)",
-            },
-            {
-                "sql": f"Select SUM(NumDepositProducts) as data from {table} where {excludeBotData} AND {excludeZeroProductApps} AND {mixedApps} AND {applicationsDeclined}",
-                "label":"Applications Declined",
-            },
-            {
-                "sql": f"Select SUM(NumDepositProducts) as data from {table} where {excludeBotData} AND {excludeZeroProductApps} AND {mixedApps} AND {applicationsExpired}",
-                "label":"Applications Expired",
-            },
-            {
-                "sql": f"Select SUM(NumDepositProducts) as data from {table} where {excludeBotData} AND {excludeZeroProductApps} AND {mixedApps} AND ({applicationsInProgressAbandoned} OR {applicationsSubmittedError} OR {applicationsDeclined} OR {applicationsExpired})",
-                "label":"Total Unsuccessful Applications",
-            },
-            {
-                "sql": f"Select SUM(NumDepositProducts) as data from {table} where {excludeBotData} AND {excludeZeroProductApps} AND {mixedApps} AND {applicationsInProgressStarted}", 
-                "label":"Applications In Progress (Started)",
-            },
-            {
-                "sql": f"Select SUM(NumDepositProducts) as data from {table} where {excludeBotData} AND {excludeZeroProductApps} AND {mixedApps} AND {applicationsInProgressSaved}",
-                "label":"Applications In Progress (Saved)",
-            },
-            {
-                "sql": f"Select SUM(NumDepositProducts) as data from {table} where {excludeBotData} AND {excludeZeroProductApps} AND {mixedApps} AND {applicationsSubmittedUnderReview}", 
-                "label":"Applications Submitted(Under Review)",
-            },
-            {
-                "sql": f"Select SUM(NumDepositProducts) as data from {table} where {excludeBotData} AND {excludeZeroProductApps} AND {mixedApps} AND {applicationsApprovedAwaitingEntry}",
-                "label":"Applications Approved(Awaiting Entry)",
-            },
-            {
-                "sql": f"Select SUM(NumDepositProducts) as data from {table} where {excludeBotData} AND {excludeZeroProductApps} AND {mixedApps} AND {applicationsApprovedInUnderwriting}",
-                "label":"Applications Approved(In Underwriting)",
-            },
-            {
-                "sql": f"Select SUM(NumDepositProducts) as data from {table} where {excludeBotData} AND {excludeZeroProductApps} AND {mixedApps} AND {applicationsApprovedFundingOngoing}",
-                "label":"Applications Approved(Funding Ongoing)",
-            },
-            {
-                "sql": f"Select SUM(NumDepositProducts) as data from {table} where {excludeBotData} AND {excludeZeroProductApps} AND {mixedApps} AND {applicationsApprovedOnboarded}",
-                "label":"Applications Approved(Onboarded)",
-            },
-            {
-                "sql": f"Select SUM(NumDepositProducts) as data from {table} where {excludeBotData} AND {excludeZeroProductApps} AND {mixedApps} AND ({applicationsInProgressStarted} OR {applicationsInProgressSaved} OR {applicationsSubmittedUnderReview} OR {applicationsApprovedAwaitingEntry} OR {applicationsApprovedInUnderwriting} OR {applicationsApprovedFundingOngoing} OR {applicationsApprovedOnboarded})",
-                "label":"Total Successful Applications",
-            },
-            {
-                "sql": f"Select SUM(NumDepositProducts) as data from {table} where {excludeBotData} AND {excludeZeroProductApps} AND {mixedApps} AND {applicationsMissing}",
-                "label":"Applications Missing", 
-            },
-            {
-                "sql": f"Select SUM(NumDepositProducts) as data from {table} where {excludeBotData} AND {excludeZeroProductApps} AND {mixedApps} AND ({applicationsInProgressAbandoned} OR {applicationsSubmittedError} OR {applicationsDeclined} OR {applicationsExpired} OR {applicationsInProgressStarted} OR {applicationsInProgressSaved} OR {applicationsSubmittedUnderReview} OR {applicationsApprovedAwaitingEntry} OR {applicationsApprovedInUnderwriting} OR {applicationsApprovedFundingOngoing} OR {applicationsApprovedFundingOngoing} OR {applicationsMissing})",
-                "label":"Total Applications Started",
-            },
-            {
-                "sql": f"",
-                "label": "Change in Products Started",
-            },
-            {
-                "sql": f"Select SUM(NumDepositProducts) as data from {table} where {excludeBotData} AND {excludeZeroProductApps} AND {mixedApps} AND ({applicationsInProgressAbandoned} OR {applicationsSubmittedError} OR {applicationsDeclined} OR {applicationsExpired} OR {applicationsInProgressStarted} OR {applicationsInProgressSaved} OR {applicationsSubmittedUnderReview} OR {applicationsApprovedAwaitingEntry} OR {applicationsApprovedInUnderwriting} OR {applicationsApprovedFundingOngoing} OR {applicationsApprovedFundingOngoing} OR {applicationsMissing})",
-                "label":"Multi Product Applications (Started)",
-            },
-            
-            {
-                "sql": f"Select SUM(NumDepositProducts) as data from {table} where {excludeBotData} AND {excludeZeroProductApps} AND {mixedApps} AND ({applicationsSubmittedUnderReview} OR {applicationsApprovedAwaitingEntry} OR {applicationsApprovedInUnderwriting} OR {applicationsApprovedFundingOngoing} OR {applicationsApprovedFundingOngoing})",
-                "label":"Total Applications Submitted",
-            },
-            {
-                "sql": f"",
-                "label": "Change in Products Submitted",
-            },
-            {
-                "sql": f"Select SUM(NumDepositProducts) as data from {table} where {excludeBotData} AND {excludeZeroProductApps} AND {mixedApps} AND ({applicationsSubmittedUnderReview} OR {applicationsApprovedAwaitingEntry} OR {applicationsApprovedInUnderwriting} OR {applicationsApprovedFundingOngoing} OR {applicationsApprovedFundingOngoing})",
-                "label":"Multi Product Applications (Submitted)",
-            },
-            
-        ])    
+        get_template_list([
+            mixedApps, # base
+            mixedApps ,# single
+            mixedApps, # multi
+        ], sum_num_deposit_products, product_or_application=PRODUCTS),
+        params
+            )    
 
-    sql.disconnect()
     return {
                 "headers": CONSUMER_LOAN_APPLICATIONS_HEADERS,
                 "rowSets": {
@@ -568,9 +84,178 @@ def get_lending_and_deposit_reports(start_date, end_date):
                     "Consumer Mixed Products": CONSUMER_MIXED_PRODUCTS_ROWS,
                     }
             }
-from concurrent.futures import ThreadPoolExecutor
 
-def generate_report(intervals,  query_list):
+
+
+
+def get_template_list(app_type, column_type, product_or_application="Application", skipSingle=False, params={}):
+    common_filters = [excludeBotData, excludeZeroProductApps]
+    template_list = [
+            {
+                # "sql": f"Select Count(DISTINCT CONCAT(eCAID, '-', ecaTrackingCode)) as data from {table} where {excludeBotData} AND {excludeZeroProductApps} AND {loanApps} AND {applicationsInProgressAbandoned}",
+                "special_condition":  applicationsInProgressAbandoned,
+                "label": "Applications In Progress (Abandoned)",
+            },
+            {
+                # "sql": f"Select Count(DISTINCT CONCAT(eCAID, '-', ecaTrackingCode)) as data from {table} where {excludeBotData} AND {excludeZeroProductApps} AND {loanApps} AND {applicationsSubmittedError}",
+                "special_condition":  applicationsSubmittedError,
+                "label": "Applications Submitted (Error)",
+            },
+            {
+                # "sql": f"Select Count(DISTINCT CONCAT(eCAID, '-', ecaTrackingCode)) as data from {table} where {excludeBotData} AND {excludeZeroProductApps} AND {loanApps} AND {applicationsDeclined}",
+                "special_condition":  applicationsDeclined,
+                "label":"Applications Declined",
+            },
+            {
+                # "sql": f"Select Count(DISTINCT CONCAT(eCAID, '-', ecaTrackingCode)) as data from {table} where {excludeBotData} AND {excludeZeroProductApps} AND {loanApps} AND {applicationsExpired}",
+                "special_condition":  applicationsExpired,
+                "label":"Applications Expired",
+            },
+            {
+                # "sql": f"Select Count(DISTINCT CONCAT(eCAID, '-', ecaTrackingCode)) as data from {table} where {excludeBotData} AND {excludeZeroProductApps} AND {loanApps} AND ({abandonedApps} OR {applicationsSubmittedError} OR {applicationsDeclined} OR {applicationsExpired})",
+                "special_condition":  f"({applicationsInProgressAbandoned} OR {applicationsSubmittedError} OR {applicationsDeclined} OR {applicationsExpired})",
+                "label":"Total Unsuccessful Applications",
+            },
+            {
+                # "sql": f"Select Count(DISTINCT CONCAT(eCAID, '-', ecaTrackingCode)) as data from {table} where {excludeBotData} AND {excludeZeroProductApps} AND {loanApps} AND {applicationsInProgressStarted}",
+                "special_condition":  applicationsInProgressStarted,
+                "label":"Applications In Progress (Started)",
+            },
+            {
+                # "sql": f"Select Count(DISTINCT CONCAT(eCAID, '-', ecaTrackingCode)) as data from {table} where {excludeBotData} AND {excludeZeroProductApps} AND {loanApps} AND {applicationsInProgressSaved}",
+                "special_condition":  applicationsInProgressSaved,
+                "label":"Applications In Progress (Saved)",
+            },
+            {
+                # "sql": f"Select Count(DISTINCT CONCAT(eCAID, '-', ecaTrackingCode)) as data from {table} where {excludeBotData} AND {excludeZeroProductApps} AND {loanApps} AND {applicationsSubmittedUnderReview}", 
+                "special_condition":  applicationsSubmittedUnderReview,
+                "label":"Applications Submitted(Under Review)",
+            },
+            {
+                # "sql": f"Select Count(DISTINCT CONCAT(eCAID, '-', ecaTrackingCode)) as data from {table} where {excludeBotData} AND {excludeZeroProductApps} AND {loanApps} AND {applicationsApprovedAwaitingEntry}",
+                "special_condition":  applicationsApprovedAwaitingEntry,
+                "label":"Applications Approved(Awaiting Entry)",
+            },
+            {
+                # "sql": f"Select Count(DISTINCT CONCAT(eCAID, '-', ecaTrackingCode)) as data from {table} where {excludeBotData} AND {excludeZeroProductApps} AND {loanApps} AND {applicationsApprovedInUnderwriting}",
+                "special_condition":  applicationsApprovedInUnderwriting,
+                "label":"Applications Approved(In Underwriting)",
+            },
+            {
+                # "sql": f"Select Count(DISTINCT CONCAT(eCAID, '-', ecaTrackingCode)) as data from {table} where {excludeBotData} AND {excludeZeroProductApps} AND {loanApps} AND {applicationsApprovedFundingOngoing}",
+                "special_condition":  applicationsApprovedFundingOngoing,
+                "label":"Applications Approved(Funding Ongoing)",
+            },
+            {
+                # "sql": f"Select Count(DISTINCT CONCAT(eCAID, '-', ecaTrackingCode)) as data from {table} where {excludeBotData} AND {excludeZeroProductApps} AND {loanApps} AND {applicationsApprovedOnboarded}",
+                "special_condition":  applicationsApprovedOnboarded,
+                "label":"Applications Approved(Onboarded)",
+            },
+            {
+                # "sql": f"Select Count(DISTINCT CONCAT(eCAID, '-', ecaTrackingCode)) as data from {table} where {excludeBotData} AND {excludeZeroProductApps} AND {loanApps} AND ({applicationsInProgressStarted} OR {applicationsInProgressSaved} OR {applicationsSubmittedUnderReview} OR {applicationsApprovedAwaitingEntry} OR {applicationsApprovedInUnderwriting} OR {applicationsApprovedFundingOngoing} OR {applicationsApprovedOnboarded})",
+                "special_condition":  f"({applicationsInProgressStarted} OR {applicationsInProgressSaved} OR {applicationsSubmittedUnderReview} OR {applicationsApprovedAwaitingEntry} OR {applicationsApprovedInUnderwriting} OR {applicationsApprovedFundingOngoing} OR {applicationsApprovedOnboarded})",
+                "label":"Total Successful Applications",
+            },
+            {
+                # "sql": f"Select Count(DISTINCT CONCAT(eCAID, '-', ecaTrackingCode)) as data from {table} where {excludeBotData} AND {excludeZeroProductApps} AND {loanApps} AND {applicationsMissing}",
+                "special_condition":  applicationsMissing,
+                "label":"Applications Missing", 
+            },
+            {
+                # "sql": f"Select Count(DISTINCT CONCAT(eCAID, '-', ecaTrackingCode)) as data from {table} where {excludeBotData} AND {excludeZeroProductApps} AND {loanApps} AND ({applicationsInProgressAbandoned} OR {applicationsSubmittedError} OR {applicationsDeclined} OR {applicationsExpired} OR {applicationsInProgressStarted} OR {applicationsInProgressSaved} OR {applicationsSubmittedUnderReview} OR {applicationsApprovedAwaitingEntry} OR {applicationsApprovedInUnderwriting} OR {applicationsApprovedFundingOngoing}  OR {applicationsMissing})",
+                "special_condition":  f"({applicationsInProgressAbandoned} OR {applicationsSubmittedError} OR {applicationsDeclined} OR {applicationsExpired} OR {applicationsInProgressStarted} OR {applicationsInProgressSaved} OR {applicationsSubmittedUnderReview} OR {applicationsApprovedAwaitingEntry} OR {applicationsApprovedInUnderwriting} OR {applicationsApprovedFundingOngoing}  OR {applicationsMissing} OR {applicationsApprovedOnboarded})",
+                "label":"Total Applications Started",
+            },
+            {
+                # "sql": f"",
+                "special_condition": "",
+                "label": "Change in Applicatons Started",
+            },
+            {
+                # "sql": f"Select Count(DISTINCT CONCAT(eCAID, '-', ecaTrackingCode)) as data from {table} where {excludeBotData} AND {excludeZeroProductApps} AND {multiLoanApps} AND ({applicationsInProgressAbandoned} OR {applicationsSubmittedError} OR {applicationsDeclined} OR {applicationsExpired} OR {applicationsInProgressStarted} OR {applicationsInProgressSaved} OR {applicationsSubmittedUnderReview} OR {applicationsApprovedAwaitingEntry} OR {applicationsApprovedInUnderwriting} OR {applicationsApprovedFundingOngoing}  OR {applicationsMissing})",
+                "special_condition":f"({applicationsInProgressAbandoned} OR {applicationsSubmittedError} OR {applicationsDeclined} OR {applicationsExpired} OR {applicationsInProgressStarted} OR {applicationsInProgressSaved} OR {applicationsSubmittedUnderReview} OR {applicationsApprovedAwaitingEntry} OR {applicationsApprovedInUnderwriting} OR {applicationsApprovedFundingOngoing}  OR {applicationsMissing} OR {applicationsApprovedOnboarded})",
+                "label":"Multi Product Applications (Started)",
+            },
+            {
+                # "sql": f"Select Count(DISTINCT CONCAT(eCAID, '-', ecaTrackingCode)) as data from {table} where {excludeBotData} AND {excludeZeroProductApps} AND {singleLoanApps} AND ({applicationsInProgressAbandoned} OR {applicationsSubmittedError} OR {applicationsDeclined} OR {applicationsExpired} OR {applicationsInProgressStarted} OR {applicationsInProgressSaved} OR {applicationsSubmittedUnderReview} OR {applicationsApprovedAwaitingEntry} OR {applicationsApprovedInUnderwriting} OR {applicationsApprovedFundingOngoing}  OR {applicationsMissing})",
+                "special_condition": f"({applicationsInProgressAbandoned} OR {applicationsSubmittedError} OR {applicationsDeclined} OR {applicationsExpired} OR {applicationsInProgressStarted} OR {applicationsInProgressSaved} OR {applicationsSubmittedUnderReview} OR {applicationsApprovedAwaitingEntry} OR {applicationsApprovedInUnderwriting} OR {applicationsApprovedFundingOngoing}  OR {applicationsMissing} OR {applicationsApprovedOnboarded})",
+                "label":"Single Product Applications (Started)",
+            },
+            {
+                # "sql": f"Select Count(DISTINCT CONCAT(eCAID, '-', ecaTrackingCode)) as data from {table} where {excludeBotData} AND {excludeZeroProductApps} AND {loanApps} AND ({applicationsSubmittedUnderReview} OR {applicationsApprovedAwaitingEntry} OR {applicationsApprovedInUnderwriting} OR {applicationsApprovedFundingOngoing} )",
+                "special_condition":  f"({applicationsSubmitted} OR {applicationsSubmittedUnderReview} OR {applicationsApprovedAwaitingEntry} OR {applicationsApprovedInUnderwriting} OR {applicationsApprovedFundingOngoing} OR {applicationsApprovedOnboarded} OR {applicationsDeclined} OR {applicationsSubmittedError})",
+                "label":"Total Applications Submitted",
+            },
+            {
+                # "sql": f"",
+                "special_condition": "",
+                "label": "Change in Applications Submitted",
+            },
+            {
+                # "sql": f"Select Count(DISTINCT CONCAT(eCAID, '-', ecaTrackingCode)) as data from {table} where {excludeBotData} AND {excludeZeroProductApps} AND {multiLoanApps} AND ({applicationsSubmittedUnderReview} OR {applicationsApprovedAwaitingEntry} OR {applicationsApprovedInUnderwriting} OR {applicationsApprovedFundingOngoing} )",
+                "special_condition": f"({applicationsSubmitted} OR {applicationsSubmittedUnderReview} OR {applicationsApprovedAwaitingEntry} OR {applicationsApprovedInUnderwriting} OR {applicationsApprovedFundingOngoing} OR {applicationsApprovedOnboarded} OR {applicationsDeclined} OR {applicationsSubmittedError})",
+                "label":"Multi Product Applications (Submitted)",
+            },
+            {
+                # "sql": f"Select Count(DISTINCT CONCAT(eCAID, '-', ecaTrackingCode)) as data from {table} where {excludeBotData} AND {excludeZeroProductApps} AND {singleLoanApps} AND ({applicationsSubmittedUnderReview} OR {applicationsApprovedAwaitingEntry} OR {applicationsApprovedInUnderwriting} OR {applicationsApprovedFundingOngoing} )",
+                "special_condition": f"({applicationsSubmitted} OR {applicationsSubmittedUnderReview} OR {applicationsApprovedAwaitingEntry} OR {applicationsApprovedInUnderwriting} OR {applicationsApprovedFundingOngoing} OR {applicationsApprovedOnboarded} OR {applicationsDeclined} OR {applicationsSubmittedError})",
+                "label":"Single Product Applictaions (Submitted)",
+            },
+            {
+                # "sql": f"Select Count(DISTINCT CONCAT(eCAID, '-', ecaTrackingCode)) as data from {table} where {excludeBotData} AND {excludeZeroProductApps} AND {loanApps} AND ({applicationsApprovedAwaitingEntry} OR {applicationsApprovedInUnderwriting} OR {applicationsApprovedFundingOngoing} )",
+                "special_condition":  f"({applicationsApprovedAwaitingEntry} OR {applicationsApprovedFundingOngoing} OR {applicationsApprovedOnboarded})",
+                "label":"Total Applications Approved",
+            },
+            {
+                # "sql": f"",
+                "special_condition": "",
+                "label": "Change in Applications Approved",
+            },
+            {
+               # "sql": f"Select Count(DISTINCT CONCAT(eCAID, '-', ecaTrackingCode)) as data from {table} where {excludeBotData} AND {excludeZeroProductApps} AND {multiLoanApps} AND ({applicationsApprovedAwaitingEntry} OR {applicationsApprovedInUnderwriting} OR {applicationsApprovedFundingOngoing} )",
+                "special_condition": f"({applicationsApprovedAwaitingEntry} OR {applicationsApprovedFundingOngoing} OR {applicationsApprovedOnboarded} )",
+                "label":"Multi Product Applications (Approved)",
+            },
+            {
+                # "sql": f"Select Count(DISTINCT CONCAT(eCAID, '-', ecaTrackingCode)) as data from {table} where {excludeBotData} AND {excludeZeroProductApps} AND {singleLoanApps} AND ({applicationsApprovedAwaitingEntry} OR {applicationsApprovedInUnderwriting} OR {applicationsApprovedFundingOngoing} )",
+                "special_condition": f"({applicationsApprovedAwaitingEntry} OR {applicationsApprovedFundingOngoing} OR {applicationsApprovedOnboarded} )",
+                "label":"Single Product Applications (Approved)",
+            },
+            
+        ]
+    
+    for i in range(len(template_list)):
+        if product_or_application == "Products":
+            template_list[i]["label"] = template_list[i]["label"].replace("Applications","Products")
+        if template_list[i].get("label").startswith("Single"):
+            if skipSingle:
+                del template_list[i]
+            template_list[i]["sql"] = Q(
+                where=[template_list[i].get("special_condition"), app_type[1]] + common_filters,
+                columns=[column_type],
+                queryOnly=True,
+                params=params
+            )
+        elif template_list[i].get("label").startswith("Multi"):
+            template_list[i]["sql"] = Q(
+                where=[template_list[i].get("special_condition"), app_type[2]] + common_filters,
+                columns=[column_type],
+                queryOnly=True,
+                params=params
+            )
+        elif template_list[i].get("label").startswith("Change"):
+            template_list[i]["sql"] = ""
+        else:
+            template_list[i]["sql"] = Q(
+                where=[template_list[i].get("special_condition"), app_type[0]] + common_filters,
+                columns=[column_type],
+                queryOnly=True,
+                params=params
+            )
+
+    return template_list
+
+def generate_report(intervals,  query_list, params):
     
     headers = ["-"] + [get_header(interval)["label"] for interval in intervals if interval['start_date'] != interval['end_date']]
     headers.append("Grand-Total")
@@ -587,12 +272,13 @@ def generate_report(intervals,  query_list):
                 num = get_change("Total Applications Started", query_list, intervals, transaction, interv)
             elif is_same_label(query["label"], "Change in Applications Submitted"):
                 num = get_change("Total Applications Submitted", query_list, intervals, transaction, interv)
+            elif is_same_label(query["label"], "Change in Applications Approved"):
+                num = get_change("Total Applications Approved", query_list, intervals, transaction, interv)
             else:
                 num = get_query_from_list(query["label"], query_list, intervals[interv - 1], transaction)
 
             if isinstance(num, (int, float)):
                 total += num
-
             row_now.append(round(num, 2))
         row_now.append(round(total, 2))
         sql.disconnect()
@@ -614,7 +300,6 @@ def get_change(label,query_list,intervals,transaction, interv):
     else:
         num = (b-a)/a
     return num
-                
 
 def get_query_from_list(name,queries,interval,transaction):
     for query in queries:
@@ -625,31 +310,6 @@ def get_query_from_list(name,queries,interval,transaction):
                 return num
             
     return 0
-
-
-def get_list_of_months_between(start_date, end_date):
-
-    start_date = datetime.strptime(start_date, "%Y-%m-%d")
-    end_date = datetime.strptime(end_date, "%Y-%m-%d")
-    months = []
-
-    while start_date <= end_date:
-        month_start = start_date.strftime("%Y-%m-01")
-        next_month = start_date + relativedelta(months=1)
-        month_end = (next_month - relativedelta(days=1)).strftime("%Y-%m-%d")
-        months.append({"start_date": month_start, "end_date": month_end})
-        start_date = next_month
-
-    return months
-
-def get_header(interval):
-    # Convert start date to format Jun-25
-    start_date = datetime.strptime(interval['start_date'], "%Y-%m-%d").strftime("%b-%Y")
-    return {
-        "field": start_date,
-        "label": start_date
-    }
-    
 
 def in_between_sql_condition(interval):
     return f" AppStartDate >= '{interval['start_date']}' AND AppStartDate <= '{interval['end_date']}'"

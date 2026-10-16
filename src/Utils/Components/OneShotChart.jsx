@@ -163,7 +163,6 @@ const buildChartData = (
     return { labels: [], datasets: [] };
   }
 
-  console.log(headers, sanitizedRows)
 
   if (XY_CHARTS.has(chartType)) {
     return buildXYDataset(headers, sanitizedRows, chartType, axisConfig);

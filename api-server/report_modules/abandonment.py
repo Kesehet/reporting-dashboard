@@ -30,7 +30,10 @@ def get_abandonment_reports(start_date, end_date, branch_id=None, application_ty
                         "rows": rows                        
             }
 def get_row(branch_id, application_type, start_date, end_date, transaction, ecaTrackingCodeFilter):
-    columns = "eCAID, eCATrackingCode, AppStartDate, AppSubmitDate, AppUpdateDate, AppStatus,PrimaryName, ProductSetId, NumLendingProducts, NumDepositProducts, BranchID, Application_type, EmployeeResponsibilityCode"
+    columns = ["eCAID", "eCATrackingCode", "AppStartDate", "AppSubmitDate", "AppUpdateDate", "AppStatus","PrimaryName", "ProductSetId", "NumLendingProducts", "NumDepositProducts", "BranchID", 
+    "Application_type", "EmployeeResponsibilityCode"] + COMMON_EXPORT_COLUMNS
+    columns = ", ".join(list(set(columns)))
+    
     branch_id_filter = f"AND BranchID = '{str(branch_id)}'"
     if branch_id == 'All':
         branch_id_filter = ""
@@ -49,72 +52,51 @@ def get_row(branch_id, application_type, start_date, end_date, transaction, ecaT
         "End-Date": end_date,
         "BranchID": branch_id,
         "Abandoned-acknowledgements": 
-            f"SELECT  Count(*) as data from {table} WHERE {ecaTrackingCodeFilter} AND AppStatus = 'Abandoned:acknowledgements' AND AppStartDate >= '{start_date}' AND AppStartDate <= '{end_date}' {branch_id_filter} {application_type_filter} AND {excludeBotData} AND {excludeZeroProductApps} " 
+            f"SELECT  COUNT(DISTINCT CONCAT(eCAID, '-', ecaTrackingCode)) as data from {table} WHERE {ecaTrackingCodeFilter} AND AppStatus = 'Abandoned:acknowledgements' AND AppStartDate >= '{start_date}' AND AppStartDate <= '{end_date}' {branch_id_filter} {application_type_filter} AND {excludeBotData} AND {excludeZeroProductApps} " 
         ,
         "Abandoned-debit_card_options":
-            f"SELECT  Count(*) as data from {table} WHERE {ecaTrackingCodeFilter} AND AppStatus = 'Abandoned:debit_card_options' AND AppStartDate >= '{start_date}' AND AppStartDate <= '{end_date}' {branch_id_filter} {application_type_filter} AND {excludeBotData} AND {excludeZeroProductApps} " 
+            f"SELECT  COUNT(DISTINCT CONCAT(eCAID, '-', ecaTrackingCode)) as data from {table} WHERE {ecaTrackingCodeFilter} AND AppStatus = 'Abandoned:debit_card_options' AND AppStartDate >= '{start_date}' AND AppStartDate <= '{end_date}' {branch_id_filter} {application_type_filter} AND {excludeBotData} AND {excludeZeroProductApps} " 
         ,
         "Abandoned-demographic_information": 
-            f"SELECT  Count(*) as data from {table} WHERE {ecaTrackingCodeFilter} AND AppStatus = 'Abandoned:demographic_information' AND AppStartDate >= '{start_date}' AND AppStartDate <= '{end_date}' {branch_id_filter} {application_type_filter} AND {excludeBotData} AND {excludeZeroProductApps} "
+            f"SELECT  COUNT(DISTINCT CONCAT(eCAID, '-', ecaTrackingCode)) as data from {table} WHERE {ecaTrackingCodeFilter} AND AppStatus = 'Abandoned:demographic_information' AND AppStartDate >= '{start_date}' AND AppStartDate <= '{end_date}' {branch_id_filter} {application_type_filter} AND {excludeBotData} AND {excludeZeroProductApps} "
         ,
         "Abandoned-employment": 
-            f"SELECT  Count(*) as data from {table} WHERE {ecaTrackingCodeFilter} AND AppStatus = 'Abandoned:employment' AND AppStartDate >= '{start_date}' AND AppStartDate <= '{end_date}' {branch_id_filter} {application_type_filter} AND {excludeBotData} AND {excludeZeroProductApps} " 
+            f"SELECT  COUNT(DISTINCT CONCAT(eCAID, '-', ecaTrackingCode)) as data from {table} WHERE {ecaTrackingCodeFilter} AND AppStatus = 'Abandoned:employment' AND AppStartDate >= '{start_date}' AND AppStartDate <= '{end_date}' {branch_id_filter} {application_type_filter} AND {excludeBotData} AND {excludeZeroProductApps} " 
         , 
         "Abandoned-fiserv_presubmit_loading": 
-            f"SELECT  Count(*) as data from {table} WHERE {ecaTrackingCodeFilter} AND AppStatus = 'Abandoned:fiserv_presubmit_loading' AND AppStartDate >= '{start_date}' AND AppStartDate <= '{end_date}' {branch_id_filter} {application_type_filter} AND {excludeBotData} AND {excludeZeroProductApps} " 
+            f"SELECT  COUNT(DISTINCT CONCAT(eCAID, '-', ecaTrackingCode)) as data from {table} WHERE {ecaTrackingCodeFilter} AND AppStatus = 'Abandoned:fiserv_presubmit_loading' AND AppStartDate >= '{start_date}' AND AppStartDate <= '{end_date}' {branch_id_filter} {application_type_filter} AND {excludeBotData} AND {excludeZeroProductApps} " 
         ,
         "Abandoned-funding": 
-            f"SELECT  Count(*) as data from {table} WHERE {ecaTrackingCodeFilter} AND AppStatus = 'Abandoned:funding' AND AppStartDate >= '{start_date}' AND AppStartDate <= '{end_date}' {branch_id_filter} {application_type_filter} AND {excludeBotData} AND {excludeZeroProductApps} " 
+            f"SELECT  COUNT(DISTINCT CONCAT(eCAID, '-', ecaTrackingCode)) as data from {table} WHERE {ecaTrackingCodeFilter} AND AppStatus = 'Abandoned:funding' AND AppStartDate >= '{start_date}' AND AppStartDate <= '{end_date}' {branch_id_filter} {application_type_filter} AND {excludeBotData} AND {excludeZeroProductApps} " 
         ,
         "Abandoned-getting_started": 
-            f"SELECT  Count(*) as data from {table} WHERE {ecaTrackingCodeFilter} AND AppStatus = 'Abandoned:getting_started' AND AppStartDate >= '{start_date}' AND AppStartDate <= '{end_date}' {branch_id_filter} {application_type_filter} AND {excludeBotData} AND {excludeZeroProductApps} " 
+            f"SELECT  COUNT(DISTINCT CONCAT(eCAID, '-', ecaTrackingCode)) as data from {table} WHERE {ecaTrackingCodeFilter} AND AppStatus = 'Abandoned:getting_started' AND AppStartDate >= '{start_date}' AND AppStartDate <= '{end_date}' {branch_id_filter} {application_type_filter} AND {excludeBotData} AND {excludeZeroProductApps} " 
         ,
         "Abandoned-id_and_citizenship": 
-            f"SELECT  Count(*) as data from {table} WHERE {ecaTrackingCodeFilter} AND AppStatus = 'Abandoned:id_and_citizenship' AND AppStartDate >= '{start_date}' AND AppStartDate <= '{end_date}' {branch_id_filter} {application_type_filter} AND {excludeBotData} AND {excludeZeroProductApps} " 
+            f"SELECT  COUNT(DISTINCT CONCAT(eCAID, '-', ecaTrackingCode)) as data from {table} WHERE {ecaTrackingCodeFilter} AND AppStatus = 'Abandoned:id_and_citizenship' AND AppStartDate >= '{start_date}' AND AppStartDate <= '{end_date}' {branch_id_filter} {application_type_filter} AND {excludeBotData} AND {excludeZeroProductApps} " 
         ,
         "Abandoned-loading": 
-            f"SELECT  Count(*) as data from {table} WHERE {ecaTrackingCodeFilter} AND AppStatus = 'Abandoned:loading' AND AppStartDate >= '{start_date}' AND AppStartDate <= '{end_date}' {branch_id_filter} {application_type_filter} AND {excludeBotData} AND {excludeZeroProductApps} " 
+            f"SELECT  COUNT(DISTINCT CONCAT(eCAID, '-', ecaTrackingCode)) as data from {table} WHERE {ecaTrackingCodeFilter} AND AppStatus = 'Abandoned:loading' AND AppStartDate >= '{start_date}' AND AppStartDate <= '{end_date}' {branch_id_filter} {application_type_filter} AND {excludeBotData} AND {excludeZeroProductApps} " 
         ,
         "Abandoned-microdeposit_pending":
-            f"SELECT  Count(*) as data from {table} WHERE {ecaTrackingCodeFilter} AND AppStatus = 'Abandoned:microdeposit_pending' AND AppStartDate >= '{start_date}' AND AppStartDate <= '{end_date}' {branch_id_filter} {application_type_filter} AND {excludeBotData} AND {excludeZeroProductApps} " 
+            f"SELECT  COUNT(DISTINCT CONCAT(eCAID, '-', ecaTrackingCode)) as data from {table} WHERE {ecaTrackingCodeFilter} AND AppStatus = 'Abandoned:microdeposit_pending' AND AppStartDate >= '{start_date}' AND AppStartDate <= '{end_date}' {branch_id_filter} {application_type_filter} AND {excludeBotData} AND {excludeZeroProductApps} " 
         ,
         "Abandoned-None":
-            f"SELECT  Count(*) as data from {table} WHERE {ecaTrackingCodeFilter} AND AppStatus = 'Abandoned:None' AND AppStartDate >= '{start_date}' AND AppStartDate <= '{end_date}' {branch_id_filter} {application_type_filter} AND {excludeBotData} AND {excludeZeroProductApps} " 
+            f"SELECT  COUNT(DISTINCT CONCAT(eCAID, '-', ecaTrackingCode)) as data from {table} WHERE {ecaTrackingCodeFilter} AND AppStatus = 'Abandoned:None' AND AppStartDate >= '{start_date}' AND AppStartDate <= '{end_date}' {branch_id_filter} {application_type_filter} AND {excludeBotData} AND {excludeZeroProductApps} " 
         ,
         "Abandoned-order_checks":
-            f"SELECT  Count(*) as data from {table} WHERE {ecaTrackingCodeFilter} AND AppStatus = 'Abandoned:order_checks' AND AppStartDate >= '{start_date}' AND AppStartDate <= '{end_date}' {branch_id_filter} {application_type_filter} AND {excludeBotData} AND {excludeZeroProductApps} " 
+            f"SELECT  COUNT(DISTINCT CONCAT(eCAID, '-', ecaTrackingCode)) as data from {table} WHERE {ecaTrackingCodeFilter} AND AppStatus = 'Abandoned:order_checks' AND AppStartDate >= '{start_date}' AND AppStartDate <= '{end_date}' {branch_id_filter} {application_type_filter} AND {excludeBotData} AND {excludeZeroProductApps} " 
         ,
         "Abandoned-personal_information":
-            f"SELECT  Count(*) as data from {table} WHERE {ecaTrackingCodeFilter} AND AppStatus = 'Abandoned:personal_information' AND AppStartDate >= '{start_date}' AND AppStartDate <= '{end_date}' {branch_id_filter} {application_type_filter} AND {excludeBotData} AND {excludeZeroProductApps} " 
+            f"SELECT  COUNT(DISTINCT CONCAT(eCAID, '-', ecaTrackingCode)) as data from {table} WHERE {ecaTrackingCodeFilter} AND AppStatus = 'Abandoned:personal_information' AND AppStartDate >= '{start_date}' AND AppStartDate <= '{end_date}' {branch_id_filter} {application_type_filter} AND {excludeBotData} AND {excludeZeroProductApps} " 
         ,
         "Abandoned-residence":
-            f"SELECT  Count(*) as data from {table} WHERE {ecaTrackingCodeFilter} AND AppStatus = 'Abandoned:residence' AND AppStartDate >= '{start_date}' AND AppStartDate <= '{end_date}' {branch_id_filter} {application_type_filter} AND {excludeBotData} AND {excludeZeroProductApps} " 
+            f"SELECT  COUNT(DISTINCT CONCAT(eCAID, '-', ecaTrackingCode)) as data from {table} WHERE {ecaTrackingCodeFilter} AND AppStatus = 'Abandoned:residence' AND AppStartDate >= '{start_date}' AND AppStartDate <= '{end_date}' {branch_id_filter} {application_type_filter} AND {excludeBotData} AND {excludeZeroProductApps} " 
         ,
         "Abandoned-vouched_transition":
-            f"SELECT  Count(*) as data from {table} WHERE {ecaTrackingCodeFilter} AND AppStatus = 'Abandoned:vouched_transition' AND AppStartDate >= '{start_date}' AND AppStartDate <= '{end_date}' {branch_id_filter} {application_type_filter} AND {excludeBotData} AND {excludeZeroProductApps} " 
+            f"SELECT  COUNT(DISTINCT CONCAT(eCAID, '-', ecaTrackingCode)) as data from {table} WHERE {ecaTrackingCodeFilter} AND AppStatus = 'Abandoned:vouched_transition' AND AppStartDate >= '{start_date}' AND AppStartDate <= '{end_date}' {branch_id_filter} {application_type_filter} AND {excludeBotData} AND {excludeZeroProductApps} " 
         , 
-        "Bot Data":
-            f"""
-            WITH UniqueTrackingCodes AS (
-                SELECT eCATrackingCode
-                FROM [Digitalreport].[dbo].[Transactions]
-                WHERE eCATrackingCode IS NOT NULL AND eCATrackingCode != ''
-                GROUP BY eCATrackingCode
-                HAVING COUNT(*) = 1
-            )
-            SELECT  Count(*) as data from {table} as t WHERE 
-            t.PrimaryName IS NOT NULL AND t.PrimaryName != '' AND
-            {branch_id_filter}
-            AppStartDate >= '{start_date}' AND AppStartDate <= '{end_date}' AND 
-            t.eCATrackingCode IN (SELECT eCATrackingCode FROM UniqueTrackingCodes) AND
-            t.PrimaryName NOT IN (
-                SELECT PrimaryName 
-                FROM [DigitalReport].[dbo].[Transactions] 
-                GROUP BY PrimaryName 
-                HAVING COUNT(*) <= 35
-            )
-            """
-        ,   
+        
         "_report_Abandoned-acknowledgements": 
             f"SELECT {columns} from {table} WHERE {ecaTrackingCodeFilter} AND AppStartdate IS NOT NULL AND AppStatus = 'Abandoned:acknowledgements' AND AppStartDate >= '{start_date}' AND AppStartDate <= '{end_date}' {branch_id_filter} {application_type_filter} AND {excludeBotData} AND {excludeZeroProductApps} order by AppStartDate DESC"
         , 
@@ -159,29 +141,7 @@ def get_row(branch_id, application_type, start_date, end_date, transaction, ecaT
         ,
         "_report_Abandoned-vouched_transition":
             f"SELECT {columns} from {table} WHERE {ecaTrackingCodeFilter} AND AppStatus = 'Abandoned:vouched_transition' AND AppStartDate >= '{start_date}' AND AppStartDate <= '{end_date}' {branch_id_filter} {application_type_filter} AND {excludeBotData} AND {excludeZeroProductApps} order by AppStartDate DESC" 
-        ,   
-        "_report_Bot Data":
-            f"""
-            WITH UniqueTrackingCodes AS (
-                SELECT eCATrackingCode
-                FROM [Digitalreport].[dbo].[Transactions]
-                WHERE eCATrackingCode IS NOT NULL AND eCATrackingCode != ''
-                GROUP BY eCATrackingCode
-                HAVING COUNT(*) = 1
-            )
-            SELECT {columns} from {table} t WHERE 
-                t.PrimaryName IS NOT NULL AND t.PrimaryName != '' AND
-                {branch_id_filter}
-                AppStartDate >= '{start_date}' AND AppStartDate <= '{end_date}' AND 
-                t.eCATrackingCode IN (SELECT eCATrackingCode FROM UniqueTrackingCodes) AND
-                t.PrimaryName NOT IN (
-                    SELECT PrimaryName 
-                    FROM [DigitalReport].[dbo].[Transactions] 
-                    GROUP BY PrimaryName 
-                    HAVING COUNT(*) <= 35
-                )
-            """ 
-        ,   
+        
     }
 
 

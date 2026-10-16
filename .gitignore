@@ -31,7 +31,6 @@ __pycache__/
 last_run_time.txt
 env/*
 uploads/*
-*__test__*
 *.spec
 api-server/build/build_config.json
 .cache*
@@ -50,3 +49,23 @@ temp.json
 logged_chart_urls.txt
 api-server/xml_audit.py
 .env*
+temp_files/*
+Loan Commiments Report/*
+api-server/temp.py
+*temp.csv
+build_log.txt
+debug.log
+
+
+.venv/*
+jm_cache/*
+enc.key
+
+# Local runtime data and packaging artifacts
+/build/
+old_enc.key
+*.iml
+.pytest_cache/
+exe_build/
+exe_dist/
+!/.env.example

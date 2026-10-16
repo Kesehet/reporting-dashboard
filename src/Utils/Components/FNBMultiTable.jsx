@@ -3,7 +3,7 @@ import { dataParser, FNB_PIE_SECONDARY_COLOURS, getColorforTransactionType } fro
 import ChartDataService from "../../Services/ChartDataService";
 import { Button } from 'primereact/button';
 
-const FNBMultipleTable = ({ data, dates, columnWidth=250 }) => {
+const FNBMultiTable = ({ data, dates, columnWidth=250 }) => {
     const [isLoading, setLoading] = useState(true);
     const [tableData, setTableData] = useState({ headers: [], rowSets: {} });
     const [foldedRows, setFoldedRows] = useState({}); // Track folded state for each subheader
@@ -12,16 +12,13 @@ const FNBMultipleTable = ({ data, dates, columnWidth=250 }) => {
         setLoading(true)
         const chart = new ChartDataService(data);
         const chartResponse = await chart.getChart();
-        // console.log("Data", chartResponse);
         setTableData(dataParser(chartResponse));
         setLoading(false)
     };
     const fetchData = () => {
         if (typeof data === "string") {
-            // console.log("Table Data received", data);
             getChartData();
         } else {
-            // console.log("Generating Chart raw");
             setTableData(data);
         }
     };
@@ -51,7 +48,7 @@ const FNBMultipleTable = ({ data, dates, columnWidth=250 }) => {
         setFoldedRows(initialFoldedState);
     }, [tableData]);
 
-    if (tableData.headers.length === 0 || Object.keys(tableData.rowSets).length === 0) {
+    if (!tableData || tableData.headers.length === 0 || Object.keys(tableData.rowSets).length === 0) {
         return <p>Loading...</p>;
     }
 
@@ -202,7 +199,7 @@ const FNBMultipleTable = ({ data, dates, columnWidth=250 }) => {
                                     position: columnIndex === 0 ? 'sticky' : 'static', // Apply sticky only to the first column
                                     left: columnIndex === 0 ? 0 : 'auto', // Ensure it stays in place when scrolled
                                     color: columnIndex === 0 ? getColorforTransactionType(row[columnIndex]) : 'black',
-                                    backgroundColor: columnIndex === 0 ? 'white' : 'transparent', // Ensure it has a background to overlap content
+                                    backgroundColor: typeof row[0] === 'string' && row[0].search("Total") >= 0 ? '#eee' : 'white', // Ensure it has a background to overlap content
                                     zIndex: columnIndex === 0 ? 1 : 'auto', // Keep it on top
                                 }}
                             >
@@ -258,4 +255,4 @@ const FNBMultipleTable = ({ data, dates, columnWidth=250 }) => {
         </div>;
 };
 
-export default FNBMultipleTable;
+export default FNBMultiTable;

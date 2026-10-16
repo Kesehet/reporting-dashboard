@@ -1,5 +1,6 @@
-from DB import Q
+from DB import Q, SQLConn, Transaction
 from report_modules.condition_utils import *
+from utils import *
 
 printableColumns = [
         'eCAID', 
@@ -14,7 +15,7 @@ printableColumns = [
         'APPLICATION_TYPE', 
         'EmployeeResponsibilityCode', 
         'NMLS_Id'
-    ]
+    ] + COMMON_EXPORT_COLUMNS
 
 
 
@@ -23,27 +24,18 @@ def get_bor_reports(start_date, end_date, params=None):
     branch_id = params["BranchID"]
     application_type = "Banker Assisted"
     
-    common_filters = [get_date_filter(start_date, end_date), isConsumerTxn, startedApps, excludeBotData, excludeZeroProductApps]
+    common_filters = [get_date_filter(start_date, end_date), startedApps, excludeBotData, excludeZeroProductApps] + params_to_condition_list(params)
     
     if application_type != "All":
         common_filters.append(f" Application_Type = '{application_type}'" )
 
-
-    
-    if branch_id is not None:
-        BRANCH_IDS = [branch_id]  # Filter to only the specified branch ID
-    else:
-        BRANCH_IDS = Q(columns=[' Distinct(BranchID)'], where=common_filters+[isConsumerTxn], order_by=['BranchID ASC'])
-        BRANCH_IDS = [int(branch['BranchID']) for branch in BRANCH_IDS]
-        BRANCH_IDS = ['All'] + BRANCH_IDS  # Add 0 to the list of branch IDs
-        BRANCH_IDS = list(set(BRANCH_IDS))
-        print(f"Processing {len(BRANCH_IDS)} Branches.")
-
-
     rows = []
-    for branch_id in BRANCH_IDS:
-        common_filters.append(f"BranchID = '{str(branch_id)}'") if branch_id != 'All' else None
-        rows.append(get_async_row(branch_id, start_date, end_date, common_filters))
+    rows.append(
+        get_async_row(branch_id='All', start_date=start_date, end_date=end_date, common_filters=common_filters)
+    )
+    for branch_id, _ in ALL_BRANCH_ID:
+        branch_filter = f"BranchID = '{str(branch_id)}'" if branch_id != 'All' else ''
+        rows.append(get_async_row(branch_id, start_date, end_date, common_filters + [branch_filter]))
     
 
     return {"headers": [
@@ -132,3 +124,37 @@ def get_async_row(branch_id, start_date, end_date, common_filters):
         "_report_Total-Opened/Approved": Q(columns=printableColumns, where=common_filters+[APPROVED_APPS_FILTER, excludeZeroProductApps], order_by=commonOrderBy, queryOnly=True),
         "_report_Grand-Total":Q(columns=printableColumns, where=common_filters+[excludeZeroProductApps], order_by=commonOrderBy, queryOnly=True),
     }
+
+
+def get_bor_monthly_analytics_line(start_date,end_date, params={}):
+    variant = params.get("variant", "Started")
+    sql = SQLConn()
+    sql.connect()
+    txn = Transaction(sql)
+    ret = {
+            "labels": [],
+            "datasetMap": {
+                f"Total-{variant}-[Lending]": [],
+                f"Total-{variant}-[Deposit]": [],
+                f"Total-{variant}-[Mixed]": []
+            }
+        }
+    months = get_list_of_months_between(start_date, end_date)
+    
+    application_type = "Banker Assisted"
+    
+    common_filters = [isConsumerTxn, startedApps, excludeBotData, excludeZeroProductApps] + params_to_condition_list(params)
+    
+    if application_type != "All":
+        common_filters.append(f" Application_Type = '{application_type}'" )
+    for month in months:
+        common_filters_month = common_filters + [get_date_filter(month['start_date'], month['end_date'])]
+        queries = get_async_row(branch_id='All', start_date=month['start_date'], end_date=month['end_date'], common_filters=common_filters_month)
+        ret["labels"].append(get_header(month)['label'])
+        ret["datasetMap"][f"Total-{variant}-[Lending]"].append(
+            txn.get_transactions_by_sql_query(queries[f"Total-{variant}-[Lending]"])
+        )
+        ret["datasetMap"][f"Total-{variant}-[Deposit]"].append(txn.get_transactions_by_sql_query(queries[f"Total-{variant}-[Deposit]"]))
+        ret["datasetMap"][f"Total-{variant}-[Mixed]"].append(txn.get_transactions_by_sql_query(queries[f"Total-{variant}-[Mixed]"]))
+    sql.disconnect()
+    return ret

@@ -4,16 +4,13 @@ import { Button } from 'primereact/button';
 import { Toast } from 'primereact/toast';
 import { MultiSelect } from 'primereact/multiselect';
 import ChartDataService from '../../Services/ChartDataService';
-import { Dialog } from 'primereact/dialog';
-import { DataTable } from 'primereact/datatable';
 import BorAccordion from './BorAccordion';
 import { Dropdown } from 'primereact/dropdown';
+import ReportActions from './ReportActions';
 
 export default function BOR({dates, chartName, applicationTypeFilter=false}) {
     const [chartData, setChartData] = useState(null);
     const toast = useRef(null);
-    const [dialogVisible, setDialogVisible] = useState(false);
-    const [dialogData, setDialogData] = useState(null);
     const [selectedBranches, setSelectedBranches] = useState(["All"]);
     const [loading, setLoading] = useState(false);
     const [application_type, setApplication_type] = useState("All"); // Banker Assisted or Online
@@ -23,8 +20,6 @@ export default function BOR({dates, chartName, applicationTypeFilter=false}) {
             return;
         }
         setChartData(null);
-        setDialogData(null);
-        setDialogVisible(false);
         setLoading(true);
 
         try {
@@ -120,7 +115,7 @@ export default function BOR({dates, chartName, applicationTypeFilter=false}) {
 
     const branchOptions = rows
         ? Array.from(new Set(rows.map((row) => row.BranchID))).map((BranchID) => ({
-              label: `${BranchID} ${BranchID == "All" ? "Branches" : "Branch"}`,
+              label: `${BranchID} ${BranchID === "All" ? "Branches" : "Branch"}`,
               value: BranchID,
           }))
         : [];
@@ -143,17 +138,6 @@ export default function BOR({dates, chartName, applicationTypeFilter=false}) {
         setSelectedBranches(selected);
     };
 
-    const showDialogWithData = (data) => {
-        setDialogData(data);
-        setDialogVisible(true);
-    };
-
-    const dialogFooter = (
-        <div>
-            <Button label="Close" icon="pi pi-times" onClick={() => setDialogVisible(false)} />
-        </div>
-    );
-
     const renderAccordionContent = (data) => {
         const customOrder = ["Date", "Total-Started", "Total-Submitted", "Total-Opened/Approved", "Grand-Total"]; // Define your custom order here
         const orderedKeys = customOrder.concat(
@@ -164,8 +148,8 @@ export default function BOR({dates, chartName, applicationTypeFilter=false}) {
             <div className="p-3">
             <div className="flex flex-wrap gap-3">
                 {orderedKeys.map((key, index) => {
-                if (key.startsWith('_report_') || data[key] == "All") return null;
-                if ( key == "Start-Date"||  key == "End-Date") return null;
+                if (key.startsWith('_report_') || data[key] === "All") return null;
+                if ( key === "Start-Date"||  key === "End-Date") return null;
                 if (key.includes("[") || key.includes("]")) return null;
 
                 return (
@@ -219,17 +203,10 @@ export default function BOR({dates, chartName, applicationTypeFilter=false}) {
                     </div>
                     {data["_report_" + key] && (
                         <>
-                        <Button
-                            icon="pi pi-file"
-                            label="Export"
-                            onClick={() => exportRowAsCSV(data["_report_" + key], key + " " + data["Date"] + '.csv')}
-                            className="p-button-text"
-                        />
-                        <Button
-                            icon="pi pi-eye"
-                            label="View"
-                            onClick={() => showDialogWithData(data["_report_" + key])}
-                            className="p-button-text"
+                        <ReportActions
+                            report={data["_report_" + key]}
+                            filename={key + " " + data["Date"] + '.csv'}
+                            dialogHeader={key + " Details"}
                         />
                         </>
                     )}
@@ -263,61 +240,18 @@ export default function BOR({dates, chartName, applicationTypeFilter=false}) {
                     return (
                         <BorAccordion
                             tab={{
-                                header: BranchID + (BranchID == "All" ? " Branches" : " Branch"),
+                                header: BranchID + (BranchID === "All" ? " Branches" : " Branch"),
                                 content: renderAccordionContent(rowWithoutBranchID)
                             }}
                             key={index}
                             show={filteredRows.length < 2}
-                            hardShow={filteredRows.length == 1}
+                            hardShow={filteredRows.length === 1}
                         />
                     );
                 })}
             </div>
-            <Dialog
-                header="Detailed Data"
-                visible={dialogVisible}
-                style={{ width: '100vw', height: '100vh', margin: '0 auto' }}
-                onHide={() => setDialogVisible(false)}
-                footer={dialogFooter}
-                maximizable
-            >
-                {dialogData && dialogData.length > 0 ? (
-                    <DataTable value={dialogData} paginator rows={10} className="p-datatable-responsive p-datatable-sm">
-                        <DataTable.Column field="Date" header="Date" sortable />
-                        {Object.keys(dialogData[0]).map((key, index) => {
-                            if (key === "Date") return null;
-                            return <DataTable.Column key={index} field={key} header={key} sortable />;
-                        })}
-                    </DataTable>
-                ) : dialogData && dialogData.length === 0 ? (
-                    <div style={{ textAlign: 'center', padding: '2rem' }}>
-                        <p>No data available for this branch</p>
-                    </div>
-                ) : (
-                    <div style={{ textAlign: 'center', padding: '2rem' }}>
-                        <p>No data to display</p>
-                    </div>
-                )}
-            </Dialog>
         </div>
     );
-
-    function exportRowAsCSV(rowData, filename = 'exported_data.csv') {
-        const csvContent = rowData
-            .map((row) =>
-                Object.keys(row)
-                    .map((key) => `"${row[key]}"`)
-                    .join(',')
-            )
-            .join('\n');
-        const headers = Object.keys(rowData[0]).join(',');
-        const fullCsvContent = `${headers}\n${csvContent}`;
-        const blob = new Blob([fullCsvContent], { type: 'text/csv;charset=utf-8;' });
-        const link = document.createElement('a');
-        link.href = URL.createObjectURL(blob);
-        link.download = filename;
-        link.click();
-    }
 
     function applicationTypeDropDown(){
         if(!applicationTypeFilter){return}

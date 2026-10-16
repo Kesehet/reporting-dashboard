@@ -31,7 +31,7 @@ const FNBStackedBarChart = ({ data, dates, setBarColor = false, chartAPIParams={
             }
             setTimeout(setLoading(false), 3000)
         };
-        if(dates && dates[0] != null && dates[1] != null){
+        if(dates && dates[0] !== null && dates[1] !== null){
             setLoading(true)
             setTimeout(fetchData, 2000)    
         }
@@ -58,18 +58,18 @@ const FNBStackedBarChart = ({ data, dates, setBarColor = false, chartAPIParams={
     const renderLegend = () => {
         return (
             <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: '16px', marginTop: '16px' }}>
-                {barData.labels.map((label, index) => (
+                {barData.datasets.map((item, index) => (
                     <div key={index} style={{ display: 'flex', alignItems: 'center' }}>
                         <span
                             style={{
                                 width: '12px',
                                 height: '12px',
-                                backgroundColor: barData.datasets[0].backgroundColor[index],
+                                backgroundColor: item.backgroundColor,
                                 display: 'inline-block',
                                 marginRight: '8px'
                             }}
                         ></span>
-                        <span>{label}</span>
+                        <span>{item.label}</span>
                     </div>
                 ))}
             </div>

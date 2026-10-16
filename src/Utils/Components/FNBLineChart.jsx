@@ -6,19 +6,16 @@ import { Card } from 'primereact/card';
 import { ProgressSpinner } from 'primereact/progressspinner';
 import { toIncludeRepeated } from 'jest-extended';
 
-const FNBLineChart = (data, showPointValues = false) => {
+const FNBLineChart = ({data, showPointValues = false, chartAPIParams={}}) => {
     data = data && typeof data === 'object' ? dataParser(data) : data;
 
     const [chartData, setChartData] = useState({ labels: [], datasets: [] });
 
     const getChartData = async () => {
-        let chart = new ChartDataService(data);
+        let chart = new ChartDataService(data,chartAPIParams);
         let chartResponse = await chart.getChart();
-        // console.log('Line Chart Data ', chartResponse);
 
         const parsedData = chartResponse ? dataParser(generateLineChartData(chartResponse)) : { labels: [], datasets: [] };
-        // console.log('Parsed Labels:', parsedData.labels); // Debugging labels
-        // console.log('Parsed Datasets:', parsedData.datasets); // Debugging datasets
         setChartData({
             labels: parsedData.labels || [],
             datasets: parsedData.datasets || []
@@ -28,20 +25,15 @@ const FNBLineChart = (data, showPointValues = false) => {
     useEffect(() => {
         const fetchData = () => {
             if (typeof data === 'string') {
-                // console.log('Line Chart Data', data);
                 getChartData();
-                // console.log('Direct Data Labels:', data.labels); // Debugging direct data labels
-                // console.log('Direct Data Datasets:', data.datasets); // Debugging direct data datasets
                 setChartData(data);
-                // console.log('Generating Chart raw');
                 setChartData(data);
             }
         };
 
         fetchData();
-    }, [data]);
+    }, [data, chartAPIParams]);
 
-    // console.log('Flag', chartData);
 
     if (!chartData || !chartData.labels || !chartData.labels.length || !chartData.datasets || !chartData.datasets.length) {
         return (

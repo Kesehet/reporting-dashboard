@@ -2,6 +2,7 @@ from DB import Transaction, SQLConn
 from datetime import datetime
 from dateutil.relativedelta import relativedelta
 from report_modules.condition_utils import *
+from utils import get_header, get_list_of_months_between
 
 def get_declined_reports(start_date, end_date):
     sql = SQLConn()
@@ -13,7 +14,7 @@ def get_declined_reports(start_date, end_date):
         intervals, transaction,
         [
             {
-                "sql": "SELECT Count(*) as data FROM [DigitalReport].[dbo].[Transactions] WHERE AppStartDate IS NOT NULL AND AppStatus IN ('Decline Application Complete','Decline Application','Denied') AND "+excludeBotData+" AND "+excludeZeroProductApps+"",
+                "sql": "SELECT Count(DISTINCT CONCAT(eCAID, '-', ecaTrackingCode)) as data FROM [DigitalReport].[dbo].[Transactions] WHERE AppStartDate IS NOT NULL AND AppStatus IN ('Decline Application Complete','Decline Application','Denied') AND "+excludeBotData+" AND "+excludeZeroProductApps+"",
                 "label": "Decline Apps"
             },
         ]
@@ -36,26 +37,7 @@ def generate_report(intervals, transaction, query_list):
             row_now.append(num)
         rows.append(row_now)
     return headers, rows
-def get_list_of_months_between(start_date, end_date):
-    start_date = datetime.strptime(start_date, "%Y-%m-%d")
-    end_date = datetime.strptime(end_date, "%Y-%m-%d")
-    months = []
 
-    while start_date <= end_date:
-        month_start = start_date.strftime("%Y-%m-01")
-        next_month = start_date + relativedelta(months=1)
-        month_end = (next_month - relativedelta(days=1)).strftime("%Y-%m-%d")
-        months.append({"start_date": month_start, "end_date": month_end})
-        start_date = next_month
-
-    return months
-
-def get_header(interval):
-    start_date = datetime.strptime(interval['start_date'], "%Y-%m-%d").strftime("%b-%Y")
-    return {
-        "field": start_date,
-        "label": start_date
-    }
 
 def in_between_sql_condition(interval):
     return f"AppStartDate >= '{interval['start_date']}' AND AppStartDate <= '{interval['end_date']}'"

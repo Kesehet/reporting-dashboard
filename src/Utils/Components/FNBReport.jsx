@@ -22,7 +22,7 @@ export default function FNBReport({dates, CHART_NAME="Abandonment Report", rende
     const [selectedBranches, setSelectedBranches] = useState(["All"]);
     const [loading, setLoading] = useState(false);
     const [progress, setProgress] = useState(0); // <-- Add progress state
-    const [application_type, setApplication_type] = useState("All"); // Banker Assisted or Online
+    const [application_type, setApplication_type] = useState(globalSettings["Abandonment Report Application Type"]); // Banker Assisted or Online
 
     const fetchData = async () => {
         if (loading) {
@@ -111,7 +111,6 @@ export default function FNBReport({dates, CHART_NAME="Abandonment Report", rende
                             globalSettingSetter(newSetting);
                         }
                         setApplication_type(e.value);
-                        console.log(e.value)
                     }}
                     placeholder="Select Application Type"
                     style={{ width: '200px', height: '40px', marginBottom: '1rem' }}
@@ -141,7 +140,7 @@ export default function FNBReport({dates, CHART_NAME="Abandonment Report", rende
 
     const branchOptions = rows
         ? Array.from(new Set(rows.map((row) => row[idName]))).map((mainId) => ({
-              label: `${mainId} ${mainId == "All" ? SingularOrPlural[1] : SingularOrPlural[0]}`,
+              label: `${mainId} ${mainId === "All" ? SingularOrPlural[1] : SingularOrPlural[0]}`,
               value: mainId,
           }))
         : [];
@@ -164,11 +163,18 @@ export default function FNBReport({dates, CHART_NAME="Abandonment Report", rende
         setSelectedBranches(selected);
     };
 
-    const showDialogWithData = (data) => {
-        getCellData(data).then((resolvedData) => {
-            setDialogData(resolvedData);
-            setDialogVisible(true);
-        });
+    const showDialogWithData = async (data) => {
+        const resolvedData = await getCellData(data);
+        let parsedData = resolvedData;
+        if (typeof resolvedData === 'string') {
+            try {
+                parsedData = JSON.parse(resolvedData);
+            } catch {
+                parsedData = [];
+            }
+        }
+        setDialogData(Array.isArray(parsedData) ? parsedData : []);
+        setDialogVisible(true);
     };
 
 
@@ -188,8 +194,8 @@ export default function FNBReport({dates, CHART_NAME="Abandonment Report", rende
             <div className="p-3">
             <div className="flex flex-wrap gap-3">
                 {orderedKeys.map((key, index) => {
-                if (key.startsWith('_report_') || data[key] == "All") return null;
-                if ( key == "Start-Date"||  key == "End-Date") return null;
+                if (key.startsWith('_report_') || data[key] === "All") return null;
+                if ( key === "Start-Date"||  key === "End-Date") return null;
                 return (
                     <div
                     key={index}
@@ -275,10 +281,10 @@ export default function FNBReport({dates, CHART_NAME="Abandonment Report", rende
             </div>
             <div>
                 {filteredRows.map((row, index) => (
-                    <BorAccordion tab={{header:row.BranchID + (row.BranchID == "All"? " Branches" : " Branch"),content:renderAccordionContent(row)}} 
+                    <BorAccordion tab={{header:row.BranchID + (row.BranchID === "All"? " Branches" : " Branch"),content:renderAccordionContent(row)}} 
                     key={index} 
                     show={(filteredRows.length < 2)}
-                    hardShow ={(filteredRows.length == 1)}
+                    hardShow ={(filteredRows.length === 1)}
                     />
                 ))}
             </div>
@@ -312,16 +318,25 @@ export default function FNBReport({dates, CHART_NAME="Abandonment Report", rende
     );
 
     async function exportRowAsCSV(rowData, filename = 'exported_data.csv') {
-        rowData = await getCellData(rowData);
-        const csvContent = rowData
-            .map((row) =>
-                Object.keys(row)
-                    .map((key) => `"${row[key]}"`)
-                    .join(',')
+        const resolvedData = await getCellData(rowData);
+        let rows = resolvedData;
+        if (typeof resolvedData === 'string') {
+            try {
+                rows = JSON.parse(resolvedData);
+            } catch {
+                rows = [];
+            }
+        }
+        if (!Array.isArray(rows) || rows.length === 0) return;
+
+        const headers = Object.keys(rows[0]);
+        const csvContent = rows
+            .map((row) => headers
+                .map((key) => `"${String(row[key] ?? '').replace(/"/g, '""')}"`)
+                .join(',')
             )
             .join('\n');
-        const headers = Object.keys(rowData[0]).join(',');
-        const fullCsvContent = `${headers}\n${csvContent}`;
+        const fullCsvContent = `${headers.join(',')}\n${csvContent}`;
         const blob = new Blob([fullCsvContent], { type: 'text/csv;charset=utf-8;' });
         const link = document.createElement('a');
         link.href = URL.createObjectURL(blob);

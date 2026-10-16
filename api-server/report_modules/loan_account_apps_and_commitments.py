@@ -4,29 +4,97 @@
 
 from datetime import datetime
 from dateutil.relativedelta import relativedelta
+import logging
 from DB import Q, get_EDW, SQLConn, Transaction
 from report_modules.condition_utils import *
 from report_modules.edw_condition_utils import *
+from utils import get_header, get_list_of_months_between, get_quarter_header, get_list_of_quarters_between
 
 
-def get_insigths_report(start_date, end_date, params):
-    common_filters = [get_date_filter(start_date,end_date)]
-    started_conditions = [submittedApps, excludeBotData, excludeZeroProductApps, CorBFilter(params.get("eCATrackingCode","%"))] + common_filters
-    started_query_all = Q(where=started_conditions, queryOnly=True)
-    started_query_count = Q(columns=[countColumn], where=started_conditions, queryOnly=True)
+logger = logging.getLogger(__name__)
+
+
+def _get_edw_appids_for_interval(interval, params, txn, use_cache=True):
+    transaction_rows = Q(
+        columns=["EDW_APPID", "eCATrackingCode"],
+        where=[
+            lendingApps,
+            in_between_sql_condition(interval),
+            application_type_filter(params.get("application_type", "")),
+            CorBFilter(params.get("eCATrackingCode", "%")),
+        ],
+        params=params,
+        use_cache=use_cache,
+    )
+    if transaction_rows == 0:
+        return {"source_rows": 0, "direct_appids": 0, "fallback_appids": 0, "appids": []}
+
+    appids = list(dict.fromkeys(
+        str(row["EDW_APPID"])
+        for row in transaction_rows
+        if row.get("EDW_APPID")
+    ))
+    tracking_codes = list(dict.fromkeys(
+        str(row["eCATrackingCode"])
+        for row in transaction_rows
+        if not row.get("EDW_APPID") and row.get("eCATrackingCode")
+    ))
+
+    fallback_appids = []
+    if tracking_codes:
+        quote = "'"
+        tracking_codes_sql = ", ".join(
+            f"{quote}{tracking_code.replace(quote, quote + quote)}{quote}"
+            for tracking_code in tracking_codes
+        )
+        mapped_rows = txn.get_transactions_by_sql_query(
+            f"""
+            SELECT DISTINCT APPID
+            FROM {customfieldscurtable}
+            WHERE Temenos_ID IN ({tracking_codes_sql})
+            """,
+            use_cache=use_cache,
+        )
+        if mapped_rows != 0:
+            fallback_appids = list(dict.fromkeys(
+                str(row["APPID"])
+                for row in mapped_rows
+                if row.get("APPID")
+            ))
+
+    direct_appid_count = len(appids)
+    appids = list(dict.fromkeys(appids + fallback_appids))
+    return {
+        "source_rows": len(transaction_rows),
+        "direct_appids": direct_appid_count,
+        "fallback_appids": len(fallback_appids),
+        "appids": appids,
+    }
+
+
+def get_insigths_report(start_date, end_date, params={}):
+    common_filters = [get_date_filter(start_date,end_date), application_type_filter(params.get("application_type", "")),CorBFilter(params.get("eCATrackingCode","%"))]
+    started_conditions = [submittedApps, excludeBotData, excludeZeroProductApps] + common_filters
+    started_query_all = Q(where=started_conditions, queryOnly=True, params=params)
+    started_query_count = Q(columns=[countColumn], where=started_conditions, queryOnly=True, params=params)
 
     submitted_conditions = [SUBMITTED_FOR_LOAN_COMMITMENT_FILTER] + common_filters
-    submitted_query_all = Q(where=submitted_conditions)
+    submitted_query_all = Q(where=submitted_conditions, params=params)
+
+
     
     sql = SQLConn(kind="CRFEDW")
     sql.connect()
     txn = Transaction(sql_conn=sql)
     tids = []
+    if submitted_query_all == 0:
+        submitted_query_all = []
     for row in submitted_query_all: #submitted_query_all:
         tids.append(row.get("eCATrackingCode"))
         
-    tids = ','.join([f'\'{tid}\'' for tid in tids])
-    Opened_Approved_query_all = f"""
+    if tids:
+        tracking_codes_sql = ','.join([f'\'{tid}\'' for tid in tids])
+        Opened_Approved_query_all = f"""
             SELECT DISTINCT
                 app.APPID,
                 app.APPDETAILID,
@@ -45,14 +113,37 @@ def get_insigths_report(start_date, end_date, params):
                 ON app.APPID = dc.APPID
             LEFT JOIN [CRFEDW].[CRF_EMPL_PII_V1].[CRF_APP_REASONMASTER_CUR] AS rc
                 ON rc.ReasonID = dc.ReasonID
-                where temp.Temenos_ID is not null and temp.Temenos_ID != '' and temp.Temenos_ID IN ({tids}) and app.DecisionStatusName = 'Approved'
+                where temp.Temenos_ID is not null and temp.Temenos_ID != '' and temp.Temenos_ID IN ({tracking_codes_sql}) and app.DecisionStatusName = 'Approved'
             """
-    resp = txn.get_transactions_by_sql_query(Opened_Approved_query_all)
+        resp = txn.get_transactions_by_sql_query(Opened_Approved_query_all)
+    else:
+        resp = 0
+
     if resp == 0:
         Opened_Approved_query_all = []
     else:
         Opened_Approved_query_all = resp
-        
+
+    if tids:
+        all_application_type_list = Q(columns=["Application_Type", "eCATrackingCode"], where=[f"eCATrackingCode IN ({tracking_codes_sql}) ", CorBFilter(params.get("eCATrackingCode","%"))], params=params)
+    else:
+        all_application_type_list = []
+    all_application_type_dict = {}
+    if all_application_type_list == 0:
+        all_application_type_list = []
+    for row in all_application_type_list:
+        all_application_type_dict[row.get("eCATrackingCode")] = row.get("Application_Type")
+    
+    unique_query_by_tracking_code = {}
+    for obj in Opened_Approved_query_all:
+        if unique_query_by_tracking_code.get(obj["Temenos_ID"], None) == None:
+            obj["ApplicationType"] = all_application_type_dict.get(obj["Temenos_ID"])
+            unique_query_by_tracking_code[obj["Temenos_ID"]] = obj
+        elif obj["DecisionReason"] != None and obj["DecisionReason"] != "":
+            unique_query_by_tracking_code[obj["Temenos_ID"]]["DecisionReason"] += ", " + obj["DecisionReason"]
+
+    
+    Opened_Approved_query_all = list(unique_query_by_tracking_code.values())
         
     sql.disconnect()
 
@@ -72,7 +163,7 @@ def get_insigths_report(start_date, end_date, params):
 
 
 
-def get_stacked_bar_report(start_date, end_date, params=None, intervals=None):
+def get_stacked_bar_report(start_date, end_date, params={}, intervals=None):
 
     if intervals == None:
         intervals = get_list_of_months_between(start_date, end_date)
@@ -90,13 +181,12 @@ def get_stacked_bar_report(start_date, end_date, params=None, intervals=None):
             "sec":0,
             "unsec":0
         }
+        appid_result = _get_edw_appids_for_interval(interval, params, txn)
+        if not appid_result["appids"]:
+            continue
+        apps_filter = ", ".join(f"'{appid}'" for appid in appid_result["appids"])
+
         for PGR in SECURED_PRODUCT_GROUPINGS+UNSECURED_PRODUCT_GROUPINGS:
-            
-            appid_response = Q(columns=["EDW_APPID"], where=[lendingApps, in_between_sql_condition(interval)])
-            if appid_response == 0:
-                continue
-            appids = ["'"+str(tc.get("EDW_APPID"))+"'" for tc in appid_response if tc.get("EDW_APPID")]
-            apps_filter = ', '.join(appids)
             
             product_groupings_resp = txn.get_transactions_by_sql_query(f'''
             Select ProductGrouping as name, Count(*) as data from [CRFEDW].[CRF_EMPL_PII_V1].[CRF_APP_ACTION_APPLICATION_CUR]
@@ -128,9 +218,10 @@ def get_stacked_bar_report(start_date, end_date, params=None, intervals=None):
        ]
     }
 
-def get_bar_line_chart_report(start_date, end_date, params=None):
+def get_bar_line_chart_report(start_date, end_date, params={}):
     
     intervals = get_list_of_quarters_between(start_date, end_date)
+    diagnostics = str(params.get("diagnostics", "")).strip().lower() in {"1", "true", "yes"}
 
     if not params.get("show_line", False):
         intervals = sorted(intervals, key=lambda x: get_quarter_header(x)['Q'])
@@ -151,43 +242,107 @@ def get_bar_line_chart_report(start_date, end_date, params=None):
             "sec":0,
             "unsec":0,
         }
-        for PGR in SECURED_PRODUCT_GROUPINGS+UNSECURED_PRODUCT_GROUPINGS:
-            
-            appid_response = Q(columns=["EDW_APPID"], where=[lendingApps, in_between_sql_condition(interval)])
-            if appid_response == 0:
-                continue
-            appids = ["'"+str(tc.get("EDW_APPID"))+"'" for tc in appid_response if tc.get("EDW_APPID")]
-            apps_filter = ', '.join(appids)
-            
-            product_groupings_resp = txn.get_transactions_by_sql_query(f'''
-            Select ProductGrouping as name, SUM(AmountRequested) as data from [CRFEDW].[CRF_EMPL_PII_V1].[CRF_APP_ACTION_APPLICATION_CUR]
-                where APPID IN ({apps_filter}) and ProductGrouping = '{PGR}'
-                group by ProductGrouping Having Count(*) > 0 
-            ''')
+        appid_result = _get_edw_appids_for_interval(
+            interval,
+            params,
+            txn,
+            use_cache=not diagnostics,
+        )
+        if appid_result["source_rows"] == 0:
+            if diagnostics:
+                logger.warning(
+                    "Loan commitment quarter has no source transactions (start=%s, end=%s, application_type=%s)",
+                    interval["start_date"],
+                    interval["end_date"],
+                    params.get("application_type"),
+                )
+        source_rows = appid_result["source_rows"]
+        appids = appid_result["appids"]
+        apps_filter = ", ".join(f"'{appid}'" for appid in appids)
+        groups_with_amount = 0
+        groups_without_amount = 0
 
-            if PGR in SECURED_PRODUCT_GROUPINGS:
-                dataThisInterval["sec"] += product_groupings_resp
-            if PGR in UNSECURED_PRODUCT_GROUPINGS:
-                dataThisInterval["unsec"] += product_groupings_resp
+        if diagnostics and source_rows and not appids:
+            logger.warning(
+                "Loan commitment quarter has source transactions but no EDW_APPID values (start=%s, end=%s, application_type=%s, source_rows=%d)",
+                interval["start_date"],
+                interval["end_date"],
+                params.get("application_type"),
+                source_rows,
+            )
+
+        if diagnostics and appids:
+            product_groupings = SECURED_PRODUCT_GROUPINGS + UNSECURED_PRODUCT_GROUPINGS
+            product_groupings_sql = ", ".join(f"'{group}'" for group in product_groupings)
+            grouped_amounts = txn.get_transactions_by_sql_query(f'''
+                SELECT ProductGrouping, SUM(AmountRequested) AS commitment_amount
+                FROM [CRFEDW].[CRF_EMPL_PII_V1].[CRF_APP_ACTION_APPLICATION_CUR]
+                WHERE APPID IN ({apps_filter})
+                  AND ProductGrouping IN ({product_groupings_sql})
+                GROUP BY ProductGrouping
+            ''', use_cache=False)
+            amounts_by_group = {
+                row.get("ProductGrouping"): row.get("commitment_amount") or 0
+                for row in grouped_amounts
+            } if grouped_amounts != 0 else {}
+            groups_with_amount = sum(value != 0 for value in amounts_by_group.values())
+            groups_without_amount = len(product_groupings) - groups_with_amount
+            dataThisInterval["sec"] = sum(
+                amounts_by_group.get(group, 0) for group in SECURED_PRODUCT_GROUPINGS
+            )
+            dataThisInterval["unsec"] = sum(
+                amounts_by_group.get(group, 0) for group in UNSECURED_PRODUCT_GROUPINGS
+            )
+        else:
+            for PGR in SECURED_PRODUCT_GROUPINGS+UNSECURED_PRODUCT_GROUPINGS:
+                if not appids:
+                    continue
+
+                product_groupings_resp = txn.get_transactions_by_sql_query(f'''
+                Select ProductGrouping as name, SUM(AmountRequested) as data from [CRFEDW].[CRF_EMPL_PII_V1].[CRF_APP_ACTION_APPLICATION_CUR]
+                    where APPID IN ({apps_filter}) and ProductGrouping = '{PGR}'
+                    group by ProductGrouping Having Count(*) > 0
+                ''')
+
+                if PGR in SECURED_PRODUCT_GROUPINGS:
+                    dataThisInterval["sec"] += product_groupings_resp
+                if PGR in UNSECURED_PRODUCT_GROUPINGS:
+                    dataThisInterval["unsec"] += product_groupings_resp
         
-        listOfItems["total"].append(dataThisInterval["sec"] + dataThisInterval["unsec"])
+        quarter_total = dataThisInterval["sec"] + dataThisInterval["unsec"]
+        listOfItems["total"].append(quarter_total)
         
         interval_name = get_quarter_header(interval).get("Y", "Missed")
         if interval_name not in listOfItems or not listOfItems[interval_name]:
             listOfItems[interval_name] = []
 
-        listOfItems[interval_name].append(dataThisInterval["sec"] + dataThisInterval["unsec"])
+        listOfItems[interval_name].append(quarter_total)
+
+        if diagnostics:
+            log_method = logger.warning if quarter_total == 0 else logger.info
+            log_method(
+                "Loan commitment quarter totals (start=%s, end=%s, application_type=%s, source_rows=%d, direct_edw_appids=%d, temenos_fallback_appids=%d, usable_edw_appids=%d, product_groups_with_amount=%d, product_groups_zero=%d, commitment_total_is_zero=%s)",
+                interval["start_date"],
+                interval["end_date"],
+                params.get("application_type"),
+                source_rows,
+                appid_result["direct_appids"],
+                appid_result["fallback_appids"],
+                len(appids),
+                groups_with_amount,
+                groups_without_amount,
+                quarter_total == 0,
+            )
         
 
     sql.disconnect()
 
-    liners_list = get_stacked_bar_report(start_date,end_date, intervals=intervals)["list"]
-    line_data = []
-    for i in range(len(liners_list[0]["data"])):
-        line_data.append(liners_list[0]["data"][i] + liners_list[1]["data"][i])
-
-
     if params.get("show_line", False):
+        liners_list = get_stacked_bar_report(start_date, end_date, params=params, intervals=intervals)["list"]
+        line_data = [
+            liners_list[0]["data"][i] + liners_list[1]["data"][i]
+            for i in range(len(liners_list[0]["data"]))
+        ]
         
         return {
             "labels": [get_quarter_header(interval)['field'] for interval in intervals],
@@ -225,11 +380,10 @@ def get_bar_line_chart_report(start_date, end_date, params=None):
             }
 
 
-def get_table_report(start_date, end_date, params=None):
+def get_table_report(start_date, end_date, params={}):
     
     intervals = get_list_of_quarters_between(start_date, end_date)
 
-    
     sql = SQLConn(kind="CRFEDW")    
     sql.connect()
     txn = Transaction(sql)
@@ -252,13 +406,12 @@ def get_table_report(start_date, end_date, params=None):
             "total_amt":0,
             "total_avg":0
         }
+        appid_result = _get_edw_appids_for_interval(interval, params, txn)
+        if not appid_result["appids"]:
+            continue
+        apps_filter = ", ".join(f"'{appid}'" for appid in appid_result["appids"])
+
         for PGR in SECURED_PRODUCT_GROUPINGS+UNSECURED_PRODUCT_GROUPINGS:
-            
-            appid_response = Q(columns=["EDW_APPID"], where=[lendingApps, in_between_sql_condition(interval)])
-            if appid_response == 0:
-                continue
-            appids = ["'"+str(tc.get("EDW_APPID"))+"'" for tc in appid_response if tc.get("EDW_APPID")]
-            apps_filter = ', '.join(appids)
             
             product_groupings_resp = txn.get_transactions_by_sql_query(f'''
             Select ProductGrouping as name, Count(*) as data from [CRFEDW].[CRF_EMPL_PII_V1].[CRF_APP_ACTION_APPLICATION_CUR]
@@ -371,60 +524,4 @@ def format_amounts(amt):
 def in_between_sql_condition(interval):
     return f" AppStartDate >= '{interval['start_date']}' AND AppStartDate <= '{interval['end_date']}'"
 
-def get_header(interval):
-    # Convert start date to format Jun-25
-    start_date = datetime.strptime(interval['start_date'], "%Y-%m-%d").strftime("%b-%Y")
-    return {
-        "field": start_date,
-        "label": start_date
-    }
 
-
-def get_quarter_header(interval):
-    date_obj = datetime.strptime(interval['start_date'], "%Y-%m-%d")
-    year = date_obj.year
-    month = date_obj.month
-    quarter = (month - 1) // 3 + 1
-    label = f"Q{quarter}-{year}"
-    
-    return {
-        "field": label,
-        "label": label,
-        "Q": f"Q{quarter}",
-        "Y": year
-    }
-
-
-def get_list_of_months_between(start_date, end_date):
-
-    start_date = datetime.strptime(start_date, "%Y-%m-%d")
-    end_date = datetime.strptime(end_date, "%Y-%m-%d")
-    months = []
-
-    while start_date <= end_date:
-        month_start = start_date.strftime("%Y-%m-01")  # July 1st
-        next_month = datetime.strptime(month_start, "%Y-%m-%d") + relativedelta(months=1)  # Auguest 1st
-        month_end = (next_month - relativedelta(days=1)).strftime("%Y-%m-%d") # Auguest 4th 
-        months.append({"start_date": month_start, "end_date": month_end}) 
-        start_date = next_month
-
-    return months
-
-
-def get_list_of_quarters_between(start_date, end_date):
-    start_date = datetime.strptime(start_date, "%Y-%m-%d")
-    end_date = datetime.strptime(end_date, "%Y-%m-%d")
-    quarters = []
-
-    # Align start_date to the beginning of its quarter
-    start_month = ((start_date.month - 1) // 3) * 3 + 1
-    start_date = datetime(start_date.year, start_month, 1)
-
-    while start_date <= end_date:
-        quarter_start = start_date.strftime("%Y-%m-%d")
-        next_quarter = start_date + relativedelta(months=3)
-        quarter_end = (next_quarter - relativedelta(days=1)).strftime("%Y-%m-%d")
-        quarters.append({"start_date": quarter_start, "end_date": quarter_end})
-        start_date = next_quarter
-
-    return quarters

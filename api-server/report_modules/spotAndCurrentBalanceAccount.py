@@ -1,8 +1,9 @@
 from report_modules.condition_utils import APPROVED_APPS_STATUSES, get_date_filter, application_type_filter
-from DB import get_EDW, SQLConn, Transaction
+from DB import get_EDW, SQLConn, Transaction, Q
 import json
 from datetime import datetime
 from dateutil.relativedelta import relativedelta
+from utils import *
 
 
 def get_insights(start_date,end_date,params):
@@ -48,56 +49,6 @@ def in_between_sql_condition(interval):
     return f" AppStartDate >= '{interval['start_date']}' AND AppStartDate <= '{interval['end_date']}'"
 
 
-def get_header(interval):
-    start_date = datetime.strptime(interval['start_date'], "%Y-%m-%d").strftime("%b-%Y")
-    return {
-        "field": start_date,
-        "label": start_date
-    }
-
-
-def get_quarter_header(interval):
-    date_obj = datetime.strptime(interval['start_date'], "%Y-%m-%d")
-    year = date_obj.year
-    month = date_obj.month
-    quarter = (month - 1) // 3 + 1
-    label = f"Q{quarter}-{year}"
-    return {
-        "field": label,
-        "label": label,
-        "Q": f"Q{quarter}",
-        "Y": year
-    }
-
-
-def get_list_of_months_between(start_date, end_date):
-    start_date = datetime.strptime(start_date, "%Y-%m-%d")
-    end_date = datetime.strptime(end_date, "%Y-%m-%d")
-    months = []
-    while start_date <= end_date:
-        month_start = start_date.strftime("%Y-%m-01")
-        next_month = datetime.strptime(month_start, "%Y-%m-%d") + relativedelta(months=1)
-        month_end = (next_month - relativedelta(days=1)).strftime("%Y-%m-%d")
-        months.append({"start_date": month_start, "end_date": month_end})
-        start_date = next_month
-    return months
-
-
-def get_list_of_quarters_between(start_date, end_date):
-    start_date = datetime.strptime(start_date, "%Y-%m-%d")
-    end_date = datetime.strptime(end_date, "%Y-%m-%d")
-    quarters = []
-
-    start_month = ((start_date.month - 1) // 3) * 3 + 1
-    start_date = datetime(start_date.year, start_month, 1)
-
-    while start_date <= end_date:
-        quarter_start = start_date.strftime("%Y-%m-%d")
-        next_quarter = start_date + relativedelta(months=3)
-        quarter_end = (next_quarter - relativedelta(days=1)).strftime("%Y-%m-%d")
-        quarters.append({"start_date": quarter_start, "end_date": quarter_end})
-        start_date = next_quarter
-    return quarters
 
 
 # -------------------- Internal utilities for batching & caching --------------------
@@ -126,7 +77,7 @@ def _normalize_int_account(accNo, code_for_log=None):
     try:
         return int(str(accNo).strip())
     except Exception:
-        # Optionally log: print(f"Account number not int. ({accNo}) at {code_for_log}")
+        print(f"Error Account number not int. ({accNo}) at {code_for_log}")
         return None
 
 
@@ -144,7 +95,6 @@ def _safe_select_list(items, is_numeric=True):
 
 def get_responses(start_date, end_date, amount_table="CAM_DDA_ACCT_CUR", amount_column="DDA_ACCT_NUM", where_clauses=False):
     """
-    Optimized replacement:
       - Single query to DigitalReport to fetch all rows for the date window.
       - Parse JSON RawData once for account numbers.
       - Single batched IN lookup to CAMEDW per call to resolve balances.
@@ -161,6 +111,7 @@ def get_responses(start_date, end_date, amount_table="CAM_DDA_ACCT_CUR", amount_
     # Single pull for the date window + statuses
     get_tracking_codes_query = f"""
         SELECT 
+            t.AppStartDate,
             t.eCATrackingCode,
             t.AppStartDate,
             j.RawData,
@@ -185,24 +136,31 @@ def get_responses(start_date, end_date, amount_table="CAM_DDA_ACCT_CUR", amount_
     account_set = set()
     for row in tcs:
         code = row.get("eCATrackingCode")
+        appStartDate = row.get("AppStartDate")
         raw = row.get("RawData", {})
-        acc = row.get("AccountNumber", None)
-        json_obj = None
-        if isinstance(raw, dict):
-            json_obj = raw
-        else:
-            try:
-                json_obj = json.loads(raw)
-            except Exception:
-                # Optionally log: print(f"JSON issue in {code}")
-                json_obj = None
-        if acc is None:
-            acc = find_first_fnb_account_number(json_obj) if json_obj is not None else None
-            acc = _normalize_int_account(acc, code_for_log=code)
-        if acc is None:
-            continue
-        rows_with_accounts.append((code, acc))
-        account_set.add(acc)
+        accts = process_account_number(row.get("AccountNumber", ''))
+        for acc in accts:
+            json_obj = None
+            if isinstance(raw, dict):
+                json_obj = raw
+            else:
+                try:
+                    json_obj = json.loads(raw)
+                except Exception:
+                    # Optionally log: print(f"JSON issue in {code}")
+                    json_obj = None
+            if acc is None:
+                acc = find_first_fnb_account_number(json_obj) if json_obj is not None else None
+                acc = _normalize_int_account(acc, code_for_log=code)
+            if acc is None:
+                from post_process import process_tc
+                tc, acc = process_tc(tc, n_sql)
+            if acc is None:
+                continue
+            # split appStartDate to ensure string in YYYY-MM-DD
+            appStartDate = appStartDate.split(":")[0].split("T")[0]
+            rows_with_accounts.append((code, acc, appStartDate))
+            account_set.add(acc)
 
     if not rows_with_accounts:
         camedw_sql.disconnect()
@@ -221,20 +179,21 @@ def get_responses(start_date, end_date, amount_table="CAM_DDA_ACCT_CUR", amount_
         """
         rows = camedw_txn.get_transactions_by_sql_query(cam_sql) or []
         for r in rows:
-            acct = r.get("acct")
-            if acct is not None:
-                account_to_amt[int(acct)] = {
+            acct = process_account_number(r.get("acct"))
+            for acc in acct:
+                account_to_amt[acc] = {
                     "Initial_Deposit": r.get("Initial_Deposit"),
                     "Current_Balance": r.get("Current_Balance"),
                 }
 
     # Synthesize the response list in the same shape
     responses = []
-    for code, acc in rows_with_accounts:
+    for code, acc, appStartDate in rows_with_accounts:
         amt = account_to_amt.get(acc)
         if not amt:
             continue
         responses.append({
+            "Date": appStartDate,
             "eCATrackingCode": code,
             "Account Number": acc,
             "Initial_Deposit": amt.get("Initial_Deposit"),
@@ -335,37 +294,41 @@ def get_stacked_chart(start_date, end_date, params):
     for row in tcs:
         raw = row.get("RawData", {})
         app_date = row.get("AppStartDate")
-        acc = row.get("AccountNumber", None)
-        if not app_date:
-            continue
-        # Ensure string in YYYY-MM-DD; if datetime, cast
-        if not isinstance(app_date, str):
-            try:
-                app_date = app_date.strftime("%Y-%m-%d")
-            except Exception:
+        accts = process_account_number(row.get("AccountNumber", ''))
+        for acc in accts:
+            if not app_date:
+                continue
+            # Ensure string in YYYY-MM-DD; if datetime, cast
+            if not isinstance(app_date, str):
+                try:
+                    app_date = app_date.strftime("%Y-%m-%d")
+                except Exception:
+                    continue
+
+            json_obj = None
+            if isinstance(raw, dict):
+                json_obj = raw
+            else:
+                try:
+                    json_obj = json.loads(raw)
+                except Exception:
+                    json_obj = None
+            
+
+            if acc is None:
+                acc = find_first_fnb_account_number(json_obj) if json_obj is not None else None
+                acc = _normalize_int_account(acc)
+            if acc is None:
+                from post_process import process_tc
+                tc, acc = process_tc(tc, n_sql)
+            if acc is None:
                 continue
 
-        json_obj = None
-        if isinstance(raw, dict):
-            json_obj = raw
-        else:
-            try:
-                json_obj = json.loads(raw)
-            except Exception:
-                json_obj = None
-        
-
-        if acc is None:
-            acc = find_first_fnb_account_number(json_obj) if json_obj is not None else None
-            acc = _normalize_int_account(acc)
-        if acc is None:
-            continue
-
-        idx = _find_interval_index(app_date)
-        if idx is None:
-            continue
-        month_accounts[idx].add(acc)
-        all_accounts.add(acc)
+            idx = _find_interval_index(app_date)
+            if idx is None:
+                continue
+            month_accounts[idx].add(acc)
+            all_accounts.add(acc)
 
     # If no accounts found, return zeroed data
     if not all_accounts:
@@ -394,9 +357,9 @@ def get_stacked_chart(start_date, end_date, params):
             """
             rows = camedw_txn.get_transactions_by_sql_query(cam_sql) or []
             for r in rows:
-                acct = r.get("acct")
-                if acct is not None:
-                    account_to_amt[int(acct)] = {
+                acct = process_account_number(r.get("acct"))
+                for acc in acct:
+                    account_to_amt[acc] = {
                         "Initial_Deposit": r.get("Initial_Deposit"),
                         "Current_Balance": r.get("Current_Balance"),
                     }
@@ -425,6 +388,68 @@ def get_stacked_chart(start_date, end_date, params):
         "list": listicles
     }
 
+def get_monthly_opening_and_current_balance_table(start_date, end_date, params):
+    """
+    Optimized replacement:
+      - Single pull from DigitalReport for the entire range.
+      - Extract account numbers once; bucketize by month.
+      - Single CAMEDW lookup (batched) for all accounts across all months.
+      - Compute monthly opening and current balances in Python from the cached lookup, minimizing DB round trips.
+    """
+    intervals = get_list_of_months_between(start_date, end_date)
+
+    resp = get_responses(start_date, end_date)
+    if not resp or resp == 0 or isinstance(resp, dict) and "error" in resp:
+        return {"headers": [], "rows": []}
+
+    headers = ["-"] + [get_header(interval)['field'] for interval in intervals] + [get_header(interval)['field'] for interval in intervals]
+    rows = [
+        ["Apps"],
+        ["Products"],
+        ["Opening Balance"],
+        ["Current Balance"]
+    ]
+
+    for i, interval in enumerate(intervals):
+        month_start = interval['start_date']
+        month_end = interval['end_date']
+
+        opening_balance = 0
+        current_balance = 0
+        unique_accounts = set()
+        unique_tracking_codes = set()
+        product_count = 0
+        for record in resp:
+            app_date = record.get("Date")
+            if month_start <= app_date <= month_end:
+                product_dat = Q(columns=["NumDepositProducts", "NumLendingProducts"], where=[f"eCATrackingCode = '{record.get('eCATrackingCode')}'"], params=params)[0]
+                product_count += try_int(product_dat["NumDepositProducts"]) + try_int(product_dat["NumLendingProducts"])
+                    
+                current_balance += record.get("Current_Balance", 0)
+                opening_balance += record.get("Initial_Deposit", 0)
+                unique_accounts.add(record.get("Account Number"))
+                unique_tracking_codes.add(record.get("eCATrackingCode"))
+
+
+        rows[0].append(
+            add_comma_to_long_numbers(len(unique_tracking_codes))
+            )
+        rows[1].append(
+            add_comma_to_long_numbers(product_count)
+            )
+        rows[2].append(
+            add_comma_to_long_numbers(opening_balance)
+            )
+        rows[3].append(
+            add_comma_to_long_numbers(current_balance)
+            )
+        
+
+
+    return {
+        "headers": headers,
+        "rows": rows
+    }
 
 def get_table(start_date, end_date, params):
     """

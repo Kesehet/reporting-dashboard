@@ -6,12 +6,6 @@ class ChartDataService {
     }
 
     async getChart() {
-        if (!localStorage.getItem('token')) {
-            // console.log("Token not set in local storage.");
-        }
-        if (!localStorage.getItem('start_date') || !localStorage.getItem('end_date')) {
-            // console.log("Start date or end date not set in local storage.");
-        }
         try {
             const startDate = localStorage.getItem("start_date");
             const endDate = localStorage.getItem("end_date");
@@ -21,20 +15,41 @@ class ChartDataService {
             if(!this.extraParams.end_date) {this.extraParams.end_date = endDate;}
             this.extraParams.eCATrackingCode = CorBFilter;
             this.extraParams.eCATrackingCode = this.extraParams.eCATrackingCode === "All" ? "%25" : this.extraParams.eCATrackingCode;
+
+            // if this.extraParams.requestMethod is set to GET, use GET method else use POST
+            if(this.extraParams.requestMethod && this.extraParams.requestMethod.toUpperCase() === "POST"){
+                let extraPostParams = Object.entries(this.extraParams).reduce((obj, [key, value]) => {
+                    obj[key] = value;
+                    return obj;
+                }, {});
+                
+                const fullUrl = `${this.url}`;
+
+                const response = await fetch(fullUrl, {
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    method: 'POST',
+                    body: JSON.stringify(extraPostParams)
+                });
+                let data = await response.json();
+                return data;
+                
+            }            
+            else{
+                let extraGetParams = Object.entries(this.extraParams).map(([key, value]) => `${key}=${value}`).join('&');
+                const fullUrl = `${this.url}?${extraGetParams}`;
+                const response = await fetch(fullUrl, {
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    method: 'GET',
+                });
+                let data = await response.json();
+                return data;
+            }
             
-
-            let extraGetParams = Object.entries(this.extraParams).map(([key, value]) => `${key}=${value}`).join('&');
             
-            const fullUrl = `${this.url}?${extraGetParams}`;
-
-            const response = await fetch(fullUrl, {
-                headers: {
-                    'Authorization': localStorage.getItem('token'),
-                }
-            });
-            let data = await response.json();
-
-            return data;
         } catch (error) {
             console.error(error);
             return "Unknown Error Occurred.";

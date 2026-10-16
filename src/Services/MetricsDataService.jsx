@@ -21,11 +21,7 @@ class MetricsDataService {
 
             const fullUrl = `${this.url}?${extraGetParams}`;
 
-            const response = await fetch(fullUrl, {
-                headers: {
-                    'Authorization': localStorage.getItem('token'),
-                }
-            });
+            const response = await fetch(fullUrl);
 
             const data = await response.json();
             return data;

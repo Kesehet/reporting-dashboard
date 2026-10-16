@@ -3,11 +3,7 @@ import React, { useEffect, useState } from 'react';
 import ChartDataService from '../../Services/ChartDataService';
 import CellDataService from '../../Services/CellDataService';
 import { Button } from 'primereact/button';
-import { Dialog } from 'primereact/dialog';
-import { DataTable } from 'primereact/datatable';
-// If a project-level helper exists to resolve table queries, reuse it:
-import getCellData from './Utils';
-import FNBDataTable from './FNBDataTable';
+import ReportActions from './ReportActions';
 
 export default function CardReport({
   CHART_NAME,
@@ -18,9 +14,6 @@ export default function CardReport({
 }) {
   const [kv, setKv] = useState(null);
   const [loading, setLoading] = useState(false);
-  const [dialogVisible, setDialogVisible] = useState(false);
-  const [dialogData, setDialogData] = useState(null);
-  const [dialogHeader, setDialogHeader] = useState('Data');
 
   useEffect(() => {
     let active = true;
@@ -53,39 +46,6 @@ export default function CardReport({
       })()
     : [];
 
-  const openDialogFor = async (reportKey, label) => {
-    try {
-      const spec = kv[reportKey]; // could be a query spec or already a dataset
-      const rows = await getCellData(spec); // resolves to an array of objects for table rendering
-      setDialogData(rows);
-      setDialogHeader(label);
-      setDialogVisible(true);
-    } catch (e) {
-      console.error('Failed to load dialog data:', e);
-      setDialogData([]);
-      setDialogHeader(label);
-      setDialogVisible(true);
-    }
-  };
-
-  const exportCsvFor = async (reportKey, filename = 'report.csv') => {
-    const spec = kv[reportKey];
-    const rows = await getCellData(spec);
-    if (!rows || rows.length === 0) {
-      triggerDownload('data:text/csv;charset=utf-8,', filename);
-      return;
-    }
-    const headers = Object.keys(rows[0]);
-    const csvRows = [
-      headers.join(','),
-      ...rows.map(r => headers.map(h => `"${(r[h] ?? '').toString().replace(/"/g, '""')}"`).join(','))
-    ];
-    const blob = new Blob([csvRows.join('\n')], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    triggerDownload(url, filename);
-    URL.revokeObjectURL(url);
-  };
-
   return (
     <div className="p-3">
       <div className="flex align-items-center justify-content-between mb-3">
@@ -96,8 +56,6 @@ export default function CardReport({
             label="Refresh"
             onClick={() => {
               setKv(null);
-              setDialogVisible(false);
-              setDialogData(null);
               // re-trigger effect by changing params shallowly
               // (parent can also pass a new key to force refresh)
               const svc = new ChartDataService(CHART_NAME, params);
@@ -124,8 +82,18 @@ export default function CardReport({
       )}
 
       {!loading && kv && keys.length > 0 && (
-        <div className="flex flex-wrap gap-3">
-          {keys.map((key) => {
+        <div style={{ display: "flex", gap: "12px", width: "100%", flexWrap: "nowrap", justifyContent: "center", alignItems: "stretch"}}>
+              {getBox(keys, kv, cardWidth, title)}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ----------------- helpers ----------------- */
+
+function getBox(keys, kv, cardWidth, title) {
+  return keys.map((key) => {
             const reportSiblingKey = `_report_${key}`;
             const hasReport = Object.prototype.hasOwnProperty.call(kv, reportSiblingKey);
             return (
@@ -145,71 +113,41 @@ export default function CardReport({
                 <div className="p-card-body">
                   {/* Use CellDataService to render cell/value */}
                   {/* If the value is a query spec, CellDataService resolves it; otherwise it should render the primitive */}
-                  <div style={{ fontSize: '.95rem', color: '#555' }}>
-                    <CellDataService query={kv[key]} />
-                  </div>
+                  {/* If the value is a json object we can render it as key value pair with bold keys and normal values */}
+                  {typeof kv[key] === 'object' && kv[key] !== null ? (
+                    <div style={{ fontSize: '.95rem', color: '#555' }}>
+                      {Object.entries(kv[key]).map(([k, v]) => (
+                        <div key={k}>
+                          <strong>{k}:</strong> <CellDataService query={v}/>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div style={{ fontSize: '.95rem', color: '#555' }}>
+                      <CellDataService query={kv[key]}/>
+                    </div>
+                  )}
+
+
                 </div>
 
                 {hasReport && (
                   <div className="pt-2 flex gap-2">
-                    <Button
-                      icon="pi pi-file"
-                      label="Export"
-                      className="p-button-text"
-                      onClick={() => exportCsvFor(reportSiblingKey, `${sanitize(title)} - ${sanitize(key)}.csv`)}
-                    />
-                    <Button
-                      icon="pi pi-eye"
-                      label="View"
-                      className="p-button-text"
-                      onClick={() => openDialogFor(reportSiblingKey, `${key} • Details`)}
+                    <ReportActions
+                      report={kv[reportSiblingKey]}
+                      filename={`${sanitize(title)} - ${sanitize(key)}.csv`}
+                      dialogHeader={`${key} Details`}
                     />
                   </div>
                 )}
               </div>
             );
-          })}
-        </div>
-      )}
-
-      <Dialog
-        header={dialogHeader}
-        visible={dialogVisible}
-        style={{ width: '100vw', height: '100vh', margin: '0 auto' }}
-        onHide={() => setDialogVisible(false)}
-        maximizable
-      >
-        {Array.isArray(dialogData) && dialogData.length > 0 ? (
-            <>
-          <DataTable value={dialogData} 
-            paginator 
-            rows={10} 
-            className="p-datatable-responsive p-datatable-sm"
-            responsiveLayout="scroll"
-            showGridlines
-            style={{ width: '100%' }}
-            sortMode="multiple"
-            filterDisplay="menu"
-            globalFilterFields={Object.keys(dialogData[0])}
-          >
-            {/* First column ordering preserved as given by object keys */}
-            <DataTable.Column field="Date" header="Date" sortable />
-            {Object.keys(dialogData[0]).map((k) => k === 'Date' ? null : (
-              <DataTable.Column key={k} field={k} header={k} sortable />
-            ))}
-          </DataTable>
-          </>
-        ) : (
-          <div style={{ textAlign: 'center', padding: '2rem' }}>
-            <p>No data to display</p>
-          </div>
-        )}
-      </Dialog>
-    </div>
-  );
+          })
 }
 
-/* ----------------- helpers ----------------- */
+
+
+
 
 function normalizeChartPayload(payload) {
   // Accepts a variety of shapes and returns a flat key-value object.
@@ -245,11 +183,3 @@ function sanitize(name = '') {
   return String(name).replace(/[\\/:*?"<>|]+/g, ' ').trim();
 }
 
-function triggerDownload(href, filename) {
-  const link = document.createElement('a');
-  link.href = href;
-  link.download = filename;
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-}

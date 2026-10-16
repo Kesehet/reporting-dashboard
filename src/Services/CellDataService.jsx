@@ -18,7 +18,6 @@ const CellDataService = ({ query, extraParams = {}, children }) => {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'Authorization': localStorage.getItem('token'),
                 },
                 body: JSON.stringify({ query })
             });
@@ -39,7 +38,7 @@ const CellDataService = ({ query, extraParams = {}, children }) => {
     if (!data) return "Loading...";
 
     return (
-        normalizeNumber(data)
+        data
     );
 };
 

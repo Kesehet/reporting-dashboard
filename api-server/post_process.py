@@ -1,17 +1,237 @@
+import base64
+import logging
+
+import os
+from datetime import datetime
+from datetime import datetime
 from metrics import update_metrics, update_metrics_from_sql
 from report_modules.condition_utils import *
-from DB import get_EDW
-import concurrent.futures
+from DB import SQLConn, Transaction, Properties, WorkspaceExtract
 import sys
+from utils import process_account_number
+from helper.encryption_helper import encrypt_decrypt_string, is_encrypted
+
+logger = logging.getLogger(__name__)
 
 
-def post_process_txns(sql,txn):
-    sql.execute(f'''UPDATE [DigitalReport].[dbo].[Transactions] SET APPLICATION_TYPE = 'Online' WHERE (APPLICATION_TYPE IS NULL OR TRIM(APPLICATION_TYPE) = '') AND AppStartDate < '2025-04-09';''')
+def post_process_txns(sql, txn, tracking_codes_added_this_run=None):
+    if tracking_codes_added_this_run is None:
+        tracking_codes_added_this_run = set()
+
+    print("Starting post processing of transactions...")
+    we = WorkspaceExtract()
+
+    try:
+        ensure_properties_table(txn)
+    except Exception as e:
+        print("Error creating Properties table" + str(e))
+
+    try:
+        populate_properties_table(sql, txn)
+    except Exception as e:
+        print("Error populating Properties table" + str(e))
+
+    try:
+        process_dds_amounts(sql, txn)
+    except Exception as e:
+        print("Error processing DDS amounts" + str(e))
+
+    try:
+        account_status_fetch(sql, txn)
+    except Exception as e:
+        print("Error in account_status_fetch" + str(e))
+
+    try:
+        encrypt_all_pii_columns(sql, txn)
+    except Exception as e:
+        print("Error encrypting PII columns" + str(e))
     
-    update_metrics_from_sql("bot_users", txn,
+    try:
+        load_workspace_data(we, txn, tracking_codes_added_this_run)
+    except Exception as e:
+        print("Error in extract_workspace_data" + str(e))
+
+    
+    print("Finished post processing of transactions.")
+
+
+def ensure_properties_table(txn):
+    txn.sql_conn.execute(f'''
+        IF OBJECT_ID('[DigitalReport].[dbo].[Properties]', 'U') IS NULL
+        BEGIN
+            CREATE TABLE [DigitalReport].[dbo].[Properties] (
+                eCATrackingCode VARCHAR(50) NOT NULL PRIMARY KEY,
+                AppStartDate DATETIME NULL,
+                PrimaryName NVARCHAR(100) NOT NULL,
+                PrimarySSN NVARCHAR(100) NOT NULL,
+                Property VARCHAR(100) NOT NULL,
+                PropertyValue NVARCHAR(MAX) NULL
+            );
+        END
+        ELSE
+        BEGIN
+            IF COL_LENGTH('[DigitalReport].[dbo].[Properties]', 'eCATrackingCode') IS NULL
+                ALTER TABLE [DigitalReport].[dbo].[Properties]
+                ADD eCATrackingCode VARCHAR(50) NOT NULL DEFAULT('');
+
+            IF COL_LENGTH('[DigitalReport].[dbo].[Properties]', 'AppStartDate') IS NULL
+                ALTER TABLE [DigitalReport].[dbo].[Properties]
+                ADD AppStartDate DATETIME NULL;
+
+            IF COL_LENGTH('[DigitalReport].[dbo].[Properties]', 'PrimaryName') IS NULL
+                ALTER TABLE [DigitalReport].[dbo].[Properties]
+                ADD PrimaryName NVARCHAR(100) NOT NULL DEFAULT('');
+
+            IF COL_LENGTH('[DigitalReport].[dbo].[Properties]', 'PrimarySSN') IS NULL
+                ALTER TABLE [DigitalReport].[dbo].[Properties]
+                ADD PrimarySSN NVARCHAR(100) NOT NULL DEFAULT('');
+
+            IF COL_LENGTH('[DigitalReport].[dbo].[Properties]', 'Property') IS NULL
+                ALTER TABLE [DigitalReport].[dbo].[Properties]
+                ADD Property VARCHAR(100) NOT NULL DEFAULT('');
+
+            IF COL_LENGTH('[DigitalReport].[dbo].[Properties]', 'PropertyValue') IS NULL
+                ALTER TABLE [DigitalReport].[dbo].[Properties]
+                ADD PropertyValue NVARCHAR(MAX) NULL;
+
+            IF NOT EXISTS (
+                SELECT 1
+                FROM sys.key_constraints
+                WHERE name = 'PK_Properties'
+            )
+            BEGIN
+                ALTER TABLE [DigitalReport].[dbo].[Properties]
+                ADD CONSTRAINT PK_Properties PRIMARY KEY (eCATrackingCode);
+            END
+        END
+    ''')
+    print("Checked for Properties table and created if not exists, also added missing columns if any.")
+
+
+def populate_properties_table(sql, txn):
+    properties = Properties(sql)
+    PIPE_SEPERATED_COLUMNS = ["AccountNumber", "DepositAcctStatus", "LoanAcctStatus"]
+    all_txns = txn.get_transactions_by_sql_query(f'''
+        SELECT APPStartDate, eCATrackingCode, PrimaryName, PrimarySSN, {", ".join(PIPE_SEPERATED_COLUMNS)} FROM [DigitalReport].[dbo].[Transactions]
+        WHERE PrimarySSN IS NOT NULL AND PrimarySSN != ''
+          AND {excludeBotData} AND {excludeZeroProductApps}
+          AND {approvedAppsForBPMandCRIF}
+    ''')
+    if all_txns == 0:
+        all_txns = []
+
+    for txn_row in all_txns:
+        eCATrackingCode = txn_row.get("eCATrackingCode")
+        if properties.ecaTrackingCode_exists(eCATrackingCode):
+            continue
+
+        for column in PIPE_SEPERATED_COLUMNS:
+            account_numbers = process_account_number(txn_row.get(column) or "")
+            for i, account_number in enumerate(account_numbers):
+                txn_row[f"{column}_{i}"] = account_number
+            txn_row.pop(column, None)
+
+        properties.set_properties_for_ecaTrackingCode(eCATrackingCode, txn_row)
+
+
+def process_dds_amounts(sql, txn):
+    all_ecatrackingCodes_with_null_accounts = txn.get_transactions_by_sql_query('''
+        SELECT eCATrackingCode, AppStartDate, AccountNumber, PrimaryName, PrimarySSN
+        FROM [DigitalReport].[dbo].[Transactions]
+        WHERE NumLendingProducts > 0
+        ORDER BY AppStartDate DESC
+    ''')
+    if all_ecatrackingCodes_with_null_accounts == 0:
+        all_ecatrackingCodes_with_null_accounts = []
+
+    properties = Properties(sql)
+    total_items = len(all_ecatrackingCodes_with_null_accounts)
+    runs = 0
+
+    for item in all_ecatrackingCodes_with_null_accounts:
+        tcc = item.get("eCATrackingCode")
+        appstartdate = item.get("AppStartDate")
+        accNo = item.get("AccountNumber")
+        if not accNo:
+            continue
+
+        for acc in process_account_number(accNo):
+            doll_amt = get_dds_dollar_amount(acc, appstartdate)
+            if doll_amt is None:
+                continue
+
+            sql.execute(f'''
+                UPDATE [DigitalReport].[dbo].[Transactions]
+                SET DDSTranAmount = {doll_amt}
+                WHERE eCATrackingCode = '{tcc}'
+            ''')
+            sql.connection.commit()
+
+            month_year = datetime.now().strftime("%m_%Y")
+            property_key = f"Account_{acc}_{month_year}"
+            properties.set_properties_for_ecaTrackingCode(tcc, {
+                "AppStartDate": appstartdate,
+                "PrimaryName": item.get("PrimaryName"),
+                "PrimarySSN": item.get("PrimarySSN"),
+                property_key: doll_amt
+            })
+
+            runs += 1
+            if total_items:
+                sys.stdout.write(f"\r{int((runs / total_items) * 100)}% - DDS dollar amount for account number {acc}. - {doll_amt}     ")
+                sys.stdout.flush()
+
+
+def load_workspace_data(workspace, txn, tracking_codes_added_this_run):
+    trackingCodes_to_extract = txn.get_transactions_by_sql_query(f'''
+        SELECT t.eCATrackingCode, w.tId FROM [DigitalReport].[dbo].[Transactions] AS t
+        LEFT JOIN [DigitalReport].[dbo].[JMExtract] w ON t.eCATrackingCode = w.tID
+        WHERE w.tID IS NOT NULL AND t.eCATrackingCode IS NOT NULL
+          AND {excludeBotData} AND {excludeZeroProductApps}
+    ''')
+    if trackingCodes_to_extract == 0:
+        trackingCodes_to_extract = []
+
+    pending_tracking_codes = set([row.get("eCATrackingCode") for row in trackingCodes_to_extract])
+    tracking_codes_to_process = pending_tracking_codes.union(tracking_codes_added_this_run)
+    print(f"Found {len(pending_tracking_codes)} pending and {len(tracking_codes_added_this_run)} current-run tracking codes that need workspace data extraction...")
+
+    for tracking_code in tracking_codes_to_process:
+        if tracking_code is None:
+            continue
+        print(f"Extracting workspace data for tracking code {tracking_code}...")
+        extract_workspace_data(workspace, tracking_code)
+
+
+def extract_workspace_data(workspace, trackingCode):
+    try:
+        data = workspace.get_value(trackingCode)
+        return data
+        
+    except Exception as e:
+        print("Error in extract_workspace_data" + str(e))
+        
+
+
+def metrics_updater(sql, txn):
+    try:
+        all_app_status_filter = ','.join([f'\'{app}\'' for app in ALL_APP_STATUS])
+        update_metrics_from_sql(
+            "new_app_statuses",txn,
+            f'''    Select DISTINCT AppStatus
+                    From [DigitalReport].[dbo].[Transactions]
+                    Where  AppStatus NOT IN ({all_app_status_filter});
+            '''
+        )
+    except Exception as e:
+        print("Error processing new app statuses" + str(e))
+
+
+    try:
+        update_metrics_from_sql("bot_users", txn,
                 '''     SELECT TOP 10
                             PrimaryName,
-                            COUNT(*) AS SeenCount
+                            COUNT(DISTINCT CONCAT(eCAID, '-', ecaTrackingCode)) AS SeenCount
                         FROM 
                             [DigitalReport].[dbo].[Transactions]
                         WHERE 
@@ -19,136 +239,299 @@ def post_process_txns(sql,txn):
                         GROUP BY 
                             PrimaryName
                         HAVING 
-                            COUNT(*) > 100
+                            COUNT(DISTINCT CONCAT(eCAID, '-', ecaTrackingCode)) > 100
                         ORDER BY 
                             SeenCount DESC;
                 '''
                             )
-
-
-    all_app_status_filter = ','.join([f'\'{app}\'' for app in ALL_APP_STATUS])
-    update_metrics_from_sql(
-        "new_app_statuses",txn,
-        f'''    Select DISTINCT AppStatus
-                From [DigitalReport].[dbo].[Transactions]
-                Where  AppStatus NOT IN ({all_app_status_filter});
-        '''
-    )
-
-
-    product_set_ids = txn.get_transactions_by_sql_query('''
-        select distinct(ProductSetId) from [DigitalReport].[dbo].[Transactions];
-    ''')
-    all_product_set_id = [int(psi) for psi, pss in ALL_PRODUCT_SET_ID]
-    
-    new_product_set_ids = []
-    for psi in product_set_ids:
-        psi = psi.get("ProductSetId")
-        if psi is None:
-            continue
-        if psi.find("|"):
-            psis  = psi.split('|')
-            for psiB in psis:
-                if psiB == "" or psiB is None:
-                    continue
-                psiB = int(float(psiB))
-                if psiB not in new_product_set_ids and psiB not in all_product_set_id:
-                    new_product_set_ids.append(psiB)
-        else:
-            if psi == "" or psi is None:
-                continue
-            psi = int(psi)
-            if psi not in new_product_set_ids and psi not in all_product_set_id:
-                new_product_set_ids.append(psi)
-    new_product_set_ids = sorted(new_product_set_ids)
-
-    update_metrics(
-        "new_product_set_id",
-        new_product_set_ids
-    )
-
-
-    
-    promocodes  = txn.get_transactions_by_sql_query('''
-        Select PromoCodes FROM [DigitalReport].[dbo].[Transactions] where PromoCodes is not NULL and PromoCodes != ''
-    ''')
-    new_promocodes = []
-    for pc in promocodes:        
-        pc = pc.get("PromoCodes")
-        if pc is None:
-            continue
-        pc = pc.strip("|")
+    except Exception as e:
+        print("Error processing bot users" + str(e))
         
-        if pc.find("|"):
-            pcs  = pc.split('|')
-            for pcB in pcs:
-                pcB = pcB.strip()
-                pcB = pcB.lstrip("|")
-                if pcB == "" or pcB is None:
-                    continue
-                if pcB not in new_promocodes and pcB not in ALL_PROMOCODES:
-                    new_promocodes.append(pcB)
-        else:
-            pc = pc.lstrip("|")
-            if pc == "" or pc is None:
-                continue
-            if pc not in new_promocodes and pc not in ALL_PROMOCODES:
-                new_promocodes.append(pc)
-    new_promocodes = sorted(new_promocodes)
-
-    update_metrics(
-        "new_promocodes",
-        new_promocodes
-    )
-
-    update_metrics_from_sql(
-        "new_application_types",
-        txn,
-        ''' select distinct(APPLICATION_TYPE) from [DigitalReport].[dbo].[Transactions] 
-            where APPLICATION_TYPE is not NULL and APPLICATION_TYPE != ''
-            and APPLICATION_TYPE NOT IN ('''+ ','.join([f'\'{app}\'' for app in ALL_APPLICATION_TYPES]) +''');'''
-    )
-
-    # Post processing to get all account numbers from EDW
-    all_ecatrackingCodes_with_null_accounts = txn.get_transactions_by_sql_query(f'''
-        select eCATrackingCode from [DigitalReport].[dbo].[Transactions] where NumLendingProducts > 0 order by AppStartDate Desc
-    ''')
-    list_of_tc = [tc.get("eCATrackingCode") for tc in all_ecatrackingCodes_with_null_accounts]
-    update_account_numbers(list_of_tc, sql)
 
 
 
 
-def process_tc(tc, sql):
-    accNoObj = get_EDW(tc, join_columns=["AccountNumber", "mt.APPID"])
-    if accNoObj is None:
-        return (tc, None)
-    accNo = accNoObj.get("AccountNumber")
-    appid = accNoObj.get("APPID")
-    
-    if accNo is None:
+def account_status_fetch(sql, txn):
+
+    sql_crfedw = SQLConn("CRFEDW")
+    sql_crfedw.connect()
+    sql_PTYEDW = SQLConn("PTYEDW")
+    sql_PTYEDW.connect()
+    if not sql_crfedw.connection or not sql_PTYEDW.connection:
+        print("Skipping account status post processing because an EDW connection could not be established.")
+        sql_crfedw.disconnect()
+        sql_PTYEDW.disconnect()
         return
-    sql.execute(f'''
-        UPDATE [DigitalReport].[dbo].[Transactions] SET EDW_APPID = '{appid}' WHERE eCATrackingCode = '{tc}'
+    txn_crfedw = Transaction(sql_crfedw)
+    txn_PTYEDW = Transaction(sql_PTYEDW)
+    properties = Properties(sql)
+    
+    # Select SSN, APPID from [CRFEDW].[CRF_EMPL_PII_V1].[CRF_APP_ACTION_CUSTOMER_CUR] where SSN IN (list of PrimarySSN from transactions ) - push appid to VSDISWEBPRD01
+    # Select APPID, DecisionStatusName from [CRFEDW].[CRF_EMPL_PII_V1].[CRF_APP_ACTION_APPLICATION_CUR] where AppID IN (list of appid from above) - push decision status to VSDISWEBPRD01
+    # Select SSN, DDA_ACCT_NUM from [PTYEDW].[PTY_EMPL_PII_V2].[PTYMSTR_DDA] where SSN IN (list of PrimarySSN from transactions]. push the acct num to VSDISWEBPRD01
+    # Select Status_Code_desc, DDA_ACCT_NUM from [CAMEDW].[CAM_EMPL_PII_V1].[CAM_DDA_TRAN] where DDA_ACCT_NUM IN (list of acct num from above)  push the status code desc to VSDISWEBPRD01
+
+
+    get_all_loans_ssn = txn.get_transactions_by_sql_query(f'''
+        SELECT DISTINCT PrimarySSN, ecaTrackingCode, EDW_APPID, LoanAcctStatus, AppStartDate, PrimaryName FROM [DigitalReport].[dbo].[Transactions] WHERE 
+                                                          PrimarySSN IS NOT NULL AND PrimarySSN != ''
+                                                          AND {excludeBotData} AND {excludeZeroProductApps}
+                                                          AND {approvedAppsForBPMandCRIF}
     ''')
-    sql.connection.commit()
-    return (tc, accNo)
 
-def update_account_numbers(list_of_tc, sql):
-    print("Updating account numbers")
-    ctr = 0
-    runs = 0
+    get_all_deposit_ssn = txn.get_transactions_by_sql_query(f'''
+        SELECT DISTINCT PrimarySSN, ecaTrackingCode, AccountNumber, DepositAcctStatus, AppStartDate, PrimaryName FROM [DigitalReport].[dbo].[Transactions] WHERE 
+                                                            PrimarySSN IS NOT NULL AND PrimarySSN != '' 
+                                                            AND NumDepositProducts > 0
+                                                            AND {excludeBotData} AND {excludeZeroProductApps}
+                                                            AND {approvedAppsForBPMandCRIF}
+    ''')
+    
+    print(f"Found {len(get_all_loans_ssn)} unique SSNs with loans and {len(get_all_deposit_ssn)} unique SSNs with deposit accounts to process for app ids, account numbers, and statuses...")
+    try:
+        for ssn_row in get_all_loans_ssn:
+            if properties.ecaTrackingCode_exists(ssn_row.get("ecaTrackingCode")):
+                continue
+            ssn = ssn_row.get("PrimarySSN").replace("-", "")
+            app_ids = txn_crfedw.get_transactions_by_sql_query(f'''
+                SELECT DISTINCT APPID FROM [CRFEDW].[CRF_EMPL_PII_V1].[CRF_APP_ACTION_CUSTOMER_CUR] WHERE SSN = '{ssn}'
+            ''')
+            
+            if app_ids == 0:
+                app_ids = []
 
-    for tc in list_of_tc:
-        runs += 1
-        sys.stdout.write(f"\r{int((runs / len(list_of_tc)) * 100)}% - {ctr}/{len(list_of_tc)} account numbers pulled. - {runs}")
-        sys.stdout.flush()
-        resp = process_tc(tc, sql)
-        if resp is None:
-            continue
-        tc, accNo = resp
-        if accNo:
-            ctr += 1
+            for i, app_id_row in enumerate(app_ids):
+                properties.set_properties_for_ecaTrackingCode(ssn_row.get("ecaTrackingCode"), {
+                    f"AppID_{i}": app_id_row.get("APPID"),
+                    "PrimaryName": ssn_row.get("PrimaryName"),
+                    "PrimarySSN": ssn_row.get("PrimarySSN"),
+                    "AppStartDate": ssn_row.get("AppStartDate")
+                })
+
+            for i, app_id_row in enumerate(app_ids):
+                app_id = app_id_row.get("APPID")
+
+                # We push the decision status to VSDISWEBPRD01 by matching on appid
+                decision_status = txn_crfedw.get_transactions_by_sql_query(f'''
+                    SELECT DISTINCT DecisionStatusName FROM [CRFEDW].[CRF_EMPL_PII_V1].[CRF_APP_ACTION_APPLICATION_CUR] WHERE APPID = '{app_id}'
+                ''')
+                if decision_status == 0:
+                    decision_status = []
+
+                for j, status_row in enumerate(decision_status):
+                    properties.set_properties_for_ecaTrackingCode(ssn_row.get("ecaTrackingCode"), {
+                        f"AppID_{i}_LoanAcctStatus_{j}": status_row.get("DecisionStatusName"),                        
+                        "PrimaryName": ssn_row.get("PrimaryName"),
+                        "PrimarySSN": ssn_row.get("PrimarySSN"),
+                        "AppStartDate": ssn_row.get("AppStartDate")
+                    })
+
+    except Exception as e:
+        print("Error processing loan account statuses" + str(e))
+
+    print("Finished processing loan account statuses. Starting deposit account post processing...")
+    try:
+        for ssn_row in get_all_deposit_ssn:
+            if properties.ecaTrackingCode_exists(ssn_row.get("ecaTrackingCode")):
+                continue
+
+            ssn = (ssn_row.get("PrimarySSN") or "").replace("-", "")
+            account_numbers = txn_PTYEDW.get_transactions_by_sql_query(f'''
+                SELECT DISTINCT DDA_ACCT_NUM FROM [PTYEDW].[PTY_EMPL_PII_V2].[PTYMSTR_DDA] WHERE SSN = '{ssn}'
+            ''')
+            if account_numbers == 0:
+                account_numbers = []
+
+            external_accounts = [str(ac.get("DDA_ACCT_NUM")) for ac in account_numbers if ac.get("DDA_ACCT_NUM")]
+            all_account_numbers = process_account_number("|".join([str(ssn_row.get("AccountNumber") or "")] + external_accounts))
+
+            for i, acc in enumerate(all_account_numbers):
+                properties.set_properties_for_ecaTrackingCode(ssn_row.get("ecaTrackingCode"), {
+                    f"AccountNumber_{i}": acc,
+                    "PrimaryName": ssn_row.get("PrimaryName"),
+                    "PrimarySSN": ssn_row.get("PrimarySSN"),
+                    "AppStartDate": ssn_row.get("AppStartDate")
+                })
+
+                status_code = txn_PTYEDW.get_transactions_by_sql_query(f''' 
+                    SELECT DISTINCT Status_Code_desc FROM [CAMEDW].[CAM_EMPL_PII_V1].[CAM_DDA_TRAN] WHERE DDA_ACCT_NUM = '{acc}'
+                ''')
+                if status_code == 0:
+                    status_code = []
+
+                for j, status_row in enumerate(status_code):
+                    properties.set_properties_for_ecaTrackingCode(ssn_row.get("ecaTrackingCode"), {
+                        f"AccountNumber_{i}_DepositAcctStatus_{j}": status_row.get("Status_Code_desc"),
+                        "PrimaryName": ssn_row.get("PrimaryName"),
+                        "PrimarySSN": ssn_row.get("PrimarySSN"),
+                        "AppStartDate": ssn_row.get("AppStartDate")
+                    })
+                
+    except Exception as e:
+        print("Error processing deposit account statuses" + str(e))
         
+    print("Finished processing deposit account statuses.")
+    sql_crfedw.disconnect()
+    sql_PTYEDW.disconnect()
+    
+                    
+
+        
+# SELECT ACCT_ID, ACCT_NUM, TAX_ID FROM [PTYEDW].[PTY_EMPL_PII_V2].[PTYMSTR_DDA] where TAX_ID IN ()
+# SELECT APPID, SSN FROM [CRFEDW].[CRF_EMPL_PII_V1].[CRF_APP_ACTION_CUSTOMER_CUR] where SSN IN ()
 
 
+
+
+# appid1, appid2, acctid1, acctid2 = appid1|appid2|acctid1|acctid2
+
+    
+
+
+def get_dds_dollar_amount(acct_number, appstartdate):
+    camedw_sql = SQLConn("CAMEDW")
+    camedw_sql.connect()
+    camedw_txn = Transaction(camedw_sql)
+    appstartdate = str(appstartdate).split("T")[0] if appstartdate else None
+    date_filter = f"AND Tran_Date <= '{appstartdate}'" if appstartdate else ""
+    result = camedw_txn.get_transactions_by_sql_query(f'''
+        SELECT TOP 1 [Tran_Amount] FROM [CAMEDW].[CAM_EMPL_PII_V1].[CAM_DDA_TRAN]
+        WHERE [DDA_ACCT_NUM] = '{acct_number}'
+          AND Tran_Amount IS NOT NULL
+          AND Tran_Amount != 0
+          AND {DDSDescriptionFilter}
+          {date_filter}
+        ORDER BY [Tran_Date] DESC
+    ''')
+    camedw_sql.disconnect()
+    if result == 0 or not result:
+        return None
+    first_row = result[0]
+    return first_row.get("Tran_Amount")
+
+
+
+def encrypt_all_pii_columns(sql, txn):
+    pii_columns = ["PrimaryName", "PrimarySSN"]
+    cursor = sql.connection.cursor()
+
+    logger.info("Starting PII encryption pass for %s", ", ".join(pii_columns))
+
+    reencrypt_old_values = False
+
+    if os.path.exists("old_enc.key"):
+        age_days = (
+            datetime.now() - datetime.fromtimestamp(os.path.getmtime("old_enc.key"))
+        ).days
+
+        reencrypt_old_values = age_days < 30
+
+        if reencrypt_old_values:
+            logger.info(
+                "old_enc.key is %s days old. Re-encrypting values with current key.",
+                age_days,
+            )
+
+    for table_name in (
+        "[DigitalReport].[dbo].[Transactions]",
+        "[DigitalReport].[dbo].[Properties]",
+    ):
+        table_scanned = 0
+        table_encrypted = 0
+
+        try:
+            cursor.execute(
+                f"""
+                SELECT eCATrackingCode, {", ".join(pii_columns)}
+                FROM {table_name}
+                WHERE ({pii_columns[0]} IS NOT NULL AND {pii_columns[0]} != '')
+                   OR ({pii_columns[1]} IS NOT NULL AND {pii_columns[1]} != '')
+            """
+            )
+
+            rows = cursor.fetchall()
+            table_scanned = len(rows)
+
+            logger.info(
+                "PII encryption scanned %d rows in %s",
+                table_scanned,
+                table_name,
+            )
+
+        except Exception:
+            logger.exception(
+                "Failed to read PII columns from %s",
+                table_name,
+            )
+            continue
+
+        for row in rows:
+            tracking_code = row[0]
+            update_values = {}
+
+            for index, column in enumerate(pii_columns, start=1):
+                value = row[index]
+
+                if value is None or value == "":
+                    continue
+
+                try:
+                    # Plain text value
+                    if not is_encrypted(value):
+                        update_values[column] = encrypt_decrypt_string(
+                            str(value),
+                            mode="encrypt",
+                        )
+
+                    # Key rotation window active
+                    elif reencrypt_old_values:
+                        plaintext = encrypt_decrypt_string(
+                            value,
+                            mode="decrypt",
+                        )
+
+                        new_encrypted_value = encrypt_decrypt_string(
+                            plaintext,
+                            mode="encrypt",
+                        )
+
+                        # Only update if ciphertext changes
+                        if new_encrypted_value != value:
+                            update_values[column] = new_encrypted_value
+
+                except Exception:
+                    logger.exception(
+                        "Failed processing %s for tracking code %s",
+                        column,
+                        tracking_code,
+                    )
+
+            if update_values:
+                try:
+                    set_clause = ", ".join(
+                        f"{column} = ?"
+                        for column in update_values
+                    )
+
+                    cursor.execute(
+                        f"UPDATE {table_name} SET {set_clause} WHERE eCATrackingCode = ?",
+                        (*update_values.values(), tracking_code),
+                    )
+
+                    table_encrypted += 1
+
+                except Exception:
+                    logger.exception(
+                        "Failed to encrypt a PII row in %s",
+                        table_name,
+                    )
+
+        logger.info(
+            "PII encryption completed for %s: scanned=%d, updated=%d",
+            table_name,
+            table_scanned,
+            table_encrypted,
+        )
+
+    sql.connection.commit()
+    logger.info("Completed PII encryption pass")

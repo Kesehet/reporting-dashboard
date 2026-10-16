@@ -1,34 +1,35 @@
-from ldap3 import Server, Connection, ALL, NTLM, SUBTREE, ALL_ATTRIBUTES
-from ldap3.core.exceptions import LDAPException
-from flask import Flask, request, jsonify, abort, render_template_string
+from flask import Flask, json, request, jsonify, abort, render_template_string
 from flask_cors import CORS
-from datetime import timedelta, datetime
-import jwt
+from datetime import datetime
 import os
 from dotenv import load_dotenv
-from application import fetch_async
 from DB import SQLConn, Transaction
-from role_filter import role_filter as rf
-from role_filter import get_role
 from waitress import serve
-import threading
 import sched
 import time
 from charts import getChartData, get_request_dict
 import traceback
-from cache_manager import get_cached_item, set_cached_item, clear_all_cache, get_cached_chart_data, cached_date_list
-from upload_csv import UPLOAD_FORM_HTML, beautify_response
+from cache_manager import get_cached_item, set_cached_item, clear_all_cache,  cached_date_list
 from config import get_env_value
 from metrics import update_metrics, get_metrics
 from helper.chat_serve import _INFLIGHT_LOCK, _INFLIGHT, _chart_key, _acquire_or_wait_for_slot
 from urllib.parse import urlencode
-
+from utils import insight_report_to_csv_response, format_numbers_recursive
+from csvLoader import list_csv_report_files, get_tracking_codes_from_file
+from csvLoader import get_tracking_code_missing_reason
+# helpers for quick_insert
+import tempfile
+import csv
+import uuid
+import shutil
+import json as _pyjson
+# from report_modules import mob_cor_report
+# exit()
 
 scheduler = sched.scheduler(time.time, time.sleep)
 load_dotenv()
 
 app = Flask(__name__)
-app.config['SECRET_KEY'] = get_env_value('RELAY_SERVER_SECRET')
 CORS(app)
 CSV_FOLDER_REPORT = 'uploads/report'
 CSV_FOLDER_REPORTS = 'uploads/reports'
@@ -50,46 +51,6 @@ INTERNAL_CSV_FOLDER = 'uploads/csv'
 os.makedirs(INTERNAL_CSV_FOLDER, exist_ok=True)
 app.config['INTERNAL_CSV_FOLDER'] = INTERNAL_CSV_FOLDER
 
-@app.route('/', methods=['GET', 'POST'])
-def get_all_between_dates():
-    token = request.headers.get('Authorization')
-    if token is None:
-        abort(400, description="Please provide a token")
-    payload = verify_token(token)
-    if payload is None:
-        abort(400, description="Invalid token")
-    date_format = "%Y-%m-%d"
-    
-    start_date = request.args.get('start_date')
-    end_date = request.args.get('end_date')
-    
-    if not start_date or not end_date:
-        abort(400, description="Please provide both start_date and end_date")
-    
-    key = f"All_Transactions_between_{start_date}_and_{end_date}"
-
-    
-    
-    cached_data = get_cached_item(key)
-    if cached_data:
-        return jsonify(cached_data), 200
-    
-    try:
-        start_date = datetime.strptime(start_date, date_format)
-        end_date = datetime.strptime(end_date, date_format)
-    except ValueError:
-        abort(400, description="Invalid date format. Please use YYYY-MM-DD.")
-    
-    connection = SQLConn()
-    connection.connect()
-    transaction = Transaction(connection)
-    resp = transaction.get_transactions_by_date_range(start_date, end_date)
-    set_cached_item(resp, key)
-    connection.disconnect()
-    
-    return rf(resp, payload["role"])
-
-
 
 
 # Set to track unique URLs
@@ -104,7 +65,8 @@ def log_unique_url(name, params):
             try:
                 param_date = datetime.strptime(params[key], "%Y-%m-%d")
                 offset_days = (param_date - today).days
-                params[key] = f"__OFFSET_{offset_days}__"
+                if not params[key].endswith("01"):
+                    params[key] = f"__OFFSET_{offset_days}__"
             except ValueError:
                 pass  # Leave as-is if not a valid date
 
@@ -119,39 +81,16 @@ def log_unique_url(name, params):
 
 
 
+
 @app.route('/charts/<name>', methods=['GET', 'POST'])
 def charts(name):
-    auth = True
     if request.method == 'POST':
         start_date = request.json.get("start_date")
         end_date = request.json.get("end_date")
-        auth = request.json.get("authorization")
-        api_key = request.json.get("api_key")
     else:  # GET method
         start_date = request.args.get("start_date")
         end_date = request.args.get("end_date")
-        auth = request.args.get("authorization")
-        api_key = request.args.get("api_key")
-    
-    token = request.headers.get('Authorization')
 
-    method="api_key"
-    if token:
-        method = "token"
-
-
-    if method == "api_key" and (not api_key or api_key != get_env_value("ALL_FILTERS_CHART_API_KEY")):
-        return {
-            "error": "Incorrect API Key"
-        }, 401
-    elif method == "token" and token is None and auth == False:
-            abort(400, description="Please provide a token")
-    
-    if method == "token":
-        verify_token(token)
-    
-
-    
 
     if not start_date or not end_date:
         return jsonify({"error": "Start date or end date is missing."}), 400
@@ -202,6 +141,12 @@ def charts(name):
     try:
         # Get chart data from the database
         resp = getChartData(name, transactions, start_date, end_date, params=params)
+        if params.get("showComma", "true").lower() == "true":
+            resp = format_numbers_recursive(resp)
+        
+        
+        if name.find("Insight") != -1 and params.get("return_format") == "csv":
+            resp = insight_report_to_csv_response(params, resp, transactions)
 
         # Set cache before signaling completion so waiters can fetch it immediately
         set_cached_item(resp, name, start_date, end_date, params)
@@ -231,21 +176,6 @@ def charts(name):
                 if current and current.get("event") is ev:
                     _INFLIGHT.pop(key, None)
 
-@app.route('/msalConfig', methods=['GET'])
-def msalConfig():
-    return {
-        "auth": {
-            "clientId": get_env_value("REACT_APP_AZURE_CLIENT_ID"),
-            "authority": "https://login.microsoftonline.com/" + get_env_value("REACT_APP_AZURE_TENANT_ID"),
-            "redirectUri": get_env_value("REACT_APP_FE_SERVER_BASE_URL"),
-            "postLogoutRedirectUri": get_env_value("REACT_APP_FE_SERVER_BASE_URL"),
-        },
-        "cache": {
-            "cacheLocation": "localStorage",
-            "storeAuthStateInCookie": False,
-        },
-    }
-
 @app.route('/chart_builder', methods=['GET', 'POST'])
 def chart_builder():
     from chart_builder import final
@@ -253,65 +183,30 @@ def chart_builder():
 
 
 
-
-@app.route('/login', methods=['POST'])
-def login():
+@app.route('/webhook/atomic/non_eca_dds_data', methods=['POST'])
+def non_eca_dds_data_webhook():
+    # We temporarily write it to a file.
     data = request.get_json()
-    email = data.get('email')
-    password = data.get('password')
-    if not all([email, password]):
-        return jsonify({'message': 'Both email and password are required.'}), 400
-    server_address = 'ldaps://ldap.myfnb.us:636'
-    server = Server(server_address, use_ssl=True, get_info=ALL)
-    domain_username = f'MYFNB\\{email}'
+    ce_id = data.get("ce_id", "unknown_ceid")
+    if not ce_id:
+        ce_id = "unknown_ceid"
+        # return jsonify({"error": "ce_id is missing in the payload"}), 400
+    # Ensure the folder exists
+    os.makedirs('Atomic-Webhook/Non-ECAs', exist_ok=True)
+    with open(f'Atomic-Webhook/Non-ECAs/non_eca_dds_data_{ce_id}_{datetime.now().strftime("%Y-%m-%d_%H-%M-%S")}.json', 'w') as f:
+        json.dump(data, f)
+    return jsonify({"message": "Data received successfully"}), 200
 
+
+
+@app.route('/generate_cache')
+def generate_cache():
+    import cache_gen
     try:
-        conn = Connection(server, user=domain_username, password=password, authentication=NTLM, auto_bind=True)
-
-        # Perform LDAP search to get all attributes
-        conn.search(search_base='dc=myfnb,dc=us',
-                    search_filter=f'(sAMAccountName={email})',
-                    search_scope=SUBTREE,
-                    attributes=ALL_ATTRIBUTES)
-
-        # Extract user data from search response
-        if conn.entries:
-            user_data = conn.entries[0]
-            user_info = {attr: user_data[attr].value for attr in user_data.entry_attributes_as_dict}
-
-            # Decode byte objects to strings
-            for key, value in user_info.items():
-                if isinstance(value, bytes):
-                    user_info[key] = ""
-            display_name =user_info.get("displayName","Unable to parse name.")
-            try:
-                role = get_role(user_info)
-                pass 
-            except:
-                return jsonify({"message":"Sorry "+display_name+" does not have access to this dashboard. Please contact the admin."})
-
-            token = jwt.encode({'email': email, 
-                                'role': role, 
-                                'exp': datetime.utcnow() + timedelta(minutes=int(get_env_value("REACT_APP_SESSION_TIMEOUT_MINUTES")))}, app.config['SECRET_KEY'], algorithm='HS256')
-            conn.unbind()
-
-            return jsonify({
-                'message': 'Login successful.',
-                'token': token,  # Decode the token to a string
-                'user': display_name,
-                "role": role, 
-            }), 200
-        else:
-            conn.unbind()
-            return jsonify({'message': 'User not found in LDAP.'}), 404
-
-    except LDAPException as error:
-        return jsonify({'message': "Invalid Credentials!"}), 401
-
-@app.route('/logout')
-def logout():
-    return jsonify({'message': 'Logged out successfully'})
-
+        cache_gen.generate_cache(app.config['CSV_FOLDER'])
+        return jsonify({'message': 'Cache generated successfully'})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 @app.route('/clear_cache')
 def clear_cache():
     # Optional query parameter: days
@@ -323,17 +218,6 @@ def clear_cache():
     else:
         clear_all_cache()
         return jsonify({'message': 'Cache cleared successfully'})
-
-def verify_token(token):
-    if not token:
-        return 'Token is missing'
-    try:
-        payload = jwt.decode(token, app.config["SECRET_KEY"], algorithms=['HS256'])
-        return payload
-    except jwt.InvalidTokenError:
-        return None
-    except Exception as e:
-        return None
 
 @app.route('/refill_database', methods=['GET'])
 def refill_database():
@@ -369,11 +253,202 @@ def show_logs(filename):
 
 @app.route('/uptospeed')
 def uptospeed():
-    from csvLoader import get_csv
-    update_metrics("csv_push", f"started {datetime.now().isoformat()}")
-    updates = get_csv(app.config['CSV_FOLDER'])
-    update_metrics("csv_push", f"ended {datetime.now().isoformat()}")
-    return updates
+    try:
+        from csvLoader import get_csv
+        update_metrics("csv_push", f"started {datetime.now().isoformat()}")
+        updates = get_csv(app.config['CSV_FOLDER'])
+        update_metrics("csv_push", f"ended {datetime.now().isoformat()}")
+        return updates
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/quick_insert', methods=['POST', 'GET'])
+def quick_insert():
+    """Create temporary CSV with fake rows, process via csvLoader core path
+    (skips xml pulls and post-processing), verify DB inserts, optionally clear
+    inserted rows, save a JSON result and return it.
+
+    Params (query or JSON body): count, clear_db (true/false), save_result (true/false), prefix
+    """
+    temp_dir = None
+    try:
+        if request.method == 'POST':
+            data = request.get_json(silent=True) or {}
+        else:
+            data = request.args or {}
+
+        count = int(data.get('count', 1))
+        clear_db = str(data.get('clear_db', 'true')).lower() in ('1', 'true', 'yes')
+        save_result = str(data.get('save_result', 'true')).lower() in ('1', 'true', 'yes')
+        prefix = str(data.get('prefix', 'T-'))
+
+        temp_dir = tempfile.mkdtemp(prefix='quick_insert_')
+        csv_path = os.path.join(temp_dir, f'quick_insert_{int(time.time())}.csv')
+
+        headers = [
+            "eCA Tracking Code",
+            "eCA ID",
+            "Primary Name",
+            "App Start Date",
+            "App Update Date",
+            "App Status",
+            "Product Account Number",
+            "DataSource",
+        ]
+
+        tracking_codes = []
+        now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        with open(csv_path, 'w', newline='', encoding='utf-8') as csvfile:
+            writer = csv.DictWriter(csvfile, fieldnames=headers)
+            writer.writeheader()
+            for i in range(count):
+                code = f"{prefix}{uuid.uuid4().hex[:8]}"
+                tracking_codes.append(code)
+                writer.writerow({
+                    "eCA Tracking Code": code,
+                    "eCA ID": f"quick_{code}",
+                    "Primary Name": f"Quick Tester {code}",
+                    "App Start Date": now,
+                    "App Update Date": now,
+                    "App Status": "Submitted",
+                    "Product Account Number": "00000000",
+                    "DataSource": "quick_insert",
+                })
+
+        # process via csvLoader
+        from csvLoader import prepare_rows, core_process
+
+        sql = SQLConn()
+        sql.connect()
+        if not sql.connection:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+            return jsonify({'error': 'Failed to connect to database'}), 500
+
+        txn = Transaction(sql)
+        rows = prepare_rows(csv_path)
+        insert_output = ""
+        if rows:
+            insert_output += core_process(rows, sql, txn)
+
+        results = {}
+        for code in tracking_codes:
+            found = txn.get_transactions_by_column('eCATrackingCode', code)
+            results[code] = {'found': bool(found), 'record': found if found else None}
+
+        cleared = False
+        if clear_db:
+            try:
+                safe_codes = ",".join(
+                    "'" + str(c).replace("'", "''") + "'" for c in tracking_codes if c is not None
+                )
+                delete_query = f"DELETE FROM Transactions WHERE eCATrackingCode IN ({safe_codes})"
+                sql.execute(delete_query)
+                cleared = True
+            except Exception:
+                cleared = False
+
+        sql.disconnect()
+
+        test_result = {
+            'temp_dir': temp_dir,
+            'csv_file': csv_path,
+            'insert_output': insert_output,
+            'results': results,
+            'cleared': cleared,
+            'timestamp': datetime.now().isoformat(),
+        }
+
+        if save_result:
+            try:
+                out_file = os.path.join(temp_dir, f'quick_insert_result_{int(time.time())}.json')
+                with open(out_file, 'w', encoding='utf-8') as f:
+                    _pyjson.dump(test_result, f, default=str, indent=2)
+                test_result['result_file'] = out_file
+            except Exception:
+                pass
+
+        return jsonify(test_result), 200
+
+    except Exception as e:
+        try:
+            if temp_dir:
+                shutil.rmtree(temp_dir, ignore_errors=True)
+        except Exception:
+            pass
+        return jsonify({'error': str(e), 'stack': traceback.format_exc()}), 500
+
+
+@app.route('/csv_report_status', methods=['GET'])
+def csv_report_status():
+    folder_path = app.config['CSV_FOLDER']
+    processed_files = set()
+    ctrl_path = os.path.join(folder_path, 'ctrl.conf')
+    if os.path.exists(ctrl_path):
+        with open(ctrl_path, 'r', encoding='utf-8', errors='replace') as ctrl_file:
+            processed_files = {line.strip() for line in ctrl_file if line.strip()}
+
+    status_filter = request.args.get('status', 'all')
+    date_filter = request.args.get('date_filter', 'all')
+    files = list_csv_report_files(folder_path, processed_files, status_filter=status_filter, date_filter=date_filter)
+    return jsonify({
+        'folder': folder_path,
+        'count': len(files),
+        'processed_count': sum(1 for item in files if item['processed']),
+        'files': files,
+    }), 200
+
+
+@app.route('/csv_report_tracking_status', methods=['POST'])
+def csv_report_tracking_status():
+    data = request.get_json(silent=True) or {}
+    file_name = data.get('file_name') or data.get('name')
+    if not file_name:
+        return jsonify({'error': 'A file name is required.'}), 400
+
+    folder_path = app.config['CSV_FOLDER']
+    tracking_codes = get_tracking_codes_from_file(file_name, folder_path)
+    sql = SQLConn()
+    sql.connect()
+    txn = Transaction(sql)
+    try:
+        results = []
+        for tracking_code in tracking_codes:
+            present_in_db = txn.tracking_code_exists(tracking_code)
+            missing_reason = '' if present_in_db else get_tracking_code_missing_reason(file_name, tracking_code, folder_path)
+            results.append({
+                'tracking_code': tracking_code,
+                'present_in_db': present_in_db,
+                'status': 'present' if present_in_db else 'missing',
+                'reason': missing_reason,
+            })
+
+        return jsonify({
+            'file_name': file_name,
+            'row_count': len(tracking_codes),
+            'present_count': sum(1 for item in results if item['present_in_db']),
+            'missing_count': sum(1 for item in results if not item['present_in_db']),
+            'tracking_codes': results,
+        }), 200
+    except Exception as exc:
+        return jsonify({'error': str(exc), 'stack': traceback.format_exc()}), 500
+    finally:
+        sql.disconnect()
+
+
+@app.route('/csv_report_load_file', methods=['POST'])
+def csv_report_load_file():
+    data = request.get_json(silent=True) or {}
+    file_name = data.get('file_name') or data.get('name')
+    if not file_name:
+        return jsonify({'error': 'A file name is required.'}), 400
+
+    from csvLoader import load_single_csv_file
+    result = load_single_csv_file(file_name, app.config['CSV_FOLDER'])
+    if result.get('success'):
+        return jsonify(result), 200
+    return jsonify(result), 400
+
 
 @app.route('/xml_pull')
 def xml_pull():
@@ -393,6 +468,7 @@ def xml_pull():
 def get_query():
     data = request.get_json()
     query = data.get('query')
+    showComma = data.get('showComma', True)
 
 
     if not query:
@@ -414,18 +490,20 @@ def get_query():
     sql.connect()
     resp = ""
     try:
-
         txn = Transaction(sql)
         resp = txn.get_transactions_by_sql_query(query)
     except:
         sql.execute(sql)
         resp = sql.connection.commit()
     sql.disconnect()
+    if showComma:
+        resp = format_numbers_recursive(resp)
 
     if isinstance(resp, (list, dict)):
         return jsonify(resp)
     else:
         return str(resp)
+
 
 
 
@@ -463,14 +541,12 @@ def show_cache():
         ret += f"<tr style=\"color:{color}\"><td>{object['start']}</td><td>{object['name']}</td><td>{object['end']}</td></tr>"
     return ret+"</table>"
 
-
-
  
 if __name__ == "__main__":
     print("--------------------------------------------------------- Testing Default SQL Connection ---------------------------------------------------------")
     sql = SQLConn()
     sql.connect()
-    sql.setup()
+    #sql.setup()
     sql.log_tables()
     sql.disconnect()
     
@@ -487,6 +563,13 @@ if __name__ == "__main__":
     sql.disconnect()
 
     print("-----------------------------------------------------------------------------------------------------------------")
+
+    # Reset Cache Gen URLS
+    f2 = open("base_logged_chart_urls.txt", "r")
+    with open(LOG_FILE, 'w') as f:        
+        f.write(f2.read())
+    f2.close()
+
     
     if str(get_env_value("REACT_APP_DEBUG")).lower() == "true":
         print("Running in Debug mode")
@@ -494,4 +577,5 @@ if __name__ == "__main__":
         app.run(host="0.0.0.0",port=5000, debug=True)
     else:
         print("Running in Production mode")
-        serve(app, host='0.0.0.0', port=5000)
+        clear_all_cache()
+        serve(app, host='0.0.0.0', port=5000, threads=16, connection_limit= 300, backlog=1024, channel_timeout=150)

@@ -2,11 +2,19 @@ import { isArray } from 'chart.js/helpers';
 import XMLParser from 'react-xml-parser';
 
 class TransactionService {
-  constructor(onload = null, startDate = "2024-04-09", endDate = "2024-04-11") {
+  constructor(onload = null, startDate = "2024-04-09", endDate = "2024-04-11", requestedTransactions = []) {
     this.onload = onload;
     let base = process.env.NODE_ENV === 'production' ? (window.location.href + "api") : "http://localhost:5000";
-    this.url = `${base}/?start_date=${startDate}&end_date=${endDate}`;
 
+    const params = new URLSearchParams({
+      start_date: startDate,
+      end_date: endDate,
+      txns: Array.isArray(requestedTransactions)
+        ? requestedTransactions.join(',')
+        : (requestedTransactions || '')
+    });
+
+    this.url = `${base}/?${params.toString()}`;
   }
 
   async fetchData() {
@@ -14,13 +22,8 @@ class TransactionService {
 
 
     try {
-      const response = await fetch(this.url, {
-        headers: {
-          'Authorization': localStorage.getItem('token')
-        }
-      });
+      const response = await fetch(this.url);
       if (response.status !== 200) {
-        localStorage.removeItem('token');
         throw new Error(`Failed to fetch data: Error code ${response.status}`);
 
       }

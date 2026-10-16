@@ -1,74 +1,206 @@
 ---
-# TODO: api-server/application.py has hardcoded staging url values.
+# eStore - Digital Reporting System
+
+The application source was refreshed from the supplied ZIP on October 16, 2026.
+See [snapshot import notes](docs/snapshot-import.md) for the import scope,
+configuration setup, and validation results. Copy `.env.example` to `.env`
+and configure it locally before starting the backend.
+
+## Overview
+
+eStore is a comprehensive digital reporting and analytics platform designed for financial institutions to manage, visualize, and report on loan commitments and related transactions. The system integrates with Journey Manager APIs to extract transaction data, processes CSV/Excel uploads, and provides interactive dashboards with charts and export capabilities.
+
+## Architecture
+
+The application consists of:
+- **Frontend**: React-based web application with Chart.js for data visualization
+- **Backend**: Flask REST API server with SQL Server database
+- **Authentication**: LDAP integration with JWT tokens and Azure MSAL
+- **Data Processing**: Automated ETL processes for transaction data
+- **Caching**: Redis-based caching system for performance optimization
+
+## Core Processes
+
+### 1. Data Extraction and Loading
+- **Journey Manager Integration**: Pulls transaction data via REST API calls to Journey Manager
+- **XML Processing**: Parses form XML data and stores in JMExtract table
+- **CSV/Excel Upload**: Processes uploaded files with automatic encoding detection and data validation
+- **Transaction Processing**: Applies business rules and post-processing to transaction data
+
+### 2. Data Storage and Management
+- **SQL Server Database**: Stores processed transactions, user data, and metadata
+- **Caching Layer**: Redis cache for frequently accessed chart data and reports
+- **Metrics Tracking**: System performance and usage metrics collection
+
+### 3. Reporting and Visualization
+- **Dynamic Chart Generation**: Automatic chart type inference based on data structure
+- **Interactive Dashboards**: Web-based interface for data exploration
+- **Export Functionality**: CSV export for reports and insights
+
+### 4. Security and Access Control
+- **LDAP Authentication**: User authentication against corporate directory
+- **Role-Based Access**: Filtered data access based on user roles
+- **JWT Tokens**: Secure API authentication
+
+## Executable Components
+
+The system includes standalone executables for key processes:
+
+### cache_gen.exe
+- **Purpose**: Pre-generates cache for chart data to improve application performance
+- **Function**: Reads logged chart URLs and pings API endpoints to populate cache
+- **Usage**: Run periodically or before peak usage times
+
+### csvLoader.exe
+- **Purpose**: Processes CSV/Excel files uploaded to the system
+- **Function**: Validates, transforms, and loads transaction data into database
+- **Usage**: Triggered by file uploads or scheduled batch processing
+
+### serve.exe
+- **Purpose**: Runs the Flask API server
+- **Function**: Serves REST API endpoints for frontend and external integrations
+- **Usage**: Main application server, runs continuously
+
+## How It Works
+
+1. **Data Ingestion**:
+   - System polls Journey Manager API for new transactions
+   - XML data is parsed and stored in staging tables
+   - CSV files are uploaded and processed through ETL pipeline
+
+2. **Data Processing**:
+   - Business rules applied to normalize and validate data
+   - Account numbers, product IDs, and branch codes are processed
+   - Metrics and audit logs are generated
+
+3. **User Interaction**:
+   - Users authenticate via LDAP/Azure MSAL
+   - Frontend requests data through cached API calls
+   - Charts are dynamically generated based on data types
+   - Reports can be exported to CSV format
+
+4. **Caching and Performance**:
+   - Frequently accessed data is cached in Redis
+   - Cache generation can be run as background process
+   - Metrics help monitor system performance
+
+## Technology Stack
+
+### Frontend
+- React 18.2.0
+- Chart.js 4.4.2
+- PrimeReact 10.6.4
+- Azure MSAL for authentication
+
+### Backend
+- Python 3.x
+- Flask 3.0.3
+- SQL Server with pyodbc
+- Redis for caching
+- LDAP3 for authentication
+
+### Infrastructure
+- Azure Pipelines for CI/CD
+- Docker for containerization
+- PyInstaller for executable generation
+
+## Getting Started
+
+### Prerequisites
+- Python 3.8+
+- Node.js 19.x
+- SQL Server database
+- Redis cache server
+- Journey Manager API access
+
+### Installation
+
+1. **Clone the repository**
+   ```bash
+   git clone <repository-url>
+   cd eStore
+   ```
+
+2. **Backend Setup**
+   ```bash
+   cd api-server
+   pip install -r ../requirements.txt
+   # Configure environment variables in .env file
+   ```
+
+3. **Frontend Setup**
+   ```bash
+   npm install
+   npm run build
+   ```
+
+4. **Database Setup**
+   - Ensure SQL Server is running
+   - Run database migrations if available
+   - Configure connection strings in environment
+
+### Running the Application
+
+1. **Start Backend Server**
+   ```bash
+   python api-server/serve.py
+   # or use serve.exe
+   ```
+
+2. **Start Frontend**
+   ```bash
+   npm start
+   ```
+
+3. **Build Executables** (optional)
+   ```bash
+   # Use PyInstaller or provided build scripts
+   ./py_build.sh
+   ```
+
+## Configuration
+
+Key environment variables:
+- `REACT_APP_API_SERVER_BASE_URL`: Backend API URL
+- `SQL_HOST`, `SQL_DATABASE`: Database connection
+- `REACT_APP_JOURNEY_MANAGER_USER`: JM API credentials
+- `RELAY_SERVER_SECRET`: JWT secret key
+
+## Documentation
+
+Detailed documentation is available in the `docs/` folder:
+- [System Architecture](docs/architecture.md) - Complete system overview and data flows
+- [API Documentation](docs/api-docs.md) - REST API endpoints and usage
+- [Database Schema](docs/database-schema.md) - ER diagrams and table structures  
+- [Deployment Guide](docs/deployment.md) - Installation and configuration
+- [User Guide](docs/user-guide.md) - Usage instructions and best practices
+
+## Development
+
+### Running Tests
+```bash
+npm run test
+```
+
+### Building for Production
+```bash
+npm run build
+```
+
+### CI/CD
+The project uses Azure Pipelines for automated builds and deployments. See `azure-pipelines.yml` for pipeline configuration.
+
+## Contributing
+
+1. Follow the existing code style and patterns
+2. Add tests for new features
+3. Update documentation as needed
+4. Ensure all CI checks pass
+
+## License
+
+[Add license information here]
+
 ---
 
-# Getting Started with Create React App
-
-This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
-
-## Available Scripts
-
-In the project directory, you can run:
-
-### `npm start`
-
-Runs the app in the development mode.\
-Open [http://localhost:3000](http://localhost:3000) to view it in your browser.
-
-The page will reload when you make changes.\
-You may also see any lint errors in the console.
-
-### `npm test`
-
-Launches the test runner in the interactive watch mode.\
-See the section about [running tests](https://facebook.github.io/create-react-app/docs/running-tests) for more information.
-
-### `npm run build`
-
-Builds the app for production to the `build` folder.\
-It correctly bundles React in production mode and optimizes the build for the best performance.
-
-The build is minified and the filenames include the hashes.\
-Your app is ready to be deployed!
-
-See the section about [deployment](https://facebook.github.io/create-react-app/docs/deployment) for more information.
-
-### `npm run eject`
-
-**Note: this is a one-way operation. Once you `eject`, you can't go back!**
-
-If you aren't satisfied with the build tool and configuration choices, you can `eject` at any time. This command will remove the single build dependency from your project.
-
-Instead, it will copy all the configuration files and the transitive dependencies (webpack, Babel, ESLint, etc) right into your project so you have full control over them. All of the commands except `eject` will still work, but they will point to the copied scripts so you can tweak them. At this point you're on your own.
-
-You don't have to ever use `eject`. The curated feature set is suitable for small and middle deployments, and you shouldn't feel obligated to use this feature. However we understand that this tool wouldn't be useful if you couldn't customize it when you are ready for it.
-
-## Learn More
-
-You can learn more in the [Create React App documentation](https://facebook.github.io/create-react-app/docs/getting-started).
-
-To learn React, check out the [React documentation](https://reactjs.org/).
-
-### Code Splitting
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/code-splitting](https://facebook.github.io/create-react-app/docs/code-splitting)
-
-### Analyzing the Bundle Size
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size](https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size)
-
-### Making a Progressive Web App
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app](https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app)
-
-### Advanced Configuration
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/advanced-configuration](https://facebook.github.io/create-react-app/docs/advanced-configuration)
-
-### Deployment
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/deployment](https://facebook.github.io/create-react-app/docs/deployment)
-
-### `npm run build` fails to minify
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify](https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify)
+**Note**: This application has hardcoded staging URL values in `api-server/application.py` that should be updated for production use.

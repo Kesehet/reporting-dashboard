@@ -1,14 +1,10 @@
 import { Calendar } from 'primereact/calendar';
-import AuthorizationService from '../Services/AuthorizationService';
 
 import '../Styles/analyticsRep.css';
 import '../Styles/header.css';
 import { Dropdown } from 'primereact/dropdown';
 
 const ReportHeaderComponent = ( dates, setDates, CorBFilter, setCorBFilter, setPage ) => {
-    
-    const authService = new AuthorizationService();
-
     const items = [
                 {
                     label : 'All Filters Table',
@@ -17,6 +13,14 @@ const ReportHeaderComponent = ( dates, setDates, CorBFilter, setCorBFilter, setP
                         setPage('All Filters Table')
                     },
                     section: "Basic",
+                },
+                {
+                    label: 'Transaction Logger',
+                    icon: 'pi pi-search',
+                    command: ()=>{
+                        setPage('Transaction Logger')
+                    },
+                    section: "Basic"
                 },
                 {
                     label: 'All Transactions',
@@ -35,7 +39,7 @@ const ReportHeaderComponent = ( dates, setDates, CorBFilter, setCorBFilter, setP
                     section: "Reports",
                 },
                 {
-                    label: 'Business Deposits Report',
+                    label: 'Business Deposits and Loans Report',
                     icon: 'pi pi-briefcase',
                     command: () => {
                         setPage('Business Deposit Reports');
@@ -50,11 +54,46 @@ const ReportHeaderComponent = ( dates, setDates, CorBFilter, setCorBFilter, setP
                     },
                     section: "Reports",
                 },
+                
                 {
-                     label: 'Spot & Current Balance Amounts',
+                    label: 'PennState University Banking Reports',
+                    icon: 'pi pi-building',
+                    command: () => {
+                        setPage('PennState University Banking Reports');
+                    },
+                    section: "Reports",
+                },
+                
+                {
+                    label: 'Bot Generated Reports',
+                    icon: 'pi pi-android',
+                    command: () => {
+                        setPage('Bot Generated Reports');
+                    },
+                    section: "Reports",
+                },
+                // Business Account Summary
+                {
+                    label: 'Business Accounts Summary',
+                    icon: 'pi pi-briefcase',
+                    command: () => {
+                        setPage('Business Accounts Summary');
+                    },
+                    section: "Reports",
+                },
+                {
+                    label: "Payment Switch Reports",
+                    icon: 'pi pi-credit-card',
+                    command: () => {
+                        setPage('Payment Switch Reports');
+                    },
+                    section: "Loans & Deposits Reports",
+                },
+                {
+                     label: 'Spot And Current Balance Amounts',
                     icon: 'pi pi-download',
                     command: () => {
-                        setPage('Spot & Current Balance Amounts');
+                        setPage('Spot And Current Balance Amounts');
                     },
                     section: "Loans & Deposits Reports",
                 },
@@ -65,7 +104,15 @@ const ReportHeaderComponent = ( dates, setDates, CorBFilter, setCorBFilter, setP
                         setPage('Loan Commitments');
                     },
                     section: "Loans & Deposits Reports",
-                },
+                },                
+                {
+                    label: 'Direct Deposit Switch',
+                    icon: 'pi pi-credit-card',
+                    command: () => {
+                        setPage('Direct Deposit Switch');
+                    },
+                    section: "Loans & Deposits Reports",
+                },                
                 {
                     
                     label: 'Customer Document Center',
@@ -74,6 +121,14 @@ const ReportHeaderComponent = ( dates, setDates, CorBFilter, setCorBFilter, setP
                         setPage('Customer Document Center');
                     },
                     section: "Document Center",
+                },
+                {
+                    label: 'CSV Loader Reports',
+                    icon: 'pi pi-file-excel',
+                    command: () => {
+                        setPage('CSV Loader Reports');
+                    },
+                    section: "Reports",
                 },
                 {
                     label: 'Analytics',
@@ -91,7 +146,22 @@ const ReportHeaderComponent = ( dates, setDates, CorBFilter, setCorBFilter, setP
                     },
                     section: "Customer & Product Reports",
                 },   
-                
+                {
+                    label: 'E-Delivery Report',
+                    icon: 'pi pi-user-minus',
+                    command: () => {
+                        setPage('E-Delivery Report');
+                    },
+                    section: "Reports",
+                },
+                {
+                    label: 'E Delivery Report LOB',
+                    icon: 'pi pi-user-minus',
+                    command: () => {
+                        setPage('E Delivery Report LOB');
+                    },
+                    section: "Reports",
+                },
                 {
                     label: 'New vs Existing Customers',
                     icon: 'pi pi-user-plus',
@@ -115,6 +185,14 @@ const ReportHeaderComponent = ( dates, setDates, CorBFilter, setCorBFilter, setP
                         setPage('Multi Product Reports')
                     },
                     section: "Customer & Product Reports",
+                }, 
+                {
+                    label : 'Cross Sell Reports',
+                    icon: 'pi pi-th-large',
+                    command: ()=>{
+                        setPage('Cross Sell Reports')
+                    },
+                    section: "Customer & Product Reports",
                 },
                 {
                     label: 'Funding Type Report',
@@ -132,6 +210,15 @@ const ReportHeaderComponent = ( dates, setDates, CorBFilter, setCorBFilter, setP
                     },
                     section: "Customer & Product Reports",
                 },
+                {
+                    label: 'Student Checking Report',
+                    icon: 'pi pi-user',
+                    command: () => {
+                        setPage('Student Checking Report');
+                    },
+                    section: "Customer & Product Reports",
+                },
+
                 
                 {
                 template: () => (
@@ -165,18 +252,6 @@ const ReportHeaderComponent = ( dates, setDates, CorBFilter, setCorBFilter, setP
                         />
                 ),
             },
-            {
-                    label: 'Profile'+ (localStorage.getItem("display_name") == "" ? "": ": "+localStorage.getItem("display_name")),
-                    icon: 'pi pi-user',
-                    section: "Basic",
-                },
-            {
-                        label: 'Sign Out',
-                        icon: 'pi pi-sign-out',
-                        command: () => {
-                            authService.logout();
-                        },
-                    },
     ];
 
     return items;

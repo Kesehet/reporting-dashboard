@@ -2,7 +2,7 @@ import hashlib
 import os
 import pickle
 from datetime import timedelta, datetime
-from charts import getChartData, get_request_dict
+from charts import getChartData
 from report_modules.condition_utils import LIST_OF_CHARTS
 from DB import SQLConn, Transaction
 import json
@@ -89,7 +89,6 @@ def clear_all_cache(n=None):
                 print(f"File {filename} is {file_age_days} days old. Where n={n}")
                 if file_age_days < n:
                     continue
-            print(f"Removing cache file: {filename}")
             os.remove(file_path)
 
 def get_cached_chart_data():

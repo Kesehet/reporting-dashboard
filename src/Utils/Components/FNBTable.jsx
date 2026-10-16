@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { dataParser, getColorforTransactionType, getQuarterlyTableHeader } from './Utils';
+import getCellData, { dataParser, getColorforTransactionType, getQuarterlyTableHeader } from './Utils';
 import ChartDataService from '../../Services/ChartDataService';
 import { DataTable } from 'primereact/datatable';
 import { Column } from 'primereact/column';
@@ -8,13 +8,15 @@ import 'primereact/resources/primereact.min.css';
 import 'primeicons/primeicons.css';
 import { ProgressSpinner } from 'primereact/progressspinner';
 
-const FNBTable = ({data, dates, styleNow={}, subHeaderRow=null, chartAPIParams={}}) => {
+const FNBTable = ({data, dates, styleNow={}, subHeaderRow=null, chartAPIParams={}, freezeStyle=null }) => {
+    
     data = dataParser(data);
 
     if(!styleNow['width']) styleNow['width'] = '100%';
     if(!styleNow['color']) styleNow['color'] = 'black';
 
     const [TableData, setTableData] = useState({ headers: [], rows: [] });
+    const [formattedRows, setFormattedRows] = useState([]);
 
     const getChartData = async () => {
         let chart = new ChartDataService(data, chartAPIParams );
@@ -39,6 +41,66 @@ const FNBTable = ({data, dates, styleNow={}, subHeaderRow=null, chartAPIParams={
     
         fetchData();
     }, [data, dates, chartAPIParams]);
+
+    useEffect(() => {
+        let isMounted = true;
+        const headersWithKeys = TableData.headers.map((value, index) => value + index);
+
+        const processRows = async () => {
+            const initialRows = TableData.rows.map((row) => {
+                const rowData = {};
+                headersWithKeys.forEach((header, colIndex) => {
+                    const value = row[colIndex];
+                    if (value === '' || value === '-' ) {
+                        rowData[header] = '-';
+                    } else if (typeof value === 'string' && value.substring(0, 6) === 'SELECT') {
+                        rowData[header] = `<div class="p-progress-spinner" role="progressbar" aria-busy="true" data-pc-name="progressspinner" data-pc-section="root"><svg class="p-progress-spinner-svg" viewBox="25 25 50 50" data-pc-section="spinner" style="animation-duration: 20s;"><circle class="p-progress-spinner-circle" cx="50" cy="50" r="7" fill="none" stroke-width="1" stroke-miterlimit="10" data-pc-section="circle"></circle></svg></div>`;
+                    }
+                    else {
+                        rowData[header] = value;
+                    }
+                });
+                return rowData;
+            });
+
+            setFormattedRows(initialRows);
+
+            await Promise.all(
+                TableData.rows.map(async (row, rowIndex) => {
+                    const updatedRow = { ...initialRows[rowIndex] };
+
+                    await Promise.all(
+                        headersWithKeys.map(async (header, colIndex) => {
+                            const value = row[colIndex];
+                            if (value !== '' && value !== '-' ) {
+                                const parsedValue = await getCellData(value);
+                                if (!isMounted) return;
+                                updatedRow[header] = parsedValue ?? value ?? '';
+                            }
+                        })
+                    );
+
+                    if (isMounted) {
+                        setFormattedRows((prevRows) => {
+                            const nextRows = [...prevRows];
+                            nextRows[rowIndex] = updatedRow;
+                            return nextRows;
+                        });
+                    }
+                })
+            );
+        };
+
+        if (TableData.rows.length > 0 && TableData.headers.length > 0) {
+            processRows();
+        } else {
+            setFormattedRows([]);
+        }
+
+        return () => {
+            isMounted = false;
+        };
+    }, [TableData.rows, TableData.headers]);
 
     if(!TableData.headers || !TableData.rows){
         return (
@@ -65,23 +127,12 @@ const FNBTable = ({data, dates, styleNow={}, subHeaderRow=null, chartAPIParams={
     }
 
     headerReplicaWithUniqueDuplicates = TableData.headers.map((value, index)=>{
-            // console.log(value+index);
             return value+index;
     });
 
-    const formattedRows = TableData.rows.map((row, rowIndex) => {
-        const rowData = {};
-        
-        headerReplicaWithUniqueDuplicates.forEach((header, colIndex) => {
-            if(!row[colIndex] || row[colIndex] == "-"){
-                delete rowData[header]
-            }
-            else{
-                rowData[header] = row[colIndex] ?? '';
-            }
-        });
-        return rowData;
-    });
+    
+
+   
 
     const cellStyle = (value) => {
         if (typeof value === 'string') {
@@ -97,11 +148,10 @@ const FNBTable = ({data, dates, styleNow={}, subHeaderRow=null, chartAPIParams={
                     key={headerReplicaWithUniqueDuplicates[index]}
                     field={headerReplicaWithUniqueDuplicates[index]}
                     header={header}
+                    alignFrozen='left'
                     headerStyle={{ textAlign: 'center' }}
                     body={(rowData) => (
-                        <span style={cellStyle(rowData[headerReplicaWithUniqueDuplicates[index]])}>
-                            {rowData[headerReplicaWithUniqueDuplicates[index]]}
-                        </span>
+                        <div dangerouslySetInnerHTML={{__html: rowData[headerReplicaWithUniqueDuplicates[index]]}} style={cellStyle(rowData[headerReplicaWithUniqueDuplicates[index]])}/>
                     )}
                 />
             );
@@ -113,19 +163,15 @@ const FNBTable = ({data, dates, styleNow={}, subHeaderRow=null, chartAPIParams={
                     header={header}
                     headerStyle={{ textAlign: 'center' }}
                     body={(rowData) => (
-                        <span style={cellStyle(rowData[headerReplicaWithUniqueDuplicates[index]])}>
-                            {rowData[headerReplicaWithUniqueDuplicates[index]]}
-                        </span>
+                        <div dangerouslySetInnerHTML={{__html: rowData[headerReplicaWithUniqueDuplicates[index]]}} style={cellStyle(rowData[headerReplicaWithUniqueDuplicates[index]])}/>
                     )}
                 />
             );
         }
     });
-    
-    // console.log("My formatted rows",formattedRows);
 
     return (
-        <div className="p-d-flex p-jc-center">
+        <div className={`p-d-flex p-jc-center frozen-${freezeStyle ?? "none"}`}>
             <DataTable
                 value={formattedRows}
                 className="p-datatable-striped"

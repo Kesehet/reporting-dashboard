@@ -6,8 +6,8 @@ import json
 def read_env_to_json(env_path=".env"):
     env_dict = {}
     if not os.path.exists(env_path):
-        return json.dumps(env_dict)
-    with open(env_path, "r") as f:
+        return env_dict
+    with open(env_path, "r", encoding="utf-8", errors="replace") as f:
         for line in f:
             line = line.strip()
             if not line or line.startswith("#"):
@@ -19,3 +19,5 @@ def read_env_to_json(env_path=".env"):
 
 def get_env_value(key, env_path=".env"):
     return read_env_to_json(env_path).get(key, None)
+
+CONFIG = read_env_to_json()

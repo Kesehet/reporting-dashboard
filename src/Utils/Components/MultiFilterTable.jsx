@@ -6,16 +6,15 @@ import OneShotChart from './OneShotChart';
 
 // Constant list for filter options (unchanged)
 const FILTER_OPTIONS = [
-  { label: 'Zero Product Applications', value: 'ZeroProductApps' },
+  { label: 'Zero Product Applications', value: 'onlyZeroProductApps' },
   { label: 'Exclude Zero Product Applications', value: 'excludeZeroProductApps' },
   { label: 'Loan Apps', value: 'loanApps' },
   { label: 'Deposit Apps', value: 'depositApps' },
   { label: 'Mixed Apps', value: 'mixedApps' },
-  { label: 'Single Product Applications', value: 'singleProductApps' },
-  { label: 'Multi Produt Applications', value: 'multiProductApps' },
+  { label: 'Single Product Applications', value: 'singleApps' },
+  { label: 'Multi Produt Applications', value: 'multiApps' },
   { label: 'Exclude Bot Data', value: 'excludeBotData' },
   { label: 'Include Bot generated', value: 'includeBotData' },
-  { label: 'Exclude LOS Submitted', value: 'appStatusforDashboard' },
   { label: 'Started', value: 'startedApps' },
   { label: 'Submitted', value: 'submittedApps' },
   { label: 'Opened/Approved', value: 'approvedApps' }
@@ -28,12 +27,11 @@ const FILTER_OPTIONS = [
  * Only one value from each group can be selected at the same time.
  */
 const RADIO_GROUPS = {
-  ZeroProducts: ['ZeroProductApps', 'excludeZeroProductApps'],
+  ZeroProducts: ['onlyZeroProductApps', 'excludeZeroProductApps'],
   AppType: ['loanApps', 'depositApps', 'mixedApps'],
   AppStatus : ['startedApps','submittedApps','approvedApps'],
-  ProductType: ['singleProductApps','multiProductApps'],
+  ProductType: ['singleApps','multiApps'],
   BotData: ['excludeBotData', 'includeBotData'],
-  LOS : ['LOS Submitted'],
 };
 
 // Build a value -> group lookup for fast checks
@@ -102,7 +100,7 @@ const MultiFilterTable = ({
   const globalFilterSumamry = useMemo(()=>{
     let CorBFilter = localStorage.getItem("CorBFilter");
     let corbfilter = ""
-    if(CorBFilter != "All"){
+    if(CorBFilter !== "All"){
         corbfilter =  `for ${CorBFilter}`
     }
     return ` ${corbfilter}. We are showing all txns between ${localStorage.getItem("start_date")} and ${localStorage.getItem("end_date")}.`
@@ -189,7 +187,7 @@ const MultiFilterTable = ({
         styleNow={styleNow}
       />
       <hr/>
-      <h4>Work In Progress</h4>
+      <h4>Create Your Own Graph</h4>
       <MultiFilterChart
         key={refreshKey+"-C"}
         serverUrl={(process.env.NODE_ENV ==='production'? (window.location.href+"api"):"http://localhost:5000")+"/chart_builder"}

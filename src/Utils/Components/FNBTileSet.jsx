@@ -57,7 +57,7 @@ export default function FNBTileSet({
     };
 
     useEffect(() => {
-        if (!dates || dates[0] == null || dates[1] == null) return;
+        if (!dates || dates[0] === null || dates[1] === null) return;
         const timeout = setTimeout(fetchData, 2500);
         return () => clearTimeout(timeout);
         // eslint-disable-next-line

@@ -1,62 +1,74 @@
-from DB import Transaction, SQLConn
 from datetime import datetime
 from dateutil.relativedelta import relativedelta
+
+from DB import Q
 from report_modules.condition_utils import *
+from utils import get_header, get_list_of_months_between, in_between_sql_condition
 
-def get_zero_product_apps_reports(start_date, end_date, application_type_condition):
-    sql = SQLConn()
-    sql.connect()
-    transaction = Transaction(sql)
+
+def _normalize_condition(condition):
+    if not condition:
+        return ""
+    condition = condition.strip()
+    if condition.upper().startswith("AND "):
+        return condition[4:].strip()
+    return condition
+
+
+def _zero_product_filters(date_filter=None, application_type_condition=""):
+    filters = [onlyZeroProductApps, excludeBotData]
+    if date_filter:
+        filters.append(date_filter)
+
+    normalized_condition = _normalize_condition(application_type_condition)
+    if normalized_condition:
+        filters.append(normalized_condition)
+    return filters
+
+
+def get_zero_product_apps_bar(application_type_condition="", params=None):
+    params = params or {}
+    labels = []
+    values = []
+    current_month = datetime.now().replace(day=1)
+
+    for month_offset in range(-11, 1):
+        month_start = current_month + relativedelta(months=month_offset)
+        month_end = month_start + relativedelta(months=1, days=-1)
+        labels.append(month_start.strftime("%b %Y"))
+
+        date_filter = f"AppStartDate >= '{month_start.strftime('%Y-%m-%d')}' AND AppStartDate <= '{month_end.strftime('%Y-%m-%d')}'"
+        values.append(Q(columns=[countColumn], where=_zero_product_filters(date_filter, application_type_condition), params=params))
+
+    return {
+        "labels": labels,
+        "list": values,
+    }
+
+
+def get_zero_product_apps_reports(start_date, end_date, application_type_condition="", params=None):
+    params = params or {}
     intervals = get_list_of_months_between(start_date, end_date)
+    headers = ["-"] + [get_header(interval)["label"] for interval in intervals if interval["start_date"] != interval["end_date"]]
 
-    test_report_header, test_report_rows = generate_report(
-        intervals, transaction,
-        [
-            {
-                "sql": f"SELECT Count(*) as data FROM [DigitalReport].[dbo].[Transactions] WHERE {onlyZeroProductApps}  {application_type_condition} AND {excludeBotData}",
-                                                                                                
-                "label": "No Of Apps"
-            },
-        ]
-    )
-    sql.disconnect()
-    return {
-        "headers": test_report_header,
-        "rows": test_report_rows
-    }
-
-def generate_report(intervals, transaction, query_list):
-    headers = ["-"] + [get_header(interval)["label"] for interval in intervals if interval['start_date'] != interval['end_date']]
-    
     rows = []
-    for query in query_list:
-        row_now = [query["label"]]
+    row_definitions = [{
+        "label": "No Of Apps",
+        "base_filters": [onlyZeroProductApps, excludeBotData],
+    }]
+
+    for row in row_definitions:
+        current_row = [row["label"]]
         for interval in intervals:
-            queryNow = query["sql"] + f" AND {in_between_sql_condition(interval)} "
-            num = transaction.get_transactions_by_sql_query(queryNow)
-            row_now.append(num)
-        rows.append(row_now)
-    return headers, rows
-def get_list_of_months_between(start_date, end_date):
-    start_date = datetime.strptime(start_date, "%Y-%m-%d")
-    end_date = datetime.strptime(end_date, "%Y-%m-%d")
-    months = []
+            filters = row["base_filters"] + [in_between_sql_condition(interval)]
+            normalized_condition = _normalize_condition(application_type_condition)
+            if normalized_condition:
+                filters.append(normalized_condition)
+            current_row.append(Q(columns=[countColumn], where=filters, params=params))
+        rows.append(current_row)
 
-    while start_date <= end_date:
-        month_start = start_date.strftime("%Y-%m-01")
-        next_month = start_date + relativedelta(months=1)
-        month_end = (next_month - relativedelta(days=1)).strftime("%Y-%m-%d")
-        months.append({"start_date": month_start, "end_date": month_end})
-        start_date = next_month
-
-    return months
-
-def get_header(interval):
-    start_date = datetime.strptime(interval['start_date'], "%Y-%m-%d").strftime("%b-%Y")
     return {
-        "field": start_date,
-        "label": start_date
+        "headers": headers,
+        "rows": rows,
     }
 
-def in_between_sql_condition(interval):
-    return f"AppStartDate >= '{interval['start_date']}' AND AppStartDate <= '{interval['end_date']}'"

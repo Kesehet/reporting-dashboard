@@ -43,6 +43,34 @@
           th.style.textAlign = 'center';
         });
       });
+
+      // find all dom elements with class "frozen-left"
+      const leftFreezeElements = document.querySelectorAll('.frozen-left');
+      // find all table tags in these elements and set their first column to be frozen
+      leftFreezeElements.forEach(element => {
+        const tables = element.querySelectorAll('table');
+        tables.forEach(table => {
+          // get all the tr tags in the table
+          const trs = table.querySelectorAll('tr');
+          // loop through each tr tag and set its first td or th to be frozen
+          trs.forEach(tr => {
+            const firstTd = tr.querySelector('td:first-child');
+            const firstTh = tr.querySelector('th:first-child');
+            if (firstTd) {
+              firstTd.style.position = 'sticky';
+              firstTd.style.left = '0';
+              firstTd.style.backgroundColor = 'white';
+              firstTd.style.zIndex = '1';
+            }
+            if (firstTh) {
+              firstTh.style.position = 'sticky';
+              firstTh.style.left = '0';
+              firstTh.style.backgroundColor = 'white';
+              firstTh.style.zIndex = '2';
+            }
+          });
+        });
+      });
     }, 2000);
   </script>
   <style>

@@ -2,9 +2,9 @@ import React, { useState } from 'react';
 import FnbLogo from '../Images/FNBlogo-long.png';
 import MetricsCard from './MetricsCard';
 
-const SidebarLayout = ({ items, mainContent }) => {
+const SidebarLayout = ({ items, mainContent, pageToShow }) => {
   const [collapsed, setCollapsed] = useState(false);
-  const [activeItem, setActiveItem] = useState(null);
+  const [activeItem, setActiveItem] = useState(pageToShow);
 
   const toggleSidebar = () => setCollapsed(prev => !prev);
 
@@ -53,13 +53,8 @@ const SidebarLayout = ({ items, mainContent }) => {
           <i className={`pi ${collapsed ? 'pi-chevron-right' : 'pi-chevron-left'}`}></i>
         </button>
 
-        {!collapsed && localStorage.getItem("display_name") &&  (
-           <b>{"Welcome "+localStorage.getItem("display_name")}</b>
-        )
-        }
-
         {!collapsed && (
-          <div style={{ overflowY: 'auto', maxHeight: '70vh' }}>
+          <div style={{ overflowY: 'auto', maxHeight: '70vh', paddingBottom: '500px' }}>
             {Object.entries(groupedItems).map(([section, items]) => (
               <div key={section} className="w3-container w3-padding-small">
                 <h6 className="w3-text-grey w3-border-bottom">{section}</h6>
@@ -89,7 +84,7 @@ const SidebarLayout = ({ items, mainContent }) => {
                   return (
                     <button
                       key={idx}
-                      className={`w3-bar-item w3-button w3-hover-light-grey ${activeItem === item.label ? 'w3-light-grey' : ''}`}
+                      className={`w3-bar-item w3-button w3-hover-light-grey ${item.label} ${activeItem === item.label ? 'w3-white' : ''}`}
                       onClick={() => {
                         setActiveItem(item.label);
                         if (item.command) item.command();

@@ -1,0 +1,364 @@
+/charts/Document Center Insigths?start_date_for_left_graph=2025-01-01&end_date_for_left_graph=2025-12-31&start_date_for_right_graph=2026-01-01&end_date_for_right_graph=2026-12-31&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Document Center Monthly Insigths?start_date_for_left_graph=2025-01-01&end_date_for_left_graph=2025-12-31&start_date_for_right_graph=2026-01-01&end_date_for_right_graph=2026-12-31&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Document Center Monthly Insigths Line?start_date=2025-01-01&end_date=__OFFSET_-21__&eCATrackingCode=%25
+/charts/Document Center Monthly Insigths Line?start_date=2026-01-01&end_date=__OFFSET_344__&eCATrackingCode=%25
+/charts/Common App In Branch and Consumer Facing Report?start_date=__OFFSET_-366__&end_date=__OFFSET_-1__&monthlyReportProductTypeSelector=All&eCATrackingCode=%25
+/charts/Monthly In Branch Report?start_date=__OFFSET_-366__&end_date=__OFFSET_-1__&monthlyReportProductTypeSelector=All&eCATrackingCode=%25
+/charts/Monthly Consumer Facing Report?start_date=__OFFSET_-366__&end_date=__OFFSET_-1__&monthlyReportProductTypeSelector=All&eCATrackingCode=%25
+/charts/Monthly BPM and CRIF Report?start_date=__OFFSET_-366__&end_date=__OFFSET_-1__&eCATrackingCode=%25
+/charts/Monthly In Branch vs BPM and CRIF Report?start_date=__OFFSET_-366__&end_date=__OFFSET_-1__&eCATrackingCode=%25
+/charts/Bot Generated Reports Insights?start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Bot Generated Reports Monthly Insights?start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Abandonment Report by Week Bar?application_type=All&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Abandonment Report by Types of Abandonment Pie?application_type=All&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Zero Product Applications Bar?application_type=All&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Zero Product Applications Table?application_type=All&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/All Branch Ids?start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Abandonment Report?BranchID=All&application_type=All&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Abandonment Report?BranchID=0&application_type=All&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Abandonment Report?BranchID=1000&application_type=All&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Abandonment Report?BranchID=1036&application_type=All&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Abandonment Report?BranchID=1050&application_type=All&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Abandonment Report?BranchID=1062&application_type=All&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Abandonment Report?BranchID=1065&application_type=All&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Abandonment Report?BranchID=1068&application_type=All&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Abandonment Report?BranchID=1107&application_type=All&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Abandonment Report?BranchID=1136&application_type=All&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Abandonment Report?BranchID=1137&application_type=All&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Abandonment Report?BranchID=1139&application_type=All&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Abandonment Report?BranchID=1162&application_type=All&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Abandonment Report?BranchID=1165&application_type=All&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Abandonment Report?BranchID=1250&application_type=All&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Abandonment Report?BranchID=2201&application_type=All&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Abandonment Report?BranchID=2206&application_type=All&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Abandonment Report?BranchID=2218&application_type=All&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Abandonment Report?BranchID=2232&application_type=All&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Abandonment Report?BranchID=2310&application_type=All&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Abandonment Report?BranchID=2615&application_type=All&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Abandonment Report?BranchID=2772&application_type=All&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Abandonment Report?BranchID=2787&application_type=All&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Abandonment Report?BranchID=2796&application_type=All&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Abandonment Report?BranchID=2812&application_type=All&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Abandonment Report?BranchID=2829&application_type=All&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Abandonment Report?BranchID=2874&application_type=All&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Abandonment Report?BranchID=2908&application_type=All&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Abandonment Report?BranchID=2909&application_type=All&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Abandonment Report?BranchID=2921&application_type=All&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Abandonment Report?BranchID=2936&application_type=All&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Abandonment Report?BranchID=2949&application_type=All&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Abandonment Report?BranchID=2952&application_type=All&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Abandonment Report?BranchID=2966&application_type=All&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Business Deposit Reports Monthly Analytics Line?variant=Submitted&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25/charts/Business Deposit Reports Monthly Analytics Line?variant=Opened%2FApproved&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/All Branch Ids?eCATrackingCode=%25&application_type=Banker+Assisted&start_date=__OFFSET_-90__&end_date=__OFFSET_0__
+/charts/Business Deposit Reports?BranchID=All&application_type=All&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Business Deposit Reports?BranchID=1000&application_type=All&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Business Deposit Reports?BranchID=1036&application_type=All&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Business Deposit Reports?BranchID=1050&application_type=All&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Business Deposit Reports?BranchID=1062&application_type=All&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Business Deposit Reports?BranchID=1065&application_type=All&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Business Deposit Reports?BranchID=1068&application_type=All&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Business Deposit Reports?BranchID=1107&application_type=All&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Business Deposit Reports?BranchID=1137&application_type=All&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Business Deposit Reports?BranchID=1139&application_type=All&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Business Deposit Reports?BranchID=1165&application_type=All&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Business Deposit Reports?BranchID=1250&application_type=All&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Business Deposit Reports?BranchID=2201&application_type=All&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Business Deposit Reports?BranchID=2206&application_type=All&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Business Deposit Reports?BranchID=2232&application_type=All&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Business Deposit Reports?BranchID=2772&application_type=All&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Business Deposit Reports?BranchID=2787&application_type=All&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Business Deposit Reports?BranchID=2796&application_type=All&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Business Deposit Reports?BranchID=2812&application_type=All&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Business Deposit Reports?BranchID=2829&application_type=All&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Business Deposit Reports?BranchID=2874&application_type=All&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Business Deposit Reports?BranchID=2952&application_type=All&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Branch Originated Reports Monthly Analytics Line?variant=Opened%2FApproved&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Branch Originated Reports Monthly Analytics Line?variant=Started&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Branch Originated Reports Monthly Analytics Line?variant=Submitted&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/All Branch Ids?eCATrackingCode=%25&application_type=%25&start_date=__OFFSET_-90__&end_date=__OFFSET_0__
+/charts/Branch Originated Reports?BranchID=All&application_type=All&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Branch Originated Reports?BranchID=0&application_type=All&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Branch Originated Reports?BranchID=1000&application_type=All&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Branch Originated Reports?BranchID=1036&application_type=All&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Branch Originated Reports?BranchID=1050&application_type=All&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Branch Originated Reports?BranchID=1062&application_type=All&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Branch Originated Reports?BranchID=1065&application_type=All&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Branch Originated Reports?BranchID=1068&application_type=All&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Branch Originated Reports?BranchID=1107&application_type=All&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Branch Originated Reports?BranchID=1136&application_type=All&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Branch Originated Reports?BranchID=1137&application_type=All&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Branch Originated Reports?BranchID=1139&application_type=All&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Branch Originated Reports?BranchID=1162&application_type=All&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Branch Originated Reports?BranchID=1165&application_type=All&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Branch Originated Reports?BranchID=1250&application_type=All&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Branch Originated Reports?BranchID=2201&application_type=All&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Branch Originated Reports?BranchID=2206&application_type=All&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Branch Originated Reports?BranchID=2218&application_type=All&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Branch Originated Reports?BranchID=2232&application_type=All&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Branch Originated Reports?BranchID=2310&application_type=All&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Branch Originated Reports?BranchID=2615&application_type=All&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Branch Originated Reports?BranchID=2772&application_type=All&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Branch Originated Reports?BranchID=2787&application_type=All&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Branch Originated Reports?BranchID=2796&application_type=All&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Branch Originated Reports?BranchID=2812&application_type=All&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Branch Originated Reports?BranchID=2829&application_type=All&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Branch Originated Reports?BranchID=2874&application_type=All&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Branch Originated Reports?BranchID=2908&application_type=All&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Branch Originated Reports?BranchID=2909&application_type=All&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Branch Originated Reports?BranchID=2921&application_type=All&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Branch Originated Reports?BranchID=2936&application_type=All&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Branch Originated Reports?BranchID=2949&application_type=All&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Branch Originated Reports?BranchID=2952&application_type=All&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Branch Originated Reports?BranchID=2966&application_type=All&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Spot And Current Balance Account Insights?start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Monthly Opening And Current Balance Table?start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Spot And Current Balance Account Stacked Chart?what_column_to_add=Initial_Deposit&application_type=Online&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Spot And Current Balance Account Stacked Chart?what_column_to_add=Current_Balance&application_type=Online&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Spot And Current Balance Account Stacked Chart?what_column_to_add=Initial_Deposit&application_type=Banker+Assisted&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Spot And Current Balance Account Stacked Chart?what_column_to_add=Current_Balance&application_type=Banker+Assisted&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Loan Commitment Insights?BranchID=All&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&application_type=undefined&eCATrackingCode=%25
+/charts/Loan Commitment Stacked Table?send_avg=true&application_type=undefined&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Loan Commitment Stacked Table?send_sec_unsec=true&send_total=true&application_type=undefined&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Loan Commitment Bar And Line?show_line=true&application_type=undefined&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Loan Commitment Bar And Line?start_date=2023-01-01&end_date=__OFFSET_344__&sideByside=true&application_type=undefined&eCATrackingCode=%25
+/charts/Loan Commitment Stacked Bar?application_type=undefined&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Direct Deposit Switch Reports Insights?start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Direct Deposit Switch Reports Table?start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Application Volume By Product (All Started Apps) Pie - Year to Date?start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Application Volume By Product (All Started Apps) Pie Table - Year to Date?start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Application Volume By Product (All Submitted Apps) Pie Table - Year to Date?start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Application Volume By Product (All Submitted Apps) Pie - Year to Date?start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Application Volume By Product (All Opened Or Approved Apps) Pie - Year to Date?start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Application Volume By Product (All Opened Or Approved Apps) Pie Table - Year to Date?start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Application Volume By Product (All Started Apps) Line?start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Application Volume By Product (All Started Apps) Line Table?start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Application Volume By Product (All Submitted Apps) Line?start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Application Volume By Product (All Submitted Apps) Line Table?start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Application Volume By Product (All Opened Or Approved Apps) Line?start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Application Volume By Product (All Opened Or Approved Apps) Line Table?start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Application Volume By Product Quarterly (All Started Apps) Pie?start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Application Volume By Product Quarterly (All Submitted Apps) Pie?start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Application Volume By Product Quarterly (All Started Apps) Table?start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Application Volume By Product Quarterly (All Submitted Apps) Table?start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Application Volume By Product Quarterly (All Opened Or Approved Apps) Pie?start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Application Volume By Product Quarterly (All Opened Or Approved Apps) Table?start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Application Volume By Product Quarterly (All Started Apps) Line?start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Application Volume By Product Quarterly (All Submitted Apps) Line?start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Application Volume By Product Quarterly (All Opened Or Approved Apps) Line?start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Application Volume by Product Current Quarter (All Started Apps) Pie?start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Application Volume by Product Current Quarter (All Started Apps) Table?start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Application Volume by Product Current Quarter (All Submitted Apps) Pie?start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Application Volume by Product Current Quarter (All Submitted Apps) Table?start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Application Volume by Product Current Quarter (All Approved Apps) Pie?start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Application Volume by Product Current Quarter (All Approved Apps) Table?start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Declined Report Line?start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Declined Report Table?start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Type Of Decline Reasons Table?start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Type Of Decline Reasons Bar?start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/New vs Existing Customers Table?start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/New vs Exisitng Customers?start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Monthly Multi Product Reports Line?stat_type=Submitted&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Multi Products Product Set Id Table?start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Multi Products Product Set Id Bar?start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Monthly Multi Product Reports Line?stat_type=Opened+%2F+Approved&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Top 10 Single product with Cross Sell Products Bar?start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Top 10 Single product with Cross Sell Products Table?start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Multi Products Cross Sell Bar?start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Multi Products Cross Sell Table?start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Cross Sell Products Presented and Accepted Table?type=all&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Cross Sell Products Presented and Accepted Table?type=submitted&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Cross Sell Products Presented and Accepted Table?type=opened%2Fapproved&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Cross Sell Products Presented and Accepted Line?show_line=true&type=all&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Cross Sell Products Presented and Accepted Line?show_line=true&type=submitted&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Cross Sell Products Presented and Accepted Line?show_line=true&type=opened%2Fapproved&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Funding Type Report Line?start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Funding Type Report?start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/All Filters Table?filters=&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/All Bot Deduped Data Monthly Insights?start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/All Transactions?start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Document Center Monthly Insigths?start_date_for_left_graph=2025-01-01&end_date_for_left_graph=2025-12-31&start_date_for_right_graph=2026-01-01&end_date_for_right_graph=2026-12-31&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Shot Clock Application Reports Insights?start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Document Center Monthly Insigths Line?start_date=2025-01-01&end_date=__OFFSET_-207__&eCATrackingCode=%25
+/charts/Document Center Monthly Insigths Line?start_date=2026-01-01&end_date=__OFFSET_158__&eCATrackingCode=%25
+/charts/Transaction Logger Recent Txns?start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/All Bot Deduped Data Monthly Insights?start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/All Transactions?showComma=false&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/All Filters Table?showComma=false&filters=&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Branch Originated Reports Monthly Analytics Line?variant=Started&application_type=All&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Branch Originated Reports Monthly Analytics Line?variant=Submitted&application_type=All&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Branch Originated Reports Monthly Analytics Line?variant=Opened%2FApproved&application_type=All&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/All Branch Ids?eCATrackingCode=%25&application_type=%25&showComma=false&start_date=__OFFSET_-90__&end_date=__OFFSET_0__
+/charts/Branch Originated Reports?BranchID=All&application_type=All&showComma=false&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Business Deposit Reports Monthly Analytics Line?variant=Started&application_type=All&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Business Deposit Reports Monthly Analytics Line?variant=Submitted&application_type=All&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Business Deposit Reports Monthly Analytics Line?variant=Opened%2FApproved&application_type=All&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/All Branch Ids?eCATrackingCode=%25&application_type=Banker+Assisted&showComma=false&start_date=__OFFSET_-90__&end_date=__OFFSET_0__
+/charts/Abandonment Report by Week Bar?application_type=All&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Abandonment Report by Month Pie?application_type=All&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Abandonment Report by Year Pie?application_type=All&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Abandonment Report by Types of Abandonment Pie?application_type=All&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Zero Product Applications Bar?application_type=All&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Zero Product Applications Table?application_type=All&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/All Branch Ids?start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/PennState Branch Report Insights?start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/PennState Student Banking Reports Insights?start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/PennState Student Banking Reports Line?variant=Started&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/PennState Student Banking Reports Line?variant=Submitted&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/PennState Student Banking Reports Line?variant=Opened%2FApproved&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Bot Generated Reports Insights?start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Bot Generated Reports Monthly Insights?start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Business Deposit Reports?BranchID=All&application_type=All&showComma=false&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Business Account Summary Number Of Apps Table?start_date=2025-01-01&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Business Account Summary Top 10 Products Table?start_date=2025-01-01&end_date=__OFFSET_0__&showComma=false&eCATrackingCode=%25
+/charts/Business Account Summary Top 10 Branches Table?start_date=2025-01-01&end_date=__OFFSET_0__&showComma=false&eCATrackingCode=%25
+/charts/Business Account Summary Current Balance and Initial Deposit Table?start_date=2025-01-01&end_date=__OFFSET_0__&showComma=true&eCATrackingCode=%25
+/charts/Abandonment Report?BranchID=All&application_type=All&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/E-Delivery Report Insights?start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Abandonment Report?BranchID=2%2C872&application_type=All&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/E Delivery Report LOB Table?start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Abandonment Report?BranchID=2%2C867&application_type=All&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Application Volume By Product (All Started Apps) Pie - Year to Date?start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Application Volume By Product (All Started Apps) Pie Table - Year to Date?start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Application Volume By Product (All Submitted Apps) Pie - Year to Date?start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Application Volume By Product (All Submitted Apps) Pie Table - Year to Date?start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Application Volume By Product (All Opened Or Approved Apps) Pie - Year to Date?start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Application Volume By Product (All Opened Or Approved Apps) Pie Table - Year to Date?start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Application Volume By Product (All Started Apps) Line?start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Application Volume By Product (All Started Apps) Line Table?start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Application Volume By Product (All Submitted Apps) Line?start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Application Volume By Product (All Submitted Apps) Line Table?start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Application Volume By Product (All Opened Or Approved Apps) Line?start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Application Volume By Product (All Opened Or Approved Apps) Line Table?start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Application Volume By Product Quarterly (All Started Apps) Pie?start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Application Volume By Product Quarterly (All Started Apps) Table?start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Application Volume By Product Quarterly (All Submitted Apps) Pie?start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Application Volume By Product Quarterly (All Submitted Apps) Table?start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Application Volume By Product Quarterly (All Opened Or Approved Apps) Pie?start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Application Volume By Product Quarterly (All Opened Or Approved Apps) Table?start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Application Volume By Product Quarterly (All Started Apps) Line?start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Application Volume By Product Quarterly (All Submitted Apps) Line?start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Application Volume By Product Quarterly (All Opened Or Approved Apps) Line?start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Application Volume by Product Current Quarter (All Started Apps) Pie?start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Application Volume by Product Current Quarter (All Started Apps) Table?start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Application Volume by Product Current Quarter (All Submitted Apps) Pie?start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Application Volume by Product Current Quarter (All Submitted Apps) Table?start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Application Volume by Product Current Quarter (All Approved Apps) Pie?start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Custom Quarterly Analytics Common App Table?quarters=%5B%7B%27year%27%3A+2026%2C+%27quarter%27%3A+%27Q1%27%7D%2C+%7B%27year%27%3A+2026%2C+%27quarter%27%3A+%27Q2%27%7D%5D&requestMethod=POST&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%2525
+/charts/Application Volume by Product Current Quarter (All Approved Apps) Table?start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Custom Quarterly Analytics Customer eCA Table?quarters=%5B%7B%27year%27%3A+2026%2C+%27quarter%27%3A+%27Q1%27%7D%2C+%7B%27year%27%3A+2026%2C+%27quarter%27%3A+%27Q2%27%7D%5D&requestMethod=POST&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%2525
+/charts/Custom Quarterly Analytics InBranch Common App Table?quarters=%5B%7B%27year%27%3A+2026%2C+%27quarter%27%3A+%27Q1%27%7D%2C+%7B%27year%27%3A+2026%2C+%27quarter%27%3A+%27Q2%27%7D%5D&requestMethod=POST&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%2525
+/charts/Student Checking Report Insights?start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Student Checking Monthly Report Table?start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Lending And Deposit Reports?start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Abandonment Report?BranchID=2%2C869&application_type=All&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Funding Type Report Line?start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Funding Type Report?start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Top 10 Single product with Cross Sell Products Bar?start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Top 10 Single product with Cross Sell Products Table?start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Multi Products Cross Sell Bar?start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Multi Products Cross Sell Table?start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Cross Sell Products Presented and Accepted Table?type=all&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Cross Sell Products Presented and Accepted Table?type=submitted&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Cross Sell Products Presented and Accepted Table?type=opened%2Fapproved&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Cross Sell Products Presented and Accepted Line?show_line=true&type=all&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Cross Sell Products Presented and Accepted Line?show_line=true&type=submitted&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Cross Sell Products Presented and Accepted Line?show_line=true&type=opened%2Fapproved&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Multi Products Product Set Id Bar?start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Multi Products Product Set Id Table?start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Multi Products Daily Product Set Id Insights?start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Monthly Multi Product Reports Line?stat_type=Opened+%2F+Approved&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Monthly Multi Product Reports Line?stat_type=Submitted&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/New vs Existing Customers Table?start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Declined Report Line?start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Declined Report Table?start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Type Of Decline Reasons Bar?start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Type Of Decline Reasons Table?start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/New vs Exisitng Customers?start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Abandonment Report?BranchID=2%2C870&application_type=All&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Abandonment Report?BranchID=2%2C862&application_type=All&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Abandonment Report?BranchID=2%2C874&application_type=All&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Abandonment Report?BranchID=2%2C864&application_type=All&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Abandonment Report?BranchID=2%2C089&application_type=All&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Abandonment Report?BranchID=2%2C852&application_type=All&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Abandonment Report?BranchID=2%2C889&application_type=All&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Abandonment Report?BranchID=2%2C887&application_type=All&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Abandonment Report?BranchID=2%2C091&application_type=All&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Abandonment Report?BranchID=2%2C088&application_type=All&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Abandonment Report?BranchID=2%2C090&application_type=All&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Abandonment Report?BranchID=2%2C888&application_type=All&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Abandonment Report?BranchID=2%2C087&application_type=All&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Abandonment Report?BranchID=2%2C897&application_type=All&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Abandonment Report?BranchID=2%2C894&application_type=All&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Abandonment Report?BranchID=2%2C879&application_type=All&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Abandonment Report?BranchID=2%2C893&application_type=All&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Abandonment Report?BranchID=2%2C895&application_type=All&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Abandonment Report?BranchID=2%2C898&application_type=All&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Abandonment Report?BranchID=2%2C093&application_type=All&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Abandonment Report?BranchID=2%2C099&application_type=All&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Abandonment Report?BranchID=2%2C849&application_type=All&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Abandonment Report?BranchID=2%2C882&application_type=All&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Abandonment Report?BranchID=2%2C092&application_type=All&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Abandonment Report?BranchID=2%2C881&application_type=All&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Abandonment Report?BranchID=2%2C098&application_type=All&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Abandonment Report?BranchID=2%2C096&application_type=All&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Abandonment Report?BranchID=2%2C097&application_type=All&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Abandonment Report?BranchID=2%2C095&application_type=All&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Abandonment Report?BranchID=2%2C851&application_type=All&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Abandonment Report?BranchID=2%2C857&application_type=All&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Abandonment Report?BranchID=2%2C034&application_type=All&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Abandonment Report?BranchID=2%2C855&application_type=All&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Abandonment Report?BranchID=2%2C876&application_type=All&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Abandonment Report?BranchID=2%2C037&application_type=All&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Abandonment Report?BranchID=2%2C423&application_type=All&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Abandonment Report?BranchID=2%2C405&application_type=All&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Abandonment Report?BranchID=2%2C420&application_type=All&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Abandonment Report?BranchID=2%2C421&application_type=All&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Abandonment Report?BranchID=2%2C427&application_type=All&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Abandonment Report?BranchID=2%2C401&application_type=All&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Abandonment Report?BranchID=2%2C046&application_type=All&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Abandonment Report?BranchID=2%2C045&application_type=All&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Abandonment Report?BranchID=2%2C047&application_type=All&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Abandonment Report?BranchID=2%2C058&application_type=All&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Abandonment Report?BranchID=2%2C029&application_type=All&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Abandonment Report?BranchID=2%2C028&application_type=All&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Abandonment Report?BranchID=2%2C030&application_type=All&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Abandonment Report?BranchID=2%2C060&application_type=All&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Abandonment Report?BranchID=2%2C041&application_type=All&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Abandonment Report?BranchID=2%2C025&application_type=All&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Abandonment Report?BranchID=2%2C071&application_type=All&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Abandonment Report?BranchID=2%2C064&application_type=All&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Abandonment Report?BranchID=2%2C072&application_type=All&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Abandonment Report?BranchID=2%2C056&application_type=All&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Abandonment Report?BranchID=2%2C075&application_type=All&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Abandonment Report?BranchID=2%2C602&application_type=All&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Abandonment Report?BranchID=2%2C603&application_type=All&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Abandonment Report?BranchID=2%2C074&application_type=All&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Current Total DDS Amount and Switches Insights?start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Direct Deposit Switch Reports Insights?start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Direct Deposit Switch Reports Table?start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Abandonment Report?BranchID=2%2C051&application_type=All&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Abandonment Report?BranchID=2%2C082&application_type=All&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Abandonment Report?BranchID=2%2C050&application_type=All&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Abandonment Report?BranchID=2%2C426&application_type=All&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Abandonment Report?BranchID=2%2C081&application_type=All&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Abandonment Report?BranchID=2%2C422&application_type=All&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Abandonment Report?BranchID=2%2C610&application_type=All&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Abandonment Report?BranchID=2%2C067&application_type=All&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Abandonment Report?BranchID=2%2C021&application_type=All&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Abandonment Report?BranchID=2%2C618&application_type=All&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Abandonment Report?BranchID=2%2C032&application_type=All&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Abandonment Report?BranchID=2%2C024&application_type=All&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Abandonment Report?BranchID=2%2C070&application_type=All&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Loan Commitment Insights?BranchID=All&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&application_type=undefined&eCATrackingCode=%25
+/charts/Loan Commitment Stacked Table?send_avg=true&application_type=undefined&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Loan Commitment Stacked Table?send_sec_unsec=true&send_total=true&application_type=undefined&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Abandonment Report?BranchID=2%2C026&application_type=All&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Loan Commitment Bar And Line?show_line=true&application_type=undefined&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Loan Commitment Bar And Line?start_date=2023-01-01&end_date=__OFFSET_158__&sideByside=true&application_type=undefined&eCATrackingCode=%25
+/charts/Loan Commitment Stacked Bar?application_type=undefined&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Spot And Current Balance Account Insights?start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Monthly Opening And Current Balance Table?start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Spot And Current Balance Account Stacked Chart?what_column_to_add=Initial_Deposit&application_type=Online&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Spot And Current Balance Account Stacked Chart?what_column_to_add=Current_Balance&application_type=Online&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Spot And Current Balance Account Stacked Chart?what_column_to_add=Initial_Deposit&application_type=Banker+Assisted&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25
+/charts/Spot And Current Balance Account Stacked Chart?what_column_to_add=Current_Balance&application_type=Banker+Assisted&start_date=__OFFSET_-90__&end_date=__OFFSET_0__&eCATrackingCode=%25

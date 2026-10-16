@@ -8,7 +8,7 @@ import { clone } from 'chart.js/helpers';
 
 import { toPng } from 'html-to-image';
 
-const ChartCard = ({ title, items, styleNow={} }) => {
+const ChartCard = ({ title, items, styleNow={}, noDialog=false }) => {
     const [visible, setVisible] = useState(false);
     const cardRef = useRef(null);
 
@@ -71,25 +71,32 @@ const takeScreenshot = async () => {
                 style={styleNow ?? { overflow: 'hidden', borderRadius: '12px', width: '100%', maxWidth: '46vw', height: 'fit-content' }}
                 onClick={() => setVisible(true)}
             >
-                <div className='table-wrapper-with-black-text' style={{ padding: '1rem', width: '100%' }}>
+                <div ref={(noDialog) ? cardRef : null} className='table-wrapper-with-black-text' style={{ padding: '1rem', width: '100%' }}>
                     {items}
                 </div>
+                {
+                    (noDialog) ? (<Button label="Take Screenshot" icon="pi pi-camera" onClick={takeScreenshot} style={{ marginTop: '1rem' }} />) : null
+                }
             </Card>
-
-            <Dialog
-                header={title}
-                visible={visible}
-                style={{ width: '46vw', height: 'fit-content' }}
-                maximizable
-                onHide={() => setVisible(false)}
-                blockScroll={false}
-            >
-                <div ref={cardRef} className='table-wrapper-with-black-text' style={{ padding: '1rem' }}>
-                    {items}
-                    
-                </div>
-                <Button label="Take Screenshot" icon="pi pi-camera" onClick={takeScreenshot} style={{ marginTop: '1rem' }} />
-            </Dialog>
+                {
+                    (noDialog) ? null : (
+                        <Dialog
+                            header={title}
+                            visible={visible}
+                            style={{ width: '46vw', height: 'fit-content' }}
+                            maximizable
+                            onHide={() => setVisible(false)}
+                            blockScroll={false}
+                        >
+                            <div ref={(noDialog) ? null : cardRef} className='table-wrapper-with-black-text' style={{ padding: '1rem' }}>
+                                {items}
+                                
+                            </div>
+                            <Button label="Take Screenshot" icon="pi pi-camera" onClick={takeScreenshot} style={{ marginTop: '1rem' }} />
+                        </Dialog>
+                    )
+                }
+            
         </>
     );
 };

@@ -3,6 +3,7 @@ from datetime import datetime
 from dateutil.relativedelta import relativedelta
 from report_modules.condition_utils import *
 from DB import query_maker
+from utils import *
 
 def get_funding_type_reports(start_date, end_date, ecaTrackingCodeFilter):
     sql = SQLConn()
@@ -53,6 +54,9 @@ def get_funding_type_reports(start_date, end_date, ecaTrackingCodeFilter):
                 "rows": test_report_rows
             }
 
+
+
+
 def generate_report(intervals, transaction, query_list):
     headers = ["-"] 
     # Generate headers for each interval
@@ -87,29 +91,24 @@ def generate_report(intervals, transaction, query_list):
 
     return headers, rows
 
+def get_funding_type_reports_line(start_date, end_date, ecaTrackingCodeFilter):
+    data = get_funding_type_reports(start_date, end_date, ecaTrackingCodeFilter)
+    ret_list = {}
+    for row in data["rows"]:
+        rows = [try_int(value) for value in row[1:]]
+        # Remove None values
+        rows = [value for value in rows if value is not None]
+        data_id = row[0]
+        ret_list[data_id] = rows
 
-def get_list_of_months_between(start_date, end_date):
 
-    start_date = datetime.strptime(start_date, "%Y-%m-%d")
-    end_date = datetime.strptime(end_date, "%Y-%m-%d")
-    months = []
-
-    while start_date <= end_date:
-        month_start = start_date.strftime("%Y-%m-01")  # July 1st
-        next_month = datetime.strptime(month_start, "%Y-%m-%d") + relativedelta(months=1)  # Auguest 1st
-        month_end = (next_month - relativedelta(days=1)).strftime("%Y-%m-%d") # Auguest 4th 
-        months.append({"start_date": month_start, "end_date": month_end}) 
-        start_date = next_month
-
-    return months
-
-def get_header(interval):
-    # Convert start date to format Jun-25
-    start_date = datetime.strptime(interval['start_date'], "%Y-%m-%d").strftime("%b-%Y")
     return {
-        "field": start_date,
-        "label": start_date
+        "labels": (data["headers"][1:][:len(data['headers'][1:])//2]), # Get unique labels for count and amount
+        "datasetMap": ret_list
     }
+
+
+
     
 
 def in_between_sql_condition(interval):

@@ -133,7 +133,7 @@ def fetch_and_export(
             continue
         encoded = quote(name, safe="")
         url = f"{base_url.rstrip('/')}{route_prefix}/{encoded}"
-        params = dict(start_date=start_date, end_date=end_date, eCATrackingCode=tracking_code, authorization=False)
+        params = dict(start_date=start_date, end_date=end_date, eCATrackingCode=tracking_code)
 
         try:
             logging.info("GET %s", url)

@@ -1,10 +1,10 @@
 import { useState, useEffect } from 'react';
 import { Chart } from "primereact/chart";
 import { ProgressSpinner } from "primereact/progressspinner";
-import { dataParser, generateBarWithLineChartData } from "./Utils";
+import { dataParser, generateBarWithLineChartData,  showPointValuesInLineChart, showQuarterMarkersInLineChart } from "./Utils";
 import ChartDataService from "../../Services/ChartDataService";
 
-const FNBBarWithLineChart = ({ data, dates, setBarColor = false, chartAPIParams = {} }) => {
+const FNBBarWithLineChart = ({ data, dates, setBarColor = false, chartAPIParams = {}, showPointValues = false, dont_show_for_index=[] }) => {
     const [chartData, setChartData] = useState(null);
     const [loading, setLoading] = useState(true);
 
@@ -31,7 +31,7 @@ const FNBBarWithLineChart = ({ data, dates, setBarColor = false, chartAPIParams 
             setTimeout(() => setLoading(false), 3000);
         };
 
-        if (dates && dates[0] != null && dates[1] != null) {
+        if (dates && dates[0] !== null && dates[1] !== null) {
             setLoading(true);
             setTimeout(fetchData, 2000);
         }
@@ -53,12 +53,17 @@ const FNBBarWithLineChart = ({ data, dates, setBarColor = false, chartAPIParams 
         );
     }
 
+    const PLUGINS = []
+        if(showPointValues) PLUGINS.push(showPointValuesInLineChart(dont_show_for_index));
+                            PLUGINS.push(showQuarterMarkersInLineChart());
+
     return (
         <div className="p-d-flex" style={{ position: 'relative', height: '100%', width: '100%', flexDirection: 'column' }}>
             <div className="p-d-flex" style={{ flex: 1 }}>
                 <Chart
                     type="bar"
                     data={chartData}
+                    plugins={PLUGINS}
                     options={{
                         responsive: true,
                         maintainAspectRatio: false,
@@ -77,6 +82,9 @@ const FNBBarWithLineChart = ({ data, dates, setBarColor = false, chartAPIParams 
                                 title: {
                                     display: true,
                                     text: ''
+                                },
+                                ticks:{
+                                    color: chartData?.datasets[0].backgroundColor ?? chartData?.datasets[0].borderColor
                                 }
                             },
                             y1: {
@@ -88,6 +96,9 @@ const FNBBarWithLineChart = ({ data, dates, setBarColor = false, chartAPIParams 
                                 title: {
                                     display: true,
                                     text: ''
+                                },
+                                ticks:{
+                                    color: chartData?.datasets[1].backgroundColor ?? chartData?.datasets[1].borderColor
                                 }
                             }
                         }
