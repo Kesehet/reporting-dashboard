@@ -32,7 +32,9 @@
     "test": "react-scripts test --watchAll=false --coverage --env=@happy-dom/jest-environment",
     "test:changed": "react-scripts test  --env=@happy-dom/jest-environment",
     "test:ci": "react-scripts test --watchAll=false --coverage --testTimeout=10000 --env=@happy-dom/jest-environment",
-    "test:memory": "react-scripts test --watchAll=false --detectOpenHandles --env=@happy-dom/jest-environment"
+    "test:memory": "react-scripts test --watchAll=false --detectOpenHandles --env=@happy-dom/jest-environment",
+    "test:chart-frontend": "react-scripts test --watchAll=false --env=@happy-dom/jest-environment --runInBand --testPathPattern=contracts/chartResponses.contract.test.js",
+    "test:charts": "python scripts/run_chart_contracts.py && python -m unittest discover -s tests/contracts -p \"test_*.py\" -v && npm run test:chart-frontend"
   },
   "eslintConfig": {
     "extends": [

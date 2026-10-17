@@ -1,0 +1,57 @@
+name: Chart response contracts
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: chart-contracts-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  chart-contracts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      CI: 'true'
+      TZ: UTC
+      PYTHONHASHSEED: '0'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: tests/contracts/requirements.txt
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Install test dependencies
+        run: |
+          python -m pip install -r tests/contracts/requirements.txt
+          npm ci --no-audit --no-fund
+      - name: All backend chart responses and reviewed baselines
+        id: backend
+        run: python scripts/run_chart_contracts.py
+      - name: HTTP, date boundaries, and existing Python regressions
+        if: ${{ !cancelled() && steps.backend.outcome != 'skipped' }}
+        run: python -m unittest discover -s tests/contracts -p 'test_*.py' -v
+      - name: Compare backend responses with real frontend adapters
+        if: ${{ !cancelled() && steps.backend.outcome != 'skipped' }}
+        run: npm run test:chart-frontend
+      - name: Publish compatibility findings
+        if: always()
+        run: python scripts/chart-contract-summary.py
+      - name: Upload responses and findings (including failures)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: chart-contract-results
+          path: contract-results/
+          retention-days: 14
+          if-no-files-found: warn

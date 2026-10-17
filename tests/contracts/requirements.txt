@@ -1,0 +1,11 @@
+# Test runtime only; native ODBC is replaced at the I/O boundary.
+Flask==3.0.3
+Flask-Cors==4.0.0
+python-dotenv==1.0.1
+python-dateutil==2.9.0.post0
+requests==2.31.0
+pandas==2.2.2
+lxml==5.1.1
+chardet==5.2.0
+waitress==3.0.0
+freezegun==1.5.5

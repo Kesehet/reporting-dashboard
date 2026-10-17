@@ -69,3 +69,6 @@ old_enc.key
 exe_build/
 exe_dist/
 !/.env.example
+
+# Generated backend/frontend contract comparison artifacts
+/contract-results/

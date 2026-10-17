@@ -1,0 +1,134 @@
+{
+  "Application Volume By Product Quarterly (All Started Apps) Table | empty | {}": [
+    "table:rawResponse:table-width:6:rows:5,7",
+    "table:response:table-width:6:rows:5,7"
+  ],
+  "Application Volume By Product Quarterly (All Started Apps) Table | populated | {}": [
+    "table:rawResponse:table-width:6:rows:5,7",
+    "table:response:table-width:6:rows:5,7"
+  ],
+  "Application Volume By Product Quarterly (All Submitted Apps) Table | empty | {}": [
+    "table:rawResponse:table-width:6:rows:5,7",
+    "table:response:table-width:6:rows:5,7"
+  ],
+  "Application Volume By Product Quarterly (All Submitted Apps) Table | populated | {}": [
+    "table:rawResponse:table-width:6:rows:5,7",
+    "table:response:table-width:6:rows:5,7"
+  ],
+  "Application Volume By Product Quarterly (All Opened Or Approved Apps) Table | empty | {}": [
+    "table:rawResponse:table-width:6:rows:5,7",
+    "table:response:table-width:6:rows:5,7"
+  ],
+  "Application Volume By Product Quarterly (All Opened Or Approved Apps) Table | populated | {}": [
+    "table:rawResponse:table-width:6:rows:5,7",
+    "table:response:table-width:6:rows:5,7"
+  ],
+  "Abandonment Report by Types of Abandonment Pie | empty | {}": [
+    "bar:rawResponse:adapter-length-mismatch",
+    "bar:rawResponse:labels-series-length-mismatch",
+    "bar:response:adapter-length-mismatch",
+    "bar:response:labels-series-length-mismatch"
+  ],
+  "Abandonment Report by Types of Abandonment Pie | populated | {}": [
+    "bar:rawResponse:adapter-length-mismatch",
+    "bar:rawResponse:labels-series-length-mismatch",
+    "bar:response:adapter-length-mismatch",
+    "bar:response:labels-series-length-mismatch"
+  ],
+  "Funding Type Report | empty | {}": [
+    "table:rawResponse:table-width:7:rows:13",
+    "table:response:table-width:7:rows:13"
+  ],
+  "Funding Type Report | populated | {}": [
+    "table:rawResponse:table-width:7:rows:13",
+    "table:response:table-width:7:rows:13"
+  ],
+  "Funding Type Report Line | empty | {}": [
+    "line:rawResponse:adapter-length-mismatch",
+    "line:rawResponse:labels-series-length-mismatch",
+    "line:response:adapter-length-mismatch",
+    "line:response:labels-series-length-mismatch"
+  ],
+  "Funding Type Report Line | populated | {}": [
+    "line:rawResponse:adapter-length-mismatch",
+    "line:rawResponse:labels-series-length-mismatch",
+    "line:response:adapter-length-mismatch",
+    "line:response:labels-series-length-mismatch"
+  ],
+  "Cross Sell Products Table | empty | {}": [
+    "unreferenced:rawResponse:unexpected-top-level-array",
+    "unreferenced:response:unexpected-top-level-array"
+  ],
+  "Cross Sell Products Table | populated | {}": [
+    "unreferenced:rawResponse:unexpected-top-level-array",
+    "unreferenced:response:unexpected-top-level-array"
+  ],
+  "Monthly In Branch vs BPM and CRIF Report | populated | {}": [
+    "unreferenced:rawResponse:table-width:7:rows:6",
+    "unreferenced:response:table-width:7:rows:6"
+  ],
+  "Type Of Decline Reasons Bar | empty | {}": [
+    "bar:rawResponse:missing-labels",
+    "bar:response:missing-labels"
+  ],
+  "Type Of Decline Reasons Bar | populated | {}": [
+    "bar:rawResponse:missing-labels",
+    "bar:response:missing-labels"
+  ],
+  "Loan Commitment Stacked Bar | empty | {}": [
+    "stacked:rawResponse:adapter-length-mismatch",
+    "stacked:rawResponse:labels-series-length-mismatch",
+    "stacked:response:adapter-length-mismatch",
+    "stacked:response:labels-series-length-mismatch"
+  ],
+  "Loan Commitment Stacked Bar | populated | {}": [
+    "stacked:rawResponse:adapter-length-mismatch",
+    "stacked:rawResponse:labels-series-length-mismatch",
+    "stacked:response:adapter-length-mismatch",
+    "stacked:response:labels-series-length-mismatch"
+  ],
+  "Loan Commitment Bar And Line | empty | {}": [
+    "unreferenced:rawResponse:adapter-length-mismatch",
+    "unreferenced:rawResponse:labels-series-length-mismatch",
+    "unreferenced:response:adapter-length-mismatch",
+    "unreferenced:response:labels-series-length-mismatch"
+  ],
+  "Loan Commitment Bar And Line | populated | {}": [
+    "unreferenced:rawResponse:adapter-length-mismatch",
+    "unreferenced:rawResponse:labels-series-length-mismatch",
+    "unreferenced:response:adapter-length-mismatch",
+    "unreferenced:response:labels-series-length-mismatch"
+  ],
+  "Loan Commitment Bar And Line | empty | {\"show_line\": true}": [
+    "mixed:rawResponse:adapter-length-mismatch",
+    "mixed:rawResponse:labels-series-length-mismatch",
+    "mixed:response:adapter-length-mismatch",
+    "mixed:response:labels-series-length-mismatch"
+  ],
+  "Loan Commitment Bar And Line | populated | {\"show_line\": true}": [
+    "mixed:rawResponse:adapter-length-mismatch",
+    "mixed:rawResponse:labels-series-length-mismatch",
+    "mixed:response:adapter-length-mismatch",
+    "mixed:response:labels-series-length-mismatch"
+  ],
+  "Loan Commitment Bar And Line | empty | {\"sideByside\": true}": [
+    "mixed:rawResponse:adapter-dropped-chart",
+    "mixed:rawResponse:labels-series-length-mismatch",
+    "mixed:response:adapter-dropped-chart",
+    "mixed:response:labels-series-length-mismatch"
+  ],
+  "Loan Commitment Bar And Line | populated | {\"sideByside\": true}": [
+    "mixed:rawResponse:adapter-dropped-chart",
+    "mixed:rawResponse:labels-series-length-mismatch",
+    "mixed:response:adapter-dropped-chart",
+    "mixed:response:labels-series-length-mismatch"
+  ],
+  "E Delivery Report LOB Table | empty | {}": [
+    "table:rawResponse:table-width:8:rows:3",
+    "table:response:table-width:8:rows:3"
+  ],
+  "E Delivery Report LOB Table | populated | {}": [
+    "table:rawResponse:table-width:8:rows:2,3",
+    "table:response:table-width:8:rows:2,3"
+  ]
+}

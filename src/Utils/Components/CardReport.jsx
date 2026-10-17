@@ -183,3 +183,6 @@ function sanitize(name = '') {
   return String(name).replace(/[\\/:*?"<>|]+/g, ' ').trim();
 }
 
+
+// Share the existing adapter with response-contract tests; no rendering behavior changes.
+export { normalizeChartPayload };
