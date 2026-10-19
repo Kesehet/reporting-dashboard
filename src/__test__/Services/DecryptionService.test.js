@@ -1,7 +1,8 @@
 import DecryptionService from '../../Services/DecryptionService';
+import fetchMock from 'jest-fetch-mock';
 
 describe('DecryptionService API contract', () => {
-  beforeEach(() => fetch.resetMocks());
+  beforeEach(() => { fetchMock.enableMocks(); fetchMock.resetMocks(); });
 
   it('uses a POST body for ciphertext and a nonpersistent header for the access token', async () => {
     fetch.mockResponseOnce(JSON.stringify({ plaintext: 'hello 🌙' }));

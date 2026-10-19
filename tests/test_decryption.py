@@ -187,7 +187,7 @@ class DecryptEndpointTests(CryptoTests):
         # Only files necessary for cryptographic operation are read.
         os.remove(self.current)
         response = self.post({"ciphertext": "v2:" + base64.b64encode(b"0" * 29).decode()})
-        self.assertEqual(response.status_code, 422)
+        self.assertEqual(response.status_code, 503)
         self.assertNotIn(ACCESS, response.get_data(as_text=True))
 
 

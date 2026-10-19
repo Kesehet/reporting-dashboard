@@ -97,6 +97,8 @@ def encrypt_decrypt_string(input_string, mode="encrypt"):
     if mode == "decrypt":
         if not input_string.startswith(PREFIX):
             raise ValueError("Unsupported legacy ciphertext (missing AES-GCM nonce/tag)")
+        if not any(os.path.exists(p) for p in (CURRENT_KEY_FILE, OLD_KEY_FILE)):
+            raise FileNotFoundError("No server-side encryption key is available")
         for key_file in (CURRENT_KEY_FILE, OLD_KEY_FILE):
             if not os.path.exists(key_file):
                 continue
