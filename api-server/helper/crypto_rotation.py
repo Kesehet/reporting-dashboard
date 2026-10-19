@@ -109,7 +109,7 @@ def _rows(cursor, table, pk, initial, *, lock=False, page_size=200):
         last = rows[-1][0]
 
 
-def _converted(value, current_id, ring, max_length):
+def _converted(value, current_id, ring, max_length, dry_run=False):
     if value is None or value == "":
         return value, False
     if not isinstance(value, str):
@@ -118,6 +118,15 @@ def _converted(value, current_id, ring, max_length):
     plaintext = decrypt_string(value, ring=ring)
     if is_versioned(value) and encrypted_key_id(value) == current_id:
         return value, False
+    if dry_run:
+        candidate = encrypt_string(plaintext, ring=ring)
+        if decrypt_string(candidate, ring=ring) != plaintext:
+            raise RuntimeError("Authenticated encryption verification failed")
+        if max_length != -1 and len(candidate) > max_length:
+            if max_length < 36:
+                raise ValueError("SQL column is too narrow for a file-backed reference")
+            return "v2f:" + "0" * 32, True
+        return candidate, True
     result = encrypt_string(plaintext, max_length=max_length, ring=ring)
     if decrypt_string(result, ring=ring) != plaintext:
         raise RuntimeError("Authenticated encryption verification failed")
@@ -148,7 +157,7 @@ def inspect_database():
                         if not is_versioned(value) and not probe_checked:
                             verify_legacy_probe()
                             probe_checked = True
-                        next_value, changed = _converted(value, current_id, ring, lengths[column])
+                        next_value, changed = _converted(value, current_id, ring, lengths[column], dry_run=True)
                         capacity = lengths[column]
                         if capacity != -1 and len(next_value) > capacity:
                             raise ValueError("New ciphertext would exceed existing SQL column length")
@@ -218,6 +227,7 @@ def _migrate(run_id):
         ring = get_keyring()
         current_id = ring["current_id"]
         probe_checked = False
+        created_external = set()
         backup_path = _root() / "backups" / (run_id + ".jsonl")
         backup_path.parent.mkdir(mode=0o700, exist_ok=True)
         digest = hashlib.sha256()
@@ -240,6 +250,8 @@ def _migrate(run_id):
                         if cap != -1 and result is not None and len(result) > cap:
                             raise RuntimeError("Column capacity changed since preflight")
                         after.append(result)
+                        if isinstance(result, str) and result.startswith("v2f:") and result != old:
+                            created_external.add(result[4:])
                     if after != before:
                         original = {"table": table, "pk": pk, "id": identity,
                                     "before": before, "after": after}
@@ -265,6 +277,8 @@ def _migrate(run_id):
     except Exception:
         if sql is not None and not committed:
             sql.connection.rollback()
+            for file_id in locals().get("created_external", set()):
+                (_root() / "values" / (file_id + ".enc")).unlink(missing_ok=True)
         status.update({"state": "reconciliation_required" if committed else "failed",
                        "finished_at": _now(),
                        "error": "Commit outcome requires review" if committed else "Migration aborted; SQL transaction rolled back"})
