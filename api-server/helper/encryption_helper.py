@@ -12,6 +12,7 @@ import os
 import secrets
 import tempfile
 import uuid
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 from threading import RLock
@@ -122,32 +123,59 @@ def _legacy_env():
     return get_env_value("ENCRYPTION_KEY")
 
 
-def get_keyring():
-    """Archive any available legacy sources before returning a ring snapshot.
+@contextmanager
+def _ring_file_lock():
+    """Interprocess lock across Flask workers; prevents losing historic keys."""
+    path = _root() / "keyring.lock"
+    with open(path, "a+b") as handle:
+        if os.name == "nt":
+            import msvcrt
+            handle.seek(0, os.SEEK_END)
+            if handle.tell() == 0:
+                handle.write(b"\0")
+                handle.flush()
+            handle.seek(0)
+            msvcrt.locking(handle.fileno(), msvcrt.LK_LOCK, 1)
+        else:
+            import fcntl
+            fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            if os.name == "nt":
+                handle.seek(0)
+                msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
+            else:
+                fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
 
-    Key files remain untouched. A missing historic key can be added by placing a
-    base64 key in CRYPTO_STATE_DIR/import/*.key (or explicit env/file paths).
-    """
+
+def _sync_ring():
+    ring = _load_ring()
+    changed = False
+    legacy_sources = []
+    env_key = _legacy_env()
+    if env_key:
+        legacy_sources.append(("env", env_key))
+    for name in (CURRENT_KEY_FILE, OLD_KEY_FILE):
+        path = Path(name)
+        if path.is_file():
+            legacy_sources.append((name, path.read_text(encoding="utf-8")))
+    archive = _root() / "import"
+    if archive.is_dir():
+        for path in sorted(archive.glob("*.key")):
+            legacy_sources.append(("historical-file", path.read_text(encoding="utf-8")))
+    for source, value in legacy_sources:
+        changed |= _insert(ring, _decode_key(value), "AES_ECB_PKCS7", source)
+    if changed:
+        _save_ring(ring)
+    return ring
+
+
+def get_keyring():
+    """Import every available historical key before returning a keyring."""
     with _LOCK:
-        ring = _load_ring()
-        changed = False
-        legacy_sources = []
-        env_key = _legacy_env()
-        if env_key:
-            legacy_sources.append(("env", env_key))
-        for name in (CURRENT_KEY_FILE, OLD_KEY_FILE):
-            path = Path(name)
-            if path.is_file():
-                legacy_sources.append((name, path.read_text(encoding="utf-8")))
-        archive = _root() / "import"
-        if archive.is_dir():
-            for path in sorted(archive.glob("*.key")):
-                legacy_sources.append(("historical-file", path.read_text(encoding="utf-8")))
-        for source, value in legacy_sources:
-            changed |= _insert(ring, _decode_key(value), "AES_ECB_PKCS7", source)
-        if changed:
-            _save_ring(ring)
-        return ring
+        with _ring_file_lock():
+            return _sync_ring()
 
 
 def key_metadata():
@@ -163,18 +191,15 @@ def key_metadata():
 
 
 def key_rotation():
-    """Create and activate a new AES-GCM key; *never* discard historical keys.
-
-    Activating a key does not migrate existing data. Trigger explicitly after
-    preflight, and retain the entire protected state directory across deploys.
-    """
+    """Activate a new AES-GCM key, preserving the entire historical keyring."""
     with _LOCK:
-        ring = get_keyring()
-        raw = secrets.token_bytes(32)
-        _insert(ring, raw, "AES_GCM", "rotation")
-        ring["current_id"] = _key_id(raw)
-        _save_ring(ring)
-        return ring["current_id"]
+        with _ring_file_lock():
+            ring = _sync_ring()
+            raw = secrets.token_bytes(32)
+            _insert(ring, raw, "AES_GCM", "rotation")
+            ring["current_id"] = _key_id(raw)
+            _save_ring(ring)
+            return ring["current_id"]
 
 
 def _key_bytes(ring, kid, algorithm):
