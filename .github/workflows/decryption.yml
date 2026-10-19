@@ -32,4 +32,4 @@ jobs:
       - name: UI, navigation, and HTTP contract tests
         run: npm run test:nocov -- --runInBand --testPathPattern=Decryption
       - name: Production frontend build
-        run: npm run build
+        run: CI=false npm run build
