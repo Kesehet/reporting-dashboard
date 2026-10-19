@@ -16,6 +16,7 @@ const fakeStatus = {
 async function mockBackend(page) {
   await page.route('**/api/crypto/**', async route => {
     const path = new URL(route.request().url()).pathname;
+    console.log('CRYPTO_MOCK', route.request().method(), path, 'authorized=', route.request().headers()['x-crypto-admin-token'] === 'A'.repeat(36));
     const authed = route.request().headers()['x-crypto-admin-token'] === 'A'.repeat(36);
     if (!authed) {
       return route.fulfill({ status: 403, contentType: 'application/json',
@@ -36,6 +37,9 @@ async function mockBackend(page) {
 
 async function openTab(page, width) {
   await page.setViewportSize({ width, height: 860 });
+  page.on('request', request => { if (request.url().includes('/crypto/')) console.log('CRYPTO_REQUEST', request.method(), request.url()); });
+  page.on('console', message => { if (message.type() === 'error') console.log('PAGE_ERROR', message.text()); });
+  page.on('pageerror', error => console.log('PAGE_EXCEPTION', error.message));
   await mockBackend(page);
   await page.goto('/');
   // Dashboard startup briefly switches the entire page to a loading state.
@@ -44,6 +48,7 @@ async function openTab(page, width) {
   if (width < 800) await page.locator('.report-sidebar > button').first().click();
   await page.getByRole('button', { name: 'Crypto & Key Rotation', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Encryption & Key Rotation' })).toBeVisible();
+  console.log('CRYPTO_PAGE_URL', page.url());
 }
 
 for (const width of [375, 768, 1440]) {
