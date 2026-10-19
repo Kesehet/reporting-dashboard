@@ -42,3 +42,13 @@
 .crypto-steps p{margin-top:9px}
 @media(max-width:850px){.crypto-columns{grid-template-columns:1fr}.crypto-steps{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:500px){.crypto-page{padding:4px 0 22px}.crypto-hero{border-radius:7px}.crypto-steps{grid-template-columns:1fr}.crypto-actions button{flex:1 1 auto}}
+
+/* Shared dashboard shell: keep the new admin tab usable on phones. */
+@media(max-width:800px){
+  .report-topbar{padding:8px!important;height:64px!important;overflow:hidden}
+  .report-topbar img{max-width:180px!important;width:100%!important;height:auto!important}
+  .report-topbar h1{display:none!important}
+  .report-topbar .w3-button{margin-left:4px!important}
+  .report-main-content{margin-top:64px!important;min-width:0!important}
+  .report-sidebar{box-shadow:2px 0 15px #1d3d5220}
+}
