@@ -6,6 +6,8 @@ See [snapshot import notes](docs/snapshot-import.md) for the import scope,
 configuration setup, and validation results. Copy `.env.example` to `.env`
 and configure it locally before starting the backend.
 
+See [Business String Decryption](docs/business-string-decryption.md) for the privileged operator tool, AES-GCM format, deployment configuration, and regression tests.
+
 ## Overview
 
 eStore is a comprehensive digital reporting and analytics platform designed for financial institutions to manage, visualize, and report on loan commitments and related transactions. The system integrates with Journey Manager APIs to extract transaction data, processes CSV/Excel uploads, and provides interactive dashboards with charts and export capabilities.
