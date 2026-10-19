@@ -86,3 +86,5 @@ crypto-state/
 **/keyring.lock
 **/values/*.enc
 **/backups/**
+
+**/keyring-history/*.json
