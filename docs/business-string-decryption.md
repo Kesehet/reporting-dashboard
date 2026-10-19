@@ -29,3 +29,6 @@ Neither key file is auto-generated during imports or startup, preventing acciden
 - `python -m unittest discover -s tests/decryption -p 'test_decryption.py' -v`
 - `npm run test:nocov -- --runInBand --testPathPattern=Decryption`
 - `.github/workflows/decryption.yml` runs backend tests, frontend tests, and production build.
+
+Manual ciphertext decryption is available in the Business String Decryption tab.
+The Key Rotation tab is reserved for historical keys and verified migrations.
