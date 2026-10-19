@@ -289,7 +289,7 @@ def _migrate(run_id):
 
 def _rollback(run_id):
     status = _status()
-    if status.get("run_id") != run_id or status.get("state") not in ("completed", "committing", "reconciliation_required"):
+    if status.get("run_id") != run_id or status.get("state") not in ("completed", "committing", "reconciliation_required", "restoring", "restore_failed"):
         raise ValueError("No completed or uncertain migration with this run id")
     backup_path = _root() / "backups" / (run_id + ".jsonl")
     if not backup_path.is_file():
@@ -322,27 +322,31 @@ def _rollback(run_id):
         sql.disconnect()
 
 
-def _async_runner(run_id, action, fd):
+def _async_runner(run_id, action, fd, kind):
     global _active
     try:
         _locked_run(run_id, action, fd)
     except Exception:
-        old = _status()
-        old.update({"state": "reconciliation_required",
-                    "error": "Migration or recovery operation requires investigation"})
-        _write_status(old)
+        # A restore failure must never erase the original encrypted snapshot.
+        state = _status()
+        state.update({
+            "state": "restore_failed" if kind == "restore" else "reconciliation_required",
+            "error": "Recovery requires operator review; existing SQL data preserved where possible",
+            "finished_at": _now(),
+        })
+        _write_status(state)
     finally:
         with _active_lock:
             _active = False
 
 
-def _launch(run_id, action):
+def _launch(run_id, action, kind="migration"):
     global _active
     with _active_lock:
         if _active:
             return False
         try:
-            # Do this synchronously; two HTTP workers cannot both get a lease.
+            # Acquire a cross-process lease synchronously, before acknowledging.
             fd = os.open(str(_root() / "migration.lock"),
                          os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
         except FileExistsError:
@@ -350,8 +354,17 @@ def _launch(run_id, action):
         try:
             os.write(fd, run_id.encode("ascii"))
             os.fsync(fd)
+            # Publish starting state synchronously, before the HTTP response.
+            # Keep the original backup manifest during a restore.
+            if kind == "restore":
+                state = _status()
+                state.update({"state": "restoring", "operation_started_at": _now()})
+            else:
+                state = {"state": "starting", "run_id": run_id,
+                         "started_at": _now(), "processed": 0, "updated": 0}
+            _write_status(state)
             _active = True
-            threading.Thread(target=_async_runner, args=(run_id, action, fd),
+            threading.Thread(target=_async_runner, args=(run_id, action, fd, kind),
                              daemon=True, name="pii-rotation").start()
         except Exception:
             _active = False
@@ -365,7 +378,7 @@ def _launch(run_id, action):
 def status_api():
     job = _status()
     # Never claim success for a crashed or unknown post-commit state.
-    if job.get("state") in ("running", "committing") and not _active and not (_root() / "migration.lock").exists():
+    if job.get("state") in ("starting", "running", "committing", "restoring") and not _active and not (_root() / "migration.lock").exists():
         job["state"] = "reconciliation_required"
     return jsonify({"keyring": key_metadata(), "job": job})
 
@@ -373,13 +386,25 @@ def status_api():
 @crypto_api.post("/keys/rotate")
 def rotate_key_api():
     data = request.get_json(silent=True) or {}
-    if data.get("confirm") != "CREATE_GCM_KEY" or _active or (_root() / "migration.lock").exists():
-        return jsonify({"error": "Explicit confirmation required or migration active"}), 409
+    if data.get("confirm") != "CREATE_GCM_KEY":
+        return jsonify({"error": "Explicit confirmation required"}), 409
+    lock_path = _root() / "migration.lock"
     try:
+        # The lease is shared with migration and restore workers.
+        fd = os.open(str(lock_path), os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+    except FileExistsError:
+        return jsonify({"error": "Another cryptographic operation is active"}), 409
+    try:
+        if _status().get("state") in ("starting", "running", "committing",
+                                     "restoring", "reconciliation_required", "restore_failed"):
+            return jsonify({"error": "Resolve the existing migration first"}), 409
         key_id = key_rotation()
         return jsonify({"key_id": key_id}), 201
     except Exception:
         return jsonify({"error": "Failed to store key safely"}), 500
+    finally:
+        os.close(fd)
+        lock_path.unlink(missing_ok=True)
 
 
 @crypto_api.post("/decrypt")
@@ -396,7 +421,7 @@ def decrypt_api():
 
 @crypto_api.post("/preflight")
 def preflight_api():
-    if _active:
+    if _active or (_root() / "migration.lock").exists():
         return jsonify({"error": "Migration already running"}), 409
     try:
         report = inspect_database()
@@ -410,10 +435,10 @@ def start_api():
     data = request.get_json(silent=True) or {}
     if data.get("confirm") != "MIGRATE_PII" or get_keyring().get("current_id") is None:
         return jsonify({"error": "Confirmation and an active GCM key are required"}), 409
-    if _status().get("state") in ("running", "committing", "reconciliation_required"):
+    if _status().get("state") in ("starting", "running", "committing", "restoring", "reconciliation_required", "restore_failed"):
         return jsonify({"error": "Previous operation must be reconciled first"}), 409
     run_id = uuid.uuid4().hex
-    if not _launch(run_id, lambda: _migrate(run_id)):
+    if not _launch(run_id, lambda: _migrate(run_id), kind="migration"):
         return jsonify({"error": "Another migration is running"}), 409
     return jsonify({"run_id": run_id, "state": "starting"}), 202
 
@@ -424,6 +449,8 @@ def rollback_api():
     run_id = data.get("run_id")
     if not isinstance(run_id, str) or len(run_id) != 32 or data.get("confirm") != "RESTORE_ORIGINAL":
         return jsonify({"error": "Run id and explicit confirmation required"}), 400
-    if not _launch(run_id, lambda: _rollback(run_id)):
+    if _status().get("run_id") != run_id or _status().get("state") not in ("completed", "reconciliation_required", "restore_failed"):
+        return jsonify({"error": "No eligible recovery snapshot"}), 409
+    if not _launch(run_id, lambda: _rollback(run_id), kind="restore"):
         return jsonify({"error": "Another migration is running"}), 409
     return jsonify({"state": "starting", "run_id": run_id}), 202
