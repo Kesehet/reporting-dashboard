@@ -217,12 +217,15 @@ def _migrate(run_id):
     _write_status(status)
     sql = None
     committed = False
+    commit_started = False
     try:
         # Recheck the entire dataset immediately before writing.
         preflight = inspect_database()
         if not preflight.get("ready"):
             raise RuntimeError("Preflight failed; no data was changed")
         sql = _connection()
+        if getattr(sql.connection, "autocommit", False):
+            raise RuntimeError("Refusing migration on an autocommit database connection")
         cursor = sql.connection.cursor()
         ring = get_keyring()
         current_id = ring["current_id"]
@@ -270,18 +273,19 @@ def _migrate(run_id):
         status.update({"state": "committing", "backup_sha256": digest.hexdigest(),
                        "backup_rows": status["updated"], "backup_run_id": run_id})
         _write_status(status)
+        commit_started = True
         sql.connection.commit()
         committed = True
         status.update({"state": "completed", "finished_at": _now()})
         _write_status(status)
     except Exception:
-        if sql is not None and not committed:
+        if sql is not None and not commit_started:
             sql.connection.rollback()
             for file_id in locals().get("created_external", set()):
                 (_root() / "values" / (file_id + ".enc")).unlink(missing_ok=True)
-        status.update({"state": "reconciliation_required" if committed else "failed",
+        status.update({"state": "reconciliation_required" if commit_started else "failed",
                        "finished_at": _now(),
-                       "error": "Commit outcome requires review" if committed else "Migration aborted; SQL transaction rolled back"})
+                       "error": "SQL commit outcome needs reconciliation" if commit_started else "Migration aborted; SQL transaction rolled back"})
         _write_status(status)
     finally:
         if sql is not None:
@@ -290,7 +294,7 @@ def _migrate(run_id):
 
 def _rollback(run_id):
     status = _status()
-    if status.get("run_id") != run_id or status.get("state") not in ("completed", "committing"):
+    if status.get("run_id") != run_id or status.get("state") not in ("completed", "committing", "reconciliation_required"):
         raise ValueError("No completed or uncertain migration with this run id")
     backup_path = _root() / "backups" / (run_id + ".jsonl")
     if not backup_path.is_file():
@@ -303,6 +307,8 @@ def _rollback(run_id):
         raise ValueError("Recovery snapshot is incomplete")
     sql = _connection()
     try:
+        if getattr(sql.connection, "autocommit", False):
+            raise RuntimeError("Refusing recovery on an autocommit database connection")
         cursor = sql.connection.cursor()
         for line in lines:
             item = json.loads(decrypt_string(line))
