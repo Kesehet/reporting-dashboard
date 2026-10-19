@@ -11,6 +11,7 @@ import json
 import os
 import secrets
 import tempfile
+import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from threading import RLock
@@ -187,11 +188,13 @@ def _key_bytes(ring, kid, algorithm):
 
 
 def is_versioned(value):
-    return isinstance(value, str) and value.startswith(_VERSION + ":")
+    return isinstance(value, str) and (value.startswith(_VERSION + ":") or value.startswith("v2f:"))
 
 
 def encrypted_key_id(value):
-    if is_versioned(value):
+    if isinstance(value, str) and value.startswith("v2f:"):
+        value = _read_external(value)
+    if isinstance(value, str) and value.startswith(_VERSION + ":"):
         sections = value.split(":", 2)
         if len(sections) != 3:
             raise ValueError("Malformed ciphertext envelope")
@@ -199,10 +202,10 @@ def encrypted_key_id(value):
     return None
 
 
-def encrypt_string(value):
+def encrypt_string(value, max_length=None, ring=None):
     if not isinstance(value, str):
         raise TypeError("Plaintext must be a string")
-    ring = get_keyring()
+    ring = ring or get_keyring()
     kid = ring.get("current_id")
     if not kid:
         raise ValueError("No active GCM key; provision it explicitly before writing")
@@ -211,7 +214,25 @@ def encrypt_string(value):
     cipher.update(("reporting-dashboard:" + _VERSION + ":" + kid).encode("ascii"))
     ciphertext, tag = cipher.encrypt_and_digest(value.encode("utf-8"))
     packed = cipher.nonce + tag + ciphertext
-    return _VERSION + ":" + kid + ":" + base64.b64encode(packed).decode("ascii")
+    result = _VERSION + ":" + kid + ":" + base64.b64encode(packed).decode("ascii")
+    if max_length is None or max_length == -1 or len(result) <= max_length:
+        return result
+    if max_length < 36:
+        raise ValueError("Existing SQL column cannot hold a file reference")
+    file_id = uuid.uuid4().hex
+    inner = encrypt_string("ref:" + file_id + ":" + value, ring=ring)
+    _atomic_write(_root() / "values" / (file_id + ".enc"), inner)
+    return "v2f:" + file_id
+
+
+def _read_external(reference):
+    file_id = reference[4:]
+    if not reference.startswith("v2f:") or len(file_id) != 32 or any(ch not in "0123456789abcdef" for ch in file_id):
+        raise ValueError("Malformed external ciphertext reference")
+    content = (_root() / "values" / (file_id + ".enc")).read_text(encoding="utf-8")
+    if len(content) > 1000000 or not content.startswith("v2:"):
+        raise ValueError("Invalid external ciphertext")
+    return content
 
 
 def _decrypt_v2(value, ring):
@@ -259,10 +280,16 @@ def _decrypt_legacy(value, ring):
     raise ValueError("Cannot authenticate or decrypt legacy ciphertext with available keys")
 
 
-def decrypt_string(value):
+def decrypt_string(value, ring=None):
     if not isinstance(value, str):
         raise TypeError("Ciphertext must be a string")
-    ring = get_keyring()
+    ring = ring or get_keyring()
+    if value.startswith("v2f:"):
+        plaintext = _decrypt_v2(_read_external(value), ring)
+        prefix = "ref:" + value[4:] + ":"
+        if not plaintext.startswith(prefix):
+            raise ValueError("File reference authentication failed")
+        return plaintext[len(prefix):]
     if is_versioned(value):
         return _decrypt_v2(value, ring)
     return _decrypt_legacy(value, ring)
