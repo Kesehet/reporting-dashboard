@@ -33,8 +33,7 @@ class CryptoTests(unittest.TestCase):
         crypto.save_key(KEY_A, self.current)
 
     def test_round_trip_unicode_multiline_empty_and_long_values(self):
-        for text in ("", "hello", "کیا حال ہے
-مرحبا 🌙", "X" * 10000):
+        for text in ("", "hello", "کیا حال ہے\nمرحبا 🌙", "X" * 10000):
             with self.subTest(text_length=len(text)):
                 ciphertext = crypto.encrypt_decrypt_string(text)
                 self.assertTrue(ciphertext.startswith("v2:"))
