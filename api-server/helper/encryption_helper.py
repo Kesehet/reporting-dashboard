@@ -95,7 +95,16 @@ def _load_ring():
 
 
 def _save_ring(ring):
-    _atomic_write(_root() / "keyring.json", json.dumps(ring, sort_keys=True, indent=2))
+    path = _root() / "keyring.json"
+    # Keep immutable past keyring snapshots; an accidental edit/partial deploy
+    # must not be able to silently erase the only retained historical keyset.
+    if path.is_file():
+        old = path.read_bytes()
+        fingerprint = hashlib.sha256(old).hexdigest()
+        archived = _root() / "keyring-history" / (fingerprint + ".json")
+        if not archived.exists():
+            _atomic_write(archived, old.decode("utf-8"))
+    _atomic_write(path, json.dumps(ring, sort_keys=True, indent=2))
 
 
 def _insert(ring, raw, algorithm, source):
