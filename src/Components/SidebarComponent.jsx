@@ -1,9 +1,19 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import FnbLogo from '../Images/FNBlogo-long.png';
 import MetricsCard from './MetricsCard';
 
 const SidebarLayout = ({ items, mainContent, pageToShow }) => {
-  const [collapsed, setCollapsed] = useState(false);
+  const [isNarrow, setIsNarrow] = useState(() => typeof window !== 'undefined' && window.innerWidth < 800);
+  const [collapsed, setCollapsed] = useState(() => typeof window !== 'undefined' && window.innerWidth < 800);
+  useEffect(() => {
+    const resize = () => {
+      const narrow = window.innerWidth < 800;
+      setIsNarrow(narrow);
+      if (narrow) setCollapsed(true);
+    };
+    window.addEventListener('resize', resize);
+    return () => window.removeEventListener('resize', resize);
+  }, []);
   const [activeItem, setActiveItem] = useState(pageToShow);
 
   const toggleSidebar = () => setCollapsed(prev => !prev);
@@ -32,7 +42,7 @@ const SidebarLayout = ({ items, mainContent, pageToShow }) => {
     <>
       {/* Sidebar */}
       <div
-        className="w3-sidebar w3-bar-block w3-light-grey"
+        className="w3-sidebar w3-bar-block w3-light-grey report-sidebar"
         style={{
           width: collapsed ? '60px' : '250px',
           transition: 'width 0.3s ease',
@@ -42,15 +52,18 @@ const SidebarLayout = ({ items, mainContent, pageToShow }) => {
           top: 0,
           left: 0,
           paddingTop: '1rem',
+          zIndex: 1002,
         }}
       >
         
         <button
           className="w3-button w3-light-grey w3-hover-grey"
+          aria-label={collapsed ? 'Expand navigation' : 'Collapse navigation'}
+          aria-expanded={!collapsed}
           onClick={toggleSidebar}
           style={{ marginBottom: '1rem', width: '100%' }}
         >
-          <i className={`pi ${collapsed ? 'pi-chevron-right' : 'pi-chevron-left'}`}></i>
+          <i aria-hidden="true" className={`pi ${collapsed ? 'pi-chevron-right' : 'pi-chevron-left'}`}></i>
         </button>
 
         {!collapsed && (
@@ -88,10 +101,12 @@ const SidebarLayout = ({ items, mainContent, pageToShow }) => {
                       onClick={() => {
                         setActiveItem(item.label);
                         if (item.command) item.command();
+                        if (isNarrow) setCollapsed(true);
                       }}
                       style={{ textAlign: 'left', padding: '12px 16px', fontSize: '14px' }}
                     >
-                      {item.icon && <i className={`pi ${item.icon}`} style={{ marginRight: '8px' }}></i>}
+                      {item.icon && <i aria-hidden="true" aria-hidden="true"
+ className={`pi ${item.icon}`} style={{ marginRight: '8px' }}></i>}
                       {item.render ? item.template() : item.label}
                     </button>
                   )}
@@ -101,14 +116,16 @@ const SidebarLayout = ({ items, mainContent, pageToShow }) => {
           </div>
         )}
 
-        {!collapsed && !window.location.href.includes('prd01') && <MetricsCard />}
+        {!collapsed && !isNarrow && !window.location.href.includes('prd01') && <MetricsCard />}
       </div>
 
       {/* Top Bar */}
       <div
-  className="w3-bar w3-light-grey"
+  className="w3-bar w3-light-grey report-topbar"
   style={{
-    marginLeft: collapsed ? '60px' : '250px',
+    marginLeft: isNarrow ? '60px' : (collapsed ? '60px' : '250px'),
+    width: isNarrow ? 'calc(100% - 60px)' : (collapsed ? 'calc(100% - 60px)' : 'calc(100% - 250px)'),
+    boxSizing: 'border-box',
     transition: 'margin-left 0.3s ease',
     padding: '1rem',
     display: 'flex',
@@ -159,6 +176,8 @@ const SidebarLayout = ({ items, mainContent, pageToShow }) => {
         >
           {item.icon && (
             <i
+              aria-hidden="true"
+
               className={`pi ${item.icon}`}
               style={{ marginRight: '6px' }}
             ></i>
@@ -174,10 +193,10 @@ const SidebarLayout = ({ items, mainContent, pageToShow }) => {
       {/* Main Content */}
       <div
         style={{
-          marginLeft: collapsed ? '60px' : '250px',
+          marginLeft: isNarrow ? '60px' : (collapsed ? '60px' : '250px'),
           marginTop: '78px',
           transition: 'margin-left 0.3s ease',
-          padding: '2rem',
+          padding: isNarrow ? '12px' : '2rem',
         }}
       >
         {mainContent}

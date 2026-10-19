@@ -3,7 +3,7 @@ export default class DecryptionService {
   constructor() {
     const base = process.env.REACT_APP_API_SERVER_BASE_URL ||
       (process.env.NODE_ENV === 'production'
-        ? new URL('api', window.location.href).toString()
+        ? new URL('api', new URL('.', window.location.href)).toString()
         : 'http://localhost:5000');
     this.baseUrl = base.replace(/\/$/, '');
   }

@@ -1,5 +1,4 @@
 import React, { useEffect, useState } from 'react';
-import { normalizeNumber } from '../Utils/Components/Utils';
 
 const CellDataService = ({ query, extraParams = {}, children }) => {
     const [data, setData] = useState(null);

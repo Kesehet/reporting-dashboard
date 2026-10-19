@@ -31,6 +31,7 @@ import { Dropdown } from 'primereact/dropdown';
 import ChartDataService from './Services/ChartDataService';
 import CsvLoaderReportsTab from './Components/CsvLoaderReportsTab';
 import BusinessStringDecryptionTab from './Components/BusinessStringDecryptionTab';
+import CryptoRotationTab from './Components/CryptoRotationTab';
 
 class PageErrorBoundary extends React.Component {
     constructor(props) {
@@ -709,6 +710,9 @@ function App() {
             }
             else if (page === "Business String Decryption") {
                 return <BusinessStringDecryptionTab />;
+            }
+            else if (page === "Crypto & Key Rotation") {
+                return <CryptoRotationTab />;
             }
             else if (page === "CSV Loader Reports") {
                 return <CsvLoaderReportsTab />;

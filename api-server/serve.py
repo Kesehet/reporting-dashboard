@@ -1,6 +1,7 @@
 from flask import Flask, json, request, jsonify, abort, render_template_string
 from flask_cors import CORS
 from decrypt_tools import decrypt_tools
+from helper.crypto_rotation import crypto_api
 from datetime import datetime
 import os
 from dotenv import load_dotenv
@@ -33,6 +34,7 @@ load_dotenv()
 app = Flask(__name__)
 CORS(app)
 app.register_blueprint(decrypt_tools)
+app.register_blueprint(crypto_api)
 CSV_FOLDER_REPORT = 'uploads/report'
 CSV_FOLDER_REPORTS = 'uploads/reports'
 

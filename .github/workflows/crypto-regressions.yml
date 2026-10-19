@@ -1,0 +1,82 @@
+name: Safe encryption rotation regressions
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - feature/safe-encryption-keyring-rotation-20261019
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  crypto-backend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install exact runtime crypto dependencies
+        run: python -m pip install "pycryptodome==3.20.0" "Flask==3.0.3" "python-dotenv==1.0.1"
+      - name: Run encryption, migration and recovery tests
+        run: python -m unittest discover -s tests -p 'test_crypto_rotation.py' -v
+      - name: End-to-end encrypted HTTP and SQL transaction fault-injection tests
+        run: |
+          python -m unittest discover -s tests -p 'test_crypto_flow_e2e.py' -v
+      - name: Parse changed Python sources
+        run: python -m py_compile api-server/helper/encryption_helper.py api-server/helper/crypto_rotation.py api-server/post_process.py api-server/serve.py
+
+  crypto-frontend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      CI: 'true'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - name: Run responsive crypto tab interaction tests
+        run: npm test -- --watchAll=false --runInBand --coverage=false --testPathPattern=CryptoRotationTab.test.js
+      # Existing dashboard has unrelated lint warnings that CRA upgrades to errors in CI.
+      # Compile production assets here while targeted Jest tests remain strict above.
+      - name: Build dashboard (existing lint warning baseline)
+        run: CI=false npm run build
+
+  crypto-browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    env:
+      CI: 'true'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Install exact production dashboard dependencies
+        run: npm ci --no-audit --no-fund
+      - name: Build dashboard from locked production dependencies
+        run: CI=false npm run build
+      - name: Install browser-only test tooling after production build
+        run: npm install --no-save --package-lock=false @playwright/test@1.56.1 --no-audit --no-fund
+      - name: Install isolated Chromium for actual responsive browser checks
+        run: npx playwright install --with-deps chromium
+      - name: Verify narrow/mobile, tablet, desktop and masked decryption UX
+        run: npx playwright test -c browser-tests/playwright.config.cjs --reporter=line
+      - name: Attach synthetic-only browser screenshots and failure traces
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: synthetic-crypto-browser-evidence
+          path: |
+            browser-tests/screenshots/
+            test-results/
+          if-no-files-found: warn
+          retention-days: 7
