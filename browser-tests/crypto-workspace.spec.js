@@ -92,7 +92,7 @@ test('real browser: scoped key rotation and preflight before migrate', async ({ 
   await expect(page.getByLabel('Encrypted value')).toHaveCount(0);
   await page.getByRole('button', { name: 'Check compatibility' }).click();
   await expect(page.getByText(/125 rows scanned/)).toBeVisible();
-  await expect(page.locator('.crypto-metrics strong').first()).toHaveText('125');
+  await expect(page.locator('[aria-label="Migration control"] .crypto-metrics strong').first()).toHaveText('125');
   await expect(page.getByRole('button', { name: 'Migrate now' })).toBeDisabled();
   await page.getByLabel(/Confirmation/).fill('MIGRATE_PII');
   await expect(page.getByRole('button', { name: 'Migrate now' })).toBeEnabled();
