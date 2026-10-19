@@ -414,15 +414,20 @@ def get_dds_dollar_amount(acct_number, appstartdate):
 
 def encrypt_all_pii_columns(sql, txn):
     """Encrypt new plaintext only; migrate historic ciphertext separately."""
-    for table_name in ("[DigitalReport].[dbo].[Transactions]",
-                       "[DigitalReport].[dbo].[Properties]"):
+    from helper.encryption_helper import decrypt_string, is_versioned
+    for table_name, primary_key in (("[DigitalReport].[dbo].[Transactions]", "tId"),
+                                    ("[DigitalReport].[dbo].[Properties]", "eCATrackingCode")):
         cursor = sql.connection.cursor()
-        cursor.execute("SELECT eCATrackingCode, PrimaryName, PrimarySSN FROM " + table_name)
+        cursor.execute("SELECT " + primary_key + ", PrimaryName, PrimarySSN FROM " + table_name)
         rows = cursor.fetchall()
-        for tracking_code, primary_name, primary_ssn in rows:
+        for row_id, primary_name, primary_ssn in rows:
             updated = []
             for value in (primary_name, primary_ssn):
-                if value is None or value == "" or is_encrypted(value):
+                if value is None or value == "":
+                    updated.append(value)
+                elif is_encrypted(value):
+                    # Verify that it remains decryptable; never disguise broken ciphertext.
+                    decrypt_string(value)
                     updated.append(value)
                 else:
                     updated.append(encrypt_decrypt_string(str(value), mode="encrypt"))
@@ -430,10 +435,10 @@ def encrypt_all_pii_columns(sql, txn):
                 cursor.execute(
                     "UPDATE " + table_name +
                     " SET PrimaryName=?, PrimarySSN=? "
-                    "WHERE eCATrackingCode=? "
+                    "WHERE " + primary_key + "=? "
                     "AND (PrimaryName=? OR (PrimaryName IS NULL AND ? IS NULL)) "
                     "AND (PrimarySSN=? OR (PrimarySSN IS NULL AND ? IS NULL))",
-                    (updated[0], updated[1], tracking_code,
+                    (updated[0], updated[1], row_id,
                      primary_name, primary_name, primary_ssn, primary_ssn),
                 )
                 if cursor.rowcount != 1:
