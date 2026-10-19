@@ -711,7 +711,7 @@ function App() {
             else if (page === "Business String Decryption") {
                 return <BusinessStringDecryptionTab />;
             }
-            else if (page === "Crypto & Key Rotation") {
+            else if (page === "Key Rotation") {
                 return <CryptoRotationTab />;
             }
             else if (page === "CSV Loader Reports") {

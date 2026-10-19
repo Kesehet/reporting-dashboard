@@ -27,6 +27,18 @@ describe('CryptoRotationTab', () => {
     cryptoRequest.mockImplementation(async (path) => path === '/status' ? state : { plaintext: 'Secret customer' });
   });
 
+  it('keeps the key rotation screen compact and focused', () => {
+    render(<CryptoRotationTab />);
+    expect(screen.getByRole('heading', { level: 1, name: 'Key Rotation' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 2, name: 'Key Rotation' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Check compatibility' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Migrate now' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Restore previous encryption' })).toBeDisabled();
+    expect(screen.queryByText('Production migration')).not.toBeInTheDocument();
+    expect(screen.queryByText('Prepare')).not.toBeInTheDocument();
+    expect(screen.queryByText('Verify / restore')).not.toBeInTheDocument();
+  });
+
   it('keeps admin access in memory and hides keys', async () => {
     render(<CryptoRotationTab />);
     expect(screen.getByText(/token stays in this tab/i)).toBeInTheDocument();
@@ -61,13 +73,13 @@ describe('CryptoRotationTab', () => {
     });
     render(<CryptoRotationTab />);
     await authorize();
-    expect(screen.getByText('Start checked migration')).toBeDisabled();
-    fireEvent.click(screen.getByText('Run read-only preflight'));
+    expect(screen.getByText('Migrate now')).toBeDisabled();
+    fireEvent.click(screen.getByText('Check compatibility'));
     await waitFor(() => expect(screen.getByText(/10 rows scanned/)).toBeInTheDocument());
-    expect(screen.getByText('Start checked migration')).toBeDisabled();
-    fireEvent.change(screen.getByLabelText(/Type the exact confirmation/), { target: { value: 'MIGRATE_PII' } });
-    expect(screen.getByText('Start checked migration')).toBeEnabled();
-    fireEvent.click(screen.getByText('Start checked migration'));
+    expect(screen.getByText('Migrate now')).toBeDisabled();
+    fireEvent.change(screen.getByLabelText(/Confirmation/), { target: { value: 'MIGRATE_PII' } });
+    expect(screen.getByText('Migrate now')).toBeEnabled();
+    fireEvent.click(screen.getByText('Migrate now'));
     await waitFor(() => expect(cryptoRequest).toHaveBeenCalledWith(
       '/start', 'A'.repeat(36), { confirm: 'MIGRATE_PII' }
     ));
@@ -80,10 +92,10 @@ describe('CryptoRotationTab', () => {
     });
     render(<CryptoRotationTab />);
     await authorize();
-    fireEvent.click(screen.getByText('Run read-only preflight'));
+    fireEvent.click(screen.getByText('Check compatibility'));
     await waitFor(() => expect(screen.getByText(/Missing key/)).toBeInTheDocument());
-    fireEvent.change(screen.getByLabelText(/Type the exact confirmation/), { target: { value: 'MIGRATE_PII' } });
-    expect(screen.getByText('Start checked migration')).toBeDisabled();
+    fireEvent.change(screen.getByLabelText(/Confirmation/), { target: { value: 'MIGRATE_PII' } });
+    expect(screen.getByText('Migrate now')).toBeDisabled();
   });
 
   it('requires exact confirmation and a completed run before restoration', async () => {
@@ -92,9 +104,9 @@ describe('CryptoRotationTab', () => {
     } : { state: 'starting' });
     render(<CryptoRotationTab />);
     await authorize();
-    expect(screen.getByText('Restore original ciphertext')).toBeDisabled();
-    fireEvent.change(screen.getByLabelText(/Type the exact confirmation/), { target: { value: 'RESTORE_ORIGINAL' } });
-    fireEvent.click(screen.getByText('Restore original ciphertext'));
+    expect(screen.getByText('Restore previous encryption')).toBeDisabled();
+    fireEvent.change(screen.getByLabelText(/Confirmation/), { target: { value: 'RESTORE_ORIGINAL' } });
+    fireEvent.click(screen.getByText('Restore previous encryption'));
     await waitFor(() => expect(cryptoRequest).toHaveBeenCalledWith(
       '/rollback', 'A'.repeat(36), { run_id: 'c'.repeat(32), confirm: 'RESTORE_ORIGINAL' }
     ));

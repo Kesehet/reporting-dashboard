@@ -51,11 +51,6 @@ export default function BusinessStringDecryptionTab() {
   return (
     <div className="w3-container w3-card-4" style={{ padding: '24px', maxWidth: '920px', margin: '0 auto' }}>
       <h2 className="w3-center">Business String Decryption</h2>
-      <p>Decrypt an authorized string with the existing server-side encryption key.</p>
-      <p style={{ color: '#5d6670', fontSize: '14px' }}>
-        A separate operator access token is required. The encryption key stays on the server;
-        inputs and results are not stored in browser storage.
-      </p>
       <form onSubmit={onSubmit} autoComplete="off" style={{ display: 'grid', gap: '14px' }}>
         <label htmlFor="decrypt-token" style={{ fontWeight: 600 }}>Tool access token</label>
         <input

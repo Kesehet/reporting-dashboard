@@ -54,7 +54,7 @@ SQL backups and filesystem backups must be coordinated.
 3. Verify original ECB test vector and import all known historical keys.
    Unknown formats or keys must stop migration.
 4. Deploy first against staging SQL and a private copy of the crypto files.
-5. Open Crypto & Key Rotation in the dashboard. Authenticate with admin token.
+5. Open Key Rotation in the dashboard. Authenticate with admin token.
 6. Explicitly create/activate a new GCM key. This action keeps the old keys and
    does not bulk-modify existing SQL ciphertext.
 7. Run read-only preflight. It verifies all existing ciphertext can decrypt,
