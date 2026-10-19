@@ -3,7 +3,6 @@ import { cryptoRequest } from '../Services/CryptoRotationService';
 import '../Styles/cryptoRotation.css';
 
 export default function CryptoRotationTab() {
-  const [token, setToken] = useState('');
   const [status, setStatus] = useState(null);
   const [preflight, setPreflight] = useState(null);
   const [confirmation, setConfirmation] = useState('');
@@ -11,32 +10,25 @@ export default function CryptoRotationTab() {
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
 
-  const refresh = useCallback(async () => {
-    if (!token) return;
-    const result = await cryptoRequest('/status', token);
+  const refresh = useCallback(async (signal) => {
+    const result = await cryptoRequest('/status', undefined, signal);
     setStatus(result);
-  }, [token]);
+  }, []);
 
   useEffect(() => {
-    setStatus(null);
-    setPreflight(null);
-    setError('');
-    if (!token || token.length < 32) return undefined;
     const controller = new AbortController();
-    const timeout = setTimeout(() => {
-      cryptoRequest('/status', token, undefined, controller.signal)
-        .then(setStatus)
-        .catch((e) => { if (e.name !== 'AbortError') setError(e.message); });
-    }, 350);
-    return () => { clearTimeout(timeout); controller.abort(); };
-  }, [token]);
+    refresh(controller.signal).catch((e) => {
+      if (e.name !== 'AbortError') setError(e.message);
+    });
+    return () => controller.abort();
+  }, [refresh]);
 
   useEffect(() => {
     const jobState = status?.job?.state;
-    if (!token || !['running', 'committing', 'starting', 'restoring'].includes(jobState)) return undefined;
+    if (!['running', 'committing', 'starting', 'restoring'].includes(jobState)) return undefined;
     const interval = setInterval(() => refresh().catch((e) => setError(e.message)), 2500);
     return () => clearInterval(interval);
-  }, [status?.job?.state, token, refresh]);
+  }, [status?.job?.state, refresh]);
 
   const action = async (name, path, body, options = {}) => {
     if (busy) return;
@@ -44,7 +36,7 @@ export default function CryptoRotationTab() {
     setNotice('');
     setError('');
     try {
-      const data = await cryptoRequest(path, token, body);
+      const data = await cryptoRequest(path, body);
       if (name === 'preflight') {
         setPreflight(data);
         setNotice(data.ready ? 'Preflight passed. Existing ciphertext is unchanged.' : 'Preflight blocked. Review failures and configuration before migration.');
@@ -79,20 +71,6 @@ export default function CryptoRotationTab() {
       <header className="crypto-hero">
         <h1>Key Rotation</h1>
       </header>
-
-      <section className="crypto-panel" aria-label="Administrator access">
-        <div className="crypto-panel-title">
-          <div><h2>Administrator access</h2><p>The token stays in this tab's memory and is never saved in browser storage.</p></div>
-          {status && <span className="crypto-pill">Connected</span>}
-        </div>
-        <label htmlFor="crypto-token">Administrator token</label>
-        <input id="crypto-token" type="password" autoComplete="off" spellCheck="false"
-          value={token} onChange={(e) => setToken(e.target.value)} placeholder="Enter private admin token" />
-        <div className="crypto-actions">
-          <button type="button" disabled={Boolean(busy) || token.length < 32} onClick={() => action('refresh', '/status')}>Refresh status</button>
-          <button type="button" className="crypto-quiet" onClick={() => { setToken(''); }}>Clear session</button>
-        </div>
-      </section>
 
       {error && <div className="crypto-alert" role="alert">{error}</div>}
       {notice && <div className="crypto-notice" role="status">{notice}</div>}
@@ -147,6 +125,8 @@ export default function CryptoRotationTab() {
             onClick={() => action('rollback', '/rollback', { run_id: job.run_id, confirm: confirmation })}>
             Restore previous encryption
           </button>
+          <button type="button" className="crypto-quiet" disabled={Boolean(busy)}
+            onClick={() => refresh().catch((e) => setError(e.message))}>Refresh status</button>
         </div>
       </section>
     </main>
