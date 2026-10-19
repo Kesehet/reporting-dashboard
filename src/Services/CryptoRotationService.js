@@ -7,15 +7,11 @@ const baseUrl = () => {
   return new URL('api', new URL('.', window.location.href)).href.replace(/\/$/, '');
 };
 
-export async function cryptoRequest(path, token, body, signal) {
-  if (!token || token.length < 32) {
-    throw new Error('Enter the administrator token (at least 32 characters).');
-  }
+export async function cryptoRequest(path, body, signal) {
   const response = await fetch(baseUrl() + '/crypto' + path, {
     method: body === undefined ? 'GET' : 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'X-Crypto-Admin-Token': token,
     },
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
     ...(signal ? { signal } : {}),

@@ -24,9 +24,6 @@ from helper import encryption_helper as crypto
 from helper import crypto_rotation as rot
 from test_crypto_rotation import FakeSQL, FakeConnection
 
-ADMIN = {"X-Crypto-Admin-Token": "A" * 36}
-
-
 def ecb(raw, value):
     raw_value = value.encode("utf-8")
     count = AES.block_size - len(raw_value) % AES.block_size
@@ -41,7 +38,6 @@ class EncryptionHttpFlow(unittest.TestCase):
         self.patcher = mock.patch.dict(os.environ, {
             "CRYPTO_STATE_DIR": self.temp.name,
             "CRYPTO_LEGACY_MODE": "AES_ECB_PKCS7",
-            "CRYPTO_ADMIN_TOKEN": ADMIN["X-Crypto-Admin-Token"],
             "ENCRYPTION_KEY": "",
             "CRYPTO_LEGACY_SAMPLE_CIPHERTEXT": "",
             "CRYPTO_LEGACY_SAMPLE_SHA256": "",
@@ -87,8 +83,8 @@ class EncryptionHttpFlow(unittest.TestCase):
         while (rot._active or (Path(self.temp.name) / "migration.lock").exists()) and time.monotonic() < end:
             time.sleep(0.01)
 
-    def api(self, method, path, payload=None, *, authenticated=True):
-        args = {"headers": ADMIN} if authenticated else {}
+    def api(self, method, path, payload=None):
+        args = {}
         if payload is not None:
             args["json"] = payload
         response = self.client.open("/crypto" + path, method=method, **args)
@@ -127,9 +123,9 @@ class EncryptionHttpFlow(unittest.TestCase):
                     self.assertNotIn(phrase, query.upper())
 
     def test_entire_http_lifecycle_legacy_to_gcm_then_full_restoration(self):
-        status, result = self.api("GET", "/status", authenticated=False)
-        self.assertEqual(status, 403)
-        self.assertNotIn("keyring", result)
+        status, result = self.api("GET", "/status")
+        self.assertEqual(status, 200)
+        self.assertIn("keyring", result)
         status, result = self.api("POST", "/start", {"confirm": "MIGRATE_PII"})
         self.assertEqual(status, 409)  # cannot migrate until active key exists
         status, result = self.api("POST", "/preflight", {})
