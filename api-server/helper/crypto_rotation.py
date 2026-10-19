@@ -109,17 +109,17 @@ def _rows(cursor, table, pk, initial, *, lock=False, page_size=200):
         last = rows[-1][0]
 
 
-def _converted(value, current_id):
+def _converted(value, current_id, ring, max_length):
     if value is None or value == "":
         return value, False
     if not isinstance(value, str):
         raise ValueError("Unsupported PII value type")
     # Reject unsupported prefix instead of mistaking data for plaintext.
-    plaintext = decrypt_string(value)
+    plaintext = decrypt_string(value, ring=ring)
     if is_versioned(value) and encrypted_key_id(value) == current_id:
         return value, False
-    result = encrypt_string(plaintext)
-    if decrypt_string(result) != plaintext:
+    result = encrypt_string(plaintext, max_length=max_length, ring=ring)
+    if decrypt_string(result, ring=ring) != plaintext:
         raise RuntimeError("Authenticated encryption verification failed")
     return result, True
 
@@ -127,11 +127,12 @@ def _converted(value, current_id):
 def inspect_database():
     """Full dry-run: decrypt EVERY value and check column widths, no writes."""
     from helper.encryption_helper import verify_legacy_probe
-    verify_legacy_probe()
-    current_id = get_keyring().get("current_id")
+    ring = get_keyring()
+    current_id = ring.get("current_id")
     if not current_id:
         return {"ready": False, "reason": "Create an active GCM key first", "scanned": 0}
     sql = _connection()
+    probe_checked = False
     result = {"ready": True, "scanned": 0, "values_to_rotate": 0,
               "already_current": 0, "failures": 0, "examples": []}
     try:
@@ -144,7 +145,10 @@ def inspect_database():
                     if value in (None, ""):
                         continue
                     try:
-                        next_value, changed = _converted(value, current_id)
+                        if not is_versioned(value) and not probe_checked:
+                            verify_legacy_probe()
+                            probe_checked = True
+                        next_value, changed = _converted(value, current_id, ring, lengths[column])
                         capacity = lengths[column]
                         if capacity != -1 and len(next_value) > capacity:
                             raise ValueError("New ciphertext would exceed existing SQL column length")
@@ -211,7 +215,9 @@ def _migrate(run_id):
             raise RuntimeError("Preflight failed; no data was changed")
         sql = _connection()
         cursor = sql.connection.cursor()
-        current_id = get_keyring()["current_id"]
+        ring = get_keyring()
+        current_id = ring["current_id"]
+        probe_checked = False
         backup_path = _root() / "backups" / (run_id + ".jsonl")
         backup_path.parent.mkdir(mode=0o700, exist_ok=True)
         digest = hashlib.sha256()
@@ -225,7 +231,11 @@ def _migrate(run_id):
                     before = [row[1], row[2]]
                     after = []
                     for column, old in zip(_COLUMNS, before):
-                        result, _ = _converted(old, current_id)
+                        if old not in (None, "") and not is_versioned(old) and not probe_checked:
+                            from helper.encryption_helper import verify_legacy_probe
+                            verify_legacy_probe()
+                            probe_checked = True
+                        result, _ = _converted(old, current_id, ring, lengths[column])
                         cap = lengths[column]
                         if cap != -1 and result is not None and len(result) > cap:
                             raise RuntimeError("Column capacity changed since preflight")
