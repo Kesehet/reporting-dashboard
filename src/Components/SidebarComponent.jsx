@@ -58,6 +58,8 @@ const SidebarLayout = ({ items, mainContent, pageToShow }) => {
         
         <button
           className="w3-button w3-light-grey w3-hover-grey"
+          aria-label={collapsed ? 'Expand navigation' : 'Collapse navigation'}
+          aria-expanded={!collapsed}
           onClick={toggleSidebar}
           style={{ marginBottom: '1rem', width: '100%' }}
         >
@@ -103,7 +105,8 @@ const SidebarLayout = ({ items, mainContent, pageToShow }) => {
                       }}
                       style={{ textAlign: 'left', padding: '12px 16px', fontSize: '14px' }}
                     >
-                      {item.icon && <i aria-hidden="true" className={`pi ${item.icon}`} style={{ marginRight: '8px' }}></i>}
+                      {item.icon && <i aria-hidden="true" aria-hidden="true"
+ className={`pi ${item.icon}`} style={{ marginRight: '8px' }}></i>}
                       {item.render ? item.template() : item.label}
                     </button>
                   )}
@@ -171,6 +174,8 @@ const SidebarLayout = ({ items, mainContent, pageToShow }) => {
         >
           {item.icon && (
             <i
+              aria-hidden="true"
+
               className={`pi ${item.icon}`}
               style={{ marginRight: '6px' }}
             ></i>
