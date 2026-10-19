@@ -61,7 +61,7 @@ const SidebarLayout = ({ items, mainContent, pageToShow }) => {
           onClick={toggleSidebar}
           style={{ marginBottom: '1rem', width: '100%' }}
         >
-          <i className={`pi ${collapsed ? 'pi-chevron-right' : 'pi-chevron-left'}`}></i>
+          <i aria-hidden="true" className={`pi ${collapsed ? 'pi-chevron-right' : 'pi-chevron-left'}`}></i>
         </button>
 
         {!collapsed && (
@@ -103,7 +103,7 @@ const SidebarLayout = ({ items, mainContent, pageToShow }) => {
                       }}
                       style={{ textAlign: 'left', padding: '12px 16px', fontSize: '14px' }}
                     >
-                      {item.icon && <i className={`pi ${item.icon}`} style={{ marginRight: '8px' }}></i>}
+                      {item.icon && <i aria-hidden="true" className={`pi ${item.icon}`} style={{ marginRight: '8px' }}></i>}
                       {item.render ? item.template() : item.label}
                     </button>
                   )}
@@ -113,7 +113,7 @@ const SidebarLayout = ({ items, mainContent, pageToShow }) => {
           </div>
         )}
 
-        {!collapsed && !window.location.href.includes('prd01') && <MetricsCard />}
+        {!collapsed && !isNarrow && !window.location.href.includes('prd01') && <MetricsCard />}
       </div>
 
       {/* Top Bar */}
