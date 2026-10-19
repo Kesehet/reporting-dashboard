@@ -30,6 +30,7 @@ import TransactionLogger from './Utils/Components/TransactionLogger';
 import { Dropdown } from 'primereact/dropdown';
 import ChartDataService from './Services/ChartDataService';
 import CsvLoaderReportsTab from './Components/CsvLoaderReportsTab';
+import BusinessStringDecryptionTab from './Components/BusinessStringDecryptionTab';
 import CryptoRotationTab from './Components/CryptoRotationTab';
 
 class PageErrorBoundary extends React.Component {
@@ -104,7 +105,7 @@ function App() {
         pageConfig["Direct Deposit Switch Current Total DDS Amount"] = null
         pageConfig["Direct Deposit Switch Total Number of Successful Switches"] = null
         setTimeout(() => {
-            setPage((current) => current === "loading" ? pNow : current);
+            setPage(pNow);
         }, 1000);
     }, [CorBFilter]);
 
@@ -113,7 +114,7 @@ function App() {
         let pNow = showPage;
         setPage("loading");
         setTimeout(() => {
-            setPage((current) => current === "loading" ? pNow : current);
+            setPage(pNow);
         }, 1000);
     }, [pageConfig]);
 
@@ -126,7 +127,7 @@ function App() {
         pageConfig["Direct Deposit Switch Total Number of Successful Switches"] = null
         setPage("loading");
         setTimeout(() => {
-            setPage((current) => current === "loading" ? pNow : current);
+            setPage(pNow);
         }, 1000);
     }, [dates]);
 
@@ -706,6 +707,9 @@ function App() {
                         
                     </>
                 )
+            }
+            else if (page === "Business String Decryption") {
+                return <BusinessStringDecryptionTab />;
             }
             else if (page === "Crypto & Key Rotation") {
                 return <CryptoRotationTab />;
