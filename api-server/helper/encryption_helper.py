@@ -279,3 +279,21 @@ def encrypt_decrypt_string(input_string, mode="encrypt"):
     if mode == "decrypt":
         return decrypt_string(input_string)
     raise ValueError("Mode must be 'encrypt' or 'decrypt'")
+
+
+def verify_legacy_probe():
+    """Require a known pre-production ECB vector before any bulk rewrite.
+
+    Operators may set both CRYPTO_LEGACY_SAMPLE_CIPHERTEXT (base64) and
+    CRYPTO_LEGACY_SAMPLE_SHA256 (hex digest of *known* plaintext). Without
+    these, bulk migration of unversioned data is deliberately blocked.
+    """
+    from config import get_env_value
+    sample = os.getenv("CRYPTO_LEGACY_SAMPLE_CIPHERTEXT") or get_env_value("CRYPTO_LEGACY_SAMPLE_CIPHERTEXT")
+    digest = os.getenv("CRYPTO_LEGACY_SAMPLE_SHA256") or get_env_value("CRYPTO_LEGACY_SAMPLE_SHA256")
+    if not sample or not digest or len(digest) != 64:
+        raise ValueError("Verified legacy sample ciphertext and SHA-256 are required for migration")
+    plaintext = _decrypt_legacy(sample, get_keyring())
+    if not secrets.compare_digest(hashlib.sha256(plaintext.encode("utf-8")).hexdigest(), digest.lower()):
+        raise ValueError("Legacy algorithm/key validation vector did not match")
+    return True
