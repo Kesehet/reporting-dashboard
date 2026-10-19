@@ -1,4 +1,3 @@
-/** Sensitive API requests use an operator-entered, memory-only admin token. */
 const baseUrl = () => {
   if (process.env.REACT_APP_API_SERVER_BASE_URL) {
     return process.env.REACT_APP_API_SERVER_BASE_URL.replace(/\/$/, '');
