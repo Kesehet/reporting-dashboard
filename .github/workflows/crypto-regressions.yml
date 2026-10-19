@@ -4,6 +4,7 @@ on:
   pull_request:
   push:
     branches:
+      - main
       - feature/safe-encryption-keyring-rotation-20261019
   workflow_dispatch:
 
