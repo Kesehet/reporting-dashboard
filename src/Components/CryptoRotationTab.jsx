@@ -28,10 +28,12 @@ export default function CryptoRotationTab() {
     setError('');
     if (!token || token.length < 32) return undefined;
     const controller = new AbortController();
-    cryptoRequest('/status', token, undefined, controller.signal)
-      .then(setStatus)
-      .catch((e) => { if (e.name !== 'AbortError') setError(e.message); });
-    return () => controller.abort();
+    const timeout = setTimeout(() => {
+      cryptoRequest('/status', token, undefined, controller.signal)
+        .then(setStatus)
+        .catch((e) => { if (e.name !== 'AbortError') setError(e.message); });
+    }, 350);
+    return () => { clearTimeout(timeout); controller.abort(); };
   }, [token]);
 
   useEffect(() => {
@@ -53,7 +55,7 @@ export default function CryptoRotationTab() {
         setReveal(false);
       } else if (name === 'preflight') {
         setPreflight(data);
-        setNotice('Preflight passed. Existing ciphertext is unchanged.');
+        setNotice(data.ready ? 'Preflight passed. Existing ciphertext is unchanged.' : 'Preflight blocked. Review failures and configuration before migration.');
       } else {
         setPreflight(null);
         setConfirmation('');
@@ -159,7 +161,7 @@ export default function CryptoRotationTab() {
           <div><span>Preflight failures</span><strong>{preflight?.failures ?? '—'}</strong></div>
         </div>
         {job?.run_id && <p className="crypto-help">Recovery run ID: <code>{job.run_id}</code></p>}
-        {preflight && <p role="status" className="crypto-help">Preflight: {preflight.scanned} rows scanned, {preflight.values_to_rotate} values to rotate, {preflight.failures} failures.</p>}
+        {preflight && <div role="status" className="crypto-help"><p>Preflight: {preflight.scanned} rows scanned, {preflight.values_to_rotate} values to rotate, {preflight.failures} failures.</p>{(preflight.examples || []).map((example, idx) => <p key={idx}>{example.table} / {example.column}: {example.error}</p>)}</div>}
         <label htmlFor="crypto-confirm">Type the exact confirmation required for your next action</label>
         <input id="crypto-confirm" type="text" autoComplete="off" spellCheck="false"
           value={confirmation} onChange={(e) => setConfirmation(e.target.value)}
