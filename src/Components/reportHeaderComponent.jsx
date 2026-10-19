@@ -129,9 +129,9 @@ const ReportHeaderComponent = ( dates, setDates, CorBFilter, setCorBFilter, setP
                     section: "Tools",
                 },
                 {
-                    label: 'Crypto & Key Rotation',
+                    label: 'Key Rotation',
                     icon: 'pi pi-lock',
-                    command: () => setPage('Crypto & Key Rotation'),
+                    command: () => setPage('Key Rotation'),
                     section: 'Administration',
                 },
                 {
