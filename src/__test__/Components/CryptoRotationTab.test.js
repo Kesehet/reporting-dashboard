@@ -14,11 +14,8 @@ const state = {
   job: { state: 'idle', processed: 0, updated: 0 },
 };
 
-const authorize = async () => {
-  fireEvent.change(screen.getByLabelText('Administrator token'), {
-    target: { value: 'A'.repeat(36) },
-  });
-  await waitFor(() => expect(screen.getByText('Connected')).toBeInTheDocument(), { timeout: 2000 });
+const loadStatus = async () => {
+  await waitFor(() => expect(screen.getByText('historic-key')).toBeInTheDocument());
 };
 
 describe('CryptoRotationTab', () => {
@@ -39,10 +36,10 @@ describe('CryptoRotationTab', () => {
     expect(screen.queryByText('Verify / restore')).not.toBeInTheDocument();
   });
 
-  it('keeps admin access in memory and hides keys', async () => {
+  it('loads key metadata automatically without operator tokens', async () => {
     render(<CryptoRotationTab />);
-    expect(screen.getByText(/token stays in this tab/i)).toBeInTheDocument();
-    await authorize();
+    expect(screen.queryByLabelText('Administrator token')).not.toBeInTheDocument();
+    await loadStatus();
     expect(screen.getByText('historic-key')).toBeInTheDocument();
     expect(screen.getByText('AES_ECB_PKCS7 · Historical')).toBeInTheDocument();
     expect(screen.queryByText('Secret customer')).not.toBeInTheDocument();
@@ -62,7 +59,7 @@ describe('CryptoRotationTab', () => {
       return {};
     });
     render(<CryptoRotationTab />);
-    await authorize();
+    await waitFor(() => expect(cryptoRequest).toHaveBeenCalledWith('/status', undefined, expect.anything()));
     expect(screen.getByText('Migrate now')).toBeDisabled();
     fireEvent.click(screen.getByText('Check compatibility'));
     await waitFor(() => expect(screen.getByText(/10 rows scanned/)).toBeInTheDocument());
@@ -72,7 +69,7 @@ describe('CryptoRotationTab', () => {
     expect(screen.getByText('Migrate now')).toBeEnabled();
     fireEvent.click(screen.getByText('Migrate now'));
     await waitFor(() => expect(cryptoRequest).toHaveBeenCalledWith(
-      '/start', 'A'.repeat(36), { confirm: 'MIGRATE_PII' }
+      '/start', { confirm: 'MIGRATE_PII' }
     ));
   });
 
@@ -82,7 +79,7 @@ describe('CryptoRotationTab', () => {
       examples: [{ table: 'Transactions', column: 'PrimarySSN', error: 'Missing key' }]
     });
     render(<CryptoRotationTab />);
-    await authorize();
+    await waitFor(() => expect(cryptoRequest).toHaveBeenCalledWith('/status', undefined, expect.anything()));
     fireEvent.click(screen.getByText('Check compatibility'));
     await waitFor(() => expect(screen.getByText(/Missing key/)).toBeInTheDocument());
     fireEvent.change(screen.getByLabelText(/Confirmation/), { target: { value: 'MIGRATE_PII' } });
@@ -94,12 +91,12 @@ describe('CryptoRotationTab', () => {
       ...state, job: { state: 'completed', run_id: 'c'.repeat(32), processed: 100, updated: 90 }
     } : { state: 'starting' });
     render(<CryptoRotationTab />);
-    await authorize();
+    await waitFor(() => expect(cryptoRequest).toHaveBeenCalledWith('/status', undefined, expect.anything()));
     expect(screen.getByText('Restore previous encryption')).toBeDisabled();
     fireEvent.change(screen.getByLabelText(/Confirmation/), { target: { value: 'RESTORE_ORIGINAL' } });
     fireEvent.click(screen.getByText('Restore previous encryption'));
     await waitFor(() => expect(cryptoRequest).toHaveBeenCalledWith(
-      '/rollback', 'A'.repeat(36), { run_id: 'c'.repeat(32), confirm: 'RESTORE_ORIGINAL' }
+      '/rollback', { run_id: 'c'.repeat(32), confirm: 'RESTORE_ORIGINAL' }
     ));
   });
 });
