@@ -5,7 +5,6 @@ const service = new DecryptionService();
 
 export default function BusinessStringDecryptionTab() {
   const [ciphertext, setCiphertext] = useState('');
-  const [token, setToken] = useState('');
   const [plaintext, setPlaintext] = useState(null);
   const [error, setError] = useState('');
   const [copied, setCopied] = useState(false);
@@ -20,10 +19,10 @@ export default function BusinessStringDecryptionTab() {
   const onSubmit = async (event) => {
     event.preventDefault();
     resetResult();
-    if (busy || !ciphertext.trim() || !token) return;
+    if (busy || !ciphertext.trim()) return;
     setBusy(true);
     try {
-      setPlaintext(await service.decrypt(ciphertext.trim(), token));
+      setPlaintext(await service.decrypt(ciphertext.trim()));
     } catch (requestError) {
       setError(requestError.message || 'Decryption request failed.');
     } finally {
@@ -33,7 +32,6 @@ export default function BusinessStringDecryptionTab() {
 
   const clearAll = () => {
     setCiphertext('');
-    setToken('');
     resetResult();
   };
 
@@ -52,14 +50,6 @@ export default function BusinessStringDecryptionTab() {
     <div className="w3-container w3-card-4" style={{ padding: '24px', maxWidth: '920px', margin: '0 auto' }}>
       <h2 className="w3-center">Business String Decryption</h2>
       <form onSubmit={onSubmit} autoComplete="off" style={{ display: 'grid', gap: '14px' }}>
-        <label htmlFor="decrypt-token" style={{ fontWeight: 600 }}>Tool access token</label>
-        <input
-          id="decrypt-token" type="password" autoComplete="off"
-          value={token} disabled={busy}
-          onChange={(event) => { setToken(event.target.value); resetResult(); }}
-          placeholder="Enter authorized access token"
-          style={{ padding: '12px', border: '1px solid #ced4da', borderRadius: '6px' }}
-        />
         <label htmlFor="decrypt-input" style={{ fontWeight: 600 }}>Encrypted string</label>
         <textarea
           id="decrypt-input" rows={5} spellCheck={false} value={ciphertext} disabled={busy}
@@ -69,7 +59,7 @@ export default function BusinessStringDecryptionTab() {
         />
         <div style={{ display: 'flex', gap: '12px' }}>
           <button type="submit" className="w3-button w3-blue"
-            disabled={busy || !ciphertext.trim() || !token}
+            disabled={busy || !ciphertext.trim()}
             style={{ borderRadius: '6px' }}>
             {busy ? 'Decrypting...' : 'Decrypt string'}
           </button>
