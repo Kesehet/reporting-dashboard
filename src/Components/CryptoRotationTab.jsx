@@ -88,7 +88,7 @@ export default function CryptoRotationTab() {
       <header className="crypto-hero">
         <span className="crypto-eyebrow">ADMINISTRATION / ENCRYPTION</span>
         <h1>Encryption &amp; Key Rotation</h1>
-        <p>Decrypt a value, review historical keys, and migrate PII safely without changing SQL schemas.</p>
+        <p>Decrypt values, inspect saved keys, and manage PII migration.</p>
       </header>
 
       <section className="crypto-panel" aria-label="Administrator access">
@@ -153,7 +153,7 @@ export default function CryptoRotationTab() {
 
       <section className="crypto-panel" aria-label="Migration control">
         <div className="crypto-panel-title">
-          <div><h2>Production migration</h2><p>Encrypted recovery journal, SQL transaction rollback on failure, and strict column-capacity checks.</p></div>
+          <div><h2>Production migration</h2><p>Migrations check column capacity and keep an encrypted recovery journal.</p></div>
           <span className="crypto-pill" data-testid="crypto-job-state">{job?.state || 'Not started'}</span>
         </div>
         <div className="crypto-steps">
@@ -186,7 +186,7 @@ export default function CryptoRotationTab() {
             Restore original ciphertext
           </button>
         </div>
-        <p className="crypto-help">Preflight does not change data. Stop other database writers for the production run. A missing key, unrecognized ciphertext, oversized value, or conflicting update blocks migration.</p>
+        <p className="crypto-help">Preflight is read-only. Pause other database writers before migration. Missing keys, invalid ciphertext, oversized values, and concurrent updates block the operation.</p>
       </section>
     </main>
   );
