@@ -358,7 +358,7 @@ def status_api():
 @crypto_api.post("/keys/rotate")
 def rotate_key_api():
     data = request.get_json(silent=True) or {}
-    if data.get("confirm") != "CREATE_GCM_KEY" or _active:
+    if data.get("confirm") != "CREATE_GCM_KEY" or _active or (_root() / "migration.lock").exists():
         return jsonify({"error": "Explicit confirmation required or migration active"}), 409
     try:
         key_id = key_rotation()
