@@ -413,37 +413,54 @@ def get_dds_dollar_amount(acct_number, appstartdate):
 
 
 def encrypt_all_pii_columns(sql, txn):
-    """Encrypt new plaintext only; migrate historic ciphertext separately."""
+    """Only encrypt new PII; leave all historical ciphertext for audited migration.
+
+    Fail closed if existing ciphertext cannot be decrypted or a concurrent
+    writer changed a selected row. Keep a single transaction across tables.
+    """
     from helper.encryption_helper import decrypt_string, encrypt_string
     from helper.crypto_rotation import _column_lengths
-    for table_name, primary_key in (("[DigitalReport].[dbo].[Transactions]", "tId"),
-                                    ("[DigitalReport].[dbo].[Properties]", "eCATrackingCode")):
-        cursor = sql.connection.cursor()
-        cursor.execute("SELECT " + primary_key + ", PrimaryName, PrimarySSN FROM " + table_name)
-        rows = cursor.fetchall()
-        limits = _column_lengths(cursor, table_name.split("].[")[-1].rstrip("]"))
-        for row_id, primary_name, primary_ssn in rows:
-            updated = []
-            for column, value in zip(("PrimaryName", "PrimarySSN"), (primary_name, primary_ssn)):
-                if value is None or value == "":
-                    updated.append(value)
-                elif is_encrypted(value):
-                    # Verify that it remains decryptable; never disguise broken ciphertext.
-                    decrypt_string(value)
-                    updated.append(value)
-                else:
-                    updated.append(encrypt_string(str(value), max_length=limits[column]))
-            if updated != [primary_name, primary_ssn]:
-                cursor.execute(
-                    "UPDATE " + table_name +
-                    " SET PrimaryName=?, PrimarySSN=? "
-                    "WHERE " + primary_key + "=? "
-                    "AND (PrimaryName=? OR (PrimaryName IS NULL AND ? IS NULL)) "
-                    "AND (PrimarySSN=? OR (PrimarySSN IS NULL AND ? IS NULL))",
-                    (updated[0], updated[1], row_id,
-                     primary_name, primary_name, primary_ssn, primary_ssn),
-                )
-                if cursor.rowcount != 1:
-                    sql.connection.rollback()
-                    raise RuntimeError("PII write conflict; transaction rolled back")
-    sql.connection.commit()
+    external_files = set()
+    try:
+        for table_name, primary_key in (
+            ("[DigitalReport].[dbo].[Transactions]", "tId"),
+            ("[DigitalReport].[dbo].[Properties]", "eCATrackingCode"),
+        ):
+            cursor = sql.connection.cursor()
+            cursor.execute("SELECT " + primary_key + ", PrimaryName, PrimarySSN FROM " + table_name)
+            rows = cursor.fetchall()
+            limits = _column_lengths(cursor, table_name.split("].[")[-1].rstrip("]"))
+            for row_id, primary_name, primary_ssn in rows:
+                updated = []
+                for column, value in zip(("PrimaryName", "PrimarySSN"), (primary_name, primary_ssn)):
+                    if value is None or value == "":
+                        updated.append(value)
+                    elif is_encrypted(value):
+                        decrypt_string(value)
+                        updated.append(value)
+                    else:
+                        ciphertext = encrypt_string(str(value), max_length=limits[column])
+                        updated.append(ciphertext)
+                        if ciphertext.startswith("v2f:"):
+                            external_files.add(ciphertext[4:])
+                if updated != [primary_name, primary_ssn]:
+                    cursor.execute(
+                        "UPDATE " + table_name +
+                        " SET PrimaryName=?, PrimarySSN=? "
+                        "WHERE " + primary_key + "=? "
+                        "AND (PrimaryName=? OR (PrimaryName IS NULL AND ? IS NULL)) "
+                        "AND (PrimarySSN=? OR (PrimarySSN IS NULL AND ? IS NULL))",
+                        (updated[0], updated[1], row_id,
+                         primary_name, primary_name, primary_ssn, primary_ssn),
+                    )
+                    if cursor.rowcount != 1:
+                        raise RuntimeError("PII write conflict; transaction rolled back")
+        if sql.connection.autocommit:
+            raise RuntimeError("Refusing non-transactional PII writes")
+        sql.connection.commit()
+    except Exception:
+        sql.connection.rollback()
+        from helper.encryption_helper import _root
+        for file_id in external_files:
+            (_root() / "values" / (file_id + ".enc")).unlink(missing_ok=True)
+        raise
