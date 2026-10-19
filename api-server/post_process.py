@@ -42,7 +42,7 @@ def post_process_txns(sql, txn, tracking_codes_added_this_run=None):
         print("Error in account_status_fetch" + str(e))
 
     try:
-        encrypt_all_pii_columns(sql, txn)
+        encrypt_all_pii_columns(sql, txn, tracking_codes_added_this_run)
     except Exception as e:
         logger.exception("PII encryption failed; do not silently persist unencrypted data")
         raise
@@ -412,51 +412,63 @@ def get_dds_dollar_amount(acct_number, appstartdate):
 
 
 
-def encrypt_all_pii_columns(sql, txn):
-    """Only encrypt new PII; leave all historical ciphertext for audited migration.
+def encrypt_all_pii_columns(sql, txn, tracking_codes):
+    """Encrypt PII for CSV rows touched in this run, not the entire database.
 
-    Fail closed if existing ciphertext cannot be decrypted or a concurrent
-    writer changed a selected row. Keep a single transaction across tables.
+    Historical ciphertext stays untouched for the explicit rotation workflow.
+    Queries and updates are parameterized; no SQL schema changes are made.
     """
-    from helper.encryption_helper import decrypt_string, encrypt_string
+    from helper.encryption_helper import encrypt_string
     from helper.crypto_rotation import _column_lengths
+
+    codes = sorted({str(code) for code in tracking_codes if code})
+    if not codes:
+        return
     external_files = set()
     try:
-        for table_name, primary_key in (
-            ("[DigitalReport].[dbo].[Transactions]", "tId"),
-            ("[DigitalReport].[dbo].[Properties]", "eCATrackingCode"),
+        if getattr(sql.connection, "autocommit", False):
+            raise RuntimeError("Refusing non-transactional PII writes")
+        for table_name, primary_key, logical_table in (
+            ("[DigitalReport].[dbo].[Transactions]", "tId", "Transactions"),
+            ("[DigitalReport].[dbo].[Properties]", "eCATrackingCode", "Properties"),
         ):
             cursor = sql.connection.cursor()
-            cursor.execute("SELECT " + primary_key + ", PrimaryName, PrimarySSN FROM " + table_name)
-            rows = cursor.fetchall()
-            limits = _column_lengths(cursor, table_name.split("].[")[-1].rstrip("]"))
-            for row_id, primary_name, primary_ssn in rows:
-                updated = []
-                for column, value in zip(("PrimaryName", "PrimarySSN"), (primary_name, primary_ssn)):
-                    if value is None or value == "":
-                        updated.append(value)
-                    elif is_encrypted(value):
-                        decrypt_string(value)
-                        updated.append(value)
-                    else:
-                        ciphertext = encrypt_string(str(value), max_length=limits[column])
-                        updated.append(ciphertext)
-                        if ciphertext.startswith("v2f:"):
-                            external_files.add(ciphertext[4:])
-                if updated != [primary_name, primary_ssn]:
-                    cursor.execute(
-                        "UPDATE " + table_name +
-                        " SET PrimaryName=?, PrimarySSN=? "
-                        "WHERE " + primary_key + "=? "
-                        "AND (PrimaryName=? OR (PrimaryName IS NULL AND ? IS NULL)) "
-                        "AND (PrimarySSN=? OR (PrimarySSN IS NULL AND ? IS NULL))",
-                        (updated[0], updated[1], row_id,
-                         primary_name, primary_name, primary_ssn, primary_ssn),
-                    )
-                    if cursor.rowcount != 1:
-                        raise RuntimeError("PII write conflict; transaction rolled back")
-        if sql.connection.autocommit:
-            raise RuntimeError("Refusing non-transactional PII writes")
+            limits = _column_lengths(cursor, logical_table)
+            # Keep comfortably below SQL Server's 2100-parameter limit.
+            for offset in range(0, len(codes), 400):
+                batch = codes[offset:offset + 400]
+                marks = ",".join("?" for _ in batch)
+                cursor.execute(
+                    "SELECT " + primary_key + ", PrimaryName, PrimarySSN FROM " +
+                    table_name + " WHERE eCATrackingCode IN (" + marks + ")",
+                    tuple(batch),
+                )
+                rows = cursor.fetchall()
+                for row_id, primary_name, primary_ssn in rows:
+                    before = [primary_name, primary_ssn]
+                    after = []
+                    for column, value in zip(("PrimaryName", "PrimarySSN"), before):
+                        if value is None or value == "" or is_encrypted(value):
+                            # Legacy or versioned ciphertext belongs to the
+                            # audited migration, not routine CSV processing.
+                            after.append(value)
+                        else:
+                            encrypted = encrypt_string(str(value), max_length=limits[column])
+                            after.append(encrypted)
+                            if encrypted.startswith("v2f:"):
+                                external_files.add(encrypted[4:])
+                    if after != before:
+                        cursor.execute(
+                            "UPDATE " + table_name +
+                            " SET PrimaryName=?, PrimarySSN=? "
+                            "WHERE " + primary_key + "=? "
+                            "AND (PrimaryName=? OR (PrimaryName IS NULL AND ? IS NULL)) "
+                            "AND (PrimarySSN=? OR (PrimarySSN IS NULL AND ? IS NULL))",
+                            (after[0], after[1], row_id,
+                             before[0], before[0], before[1], before[1]),
+                        )
+                        if cursor.rowcount != 1:
+                            raise RuntimeError("PII write conflict; transaction rolled back")
         sql.connection.commit()
     except Exception:
         sql.connection.rollback()
