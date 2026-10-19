@@ -38,7 +38,7 @@ export default function CryptoRotationTab() {
 
   useEffect(() => {
     const jobState = status?.job?.state;
-    if (!token || !['running', 'committing', 'starting'].includes(jobState)) return undefined;
+    if (!token || !['running', 'committing', 'starting', 'restoring'].includes(jobState)) return undefined;
     const interval = setInterval(() => refresh().catch((e) => setError(e.message)), 2500);
     return () => clearInterval(interval);
   }, [status?.job?.state, token, refresh]);
@@ -80,7 +80,7 @@ export default function CryptoRotationTab() {
 
   const keyring = status?.keyring;
   const job = status?.job;
-  const migrating = ['starting', 'running', 'committing'].includes(job?.state);
+  const migrating = ['starting', 'running', 'committing', 'restoring'].includes(job?.state);
   const blocked = Boolean(busy || migrating);
 
   return (
@@ -154,7 +154,7 @@ export default function CryptoRotationTab() {
       <section className="crypto-panel" aria-label="Migration control">
         <div className="crypto-panel-title">
           <div><h2>Production migration</h2><p>Encrypted recovery journal, SQL transaction rollback on failure, and strict column-capacity checks.</p></div>
-          <span className="crypto-pill">{job?.state || 'Not started'}</span>
+          <span className="crypto-pill" data-testid="crypto-job-state">{job?.state || 'Not started'}</span>
         </div>
         <div className="crypto-steps">
           <div><span className="crypto-step">01</span><strong>Prepare</strong><p>Preserve keyring backups and pause competing ETL writers.</p></div>
@@ -181,7 +181,7 @@ export default function CryptoRotationTab() {
             Start checked migration
           </button>
           <button type="button" className="crypto-danger"
-            disabled={blocked || confirmation !== 'RESTORE_ORIGINAL' || !job?.run_id || !['completed', 'reconciliation_required'].includes(job?.state)}
+            disabled={blocked || confirmation !== 'RESTORE_ORIGINAL' || !job?.run_id || !['completed', 'reconciliation_required', 'restore_failed'].includes(job?.state)}
             onClick={() => action('rollback', '/rollback', { run_id: job.run_id, confirm: confirmation })}>
             Restore original ciphertext
           </button>
