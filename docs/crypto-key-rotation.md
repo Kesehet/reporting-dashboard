@@ -16,8 +16,6 @@ Set these only on the backend server (never as `REACT_APP_*` variables):
   Back up the entire directory, not just the keyring file.
 - CRYPTO_LEGACY_ENV_FILE: optional absolute path to the original production .env.
 - CRYPTO_LEGACY_KEY_DIR: optional absolute directory containing enc.key and old_enc.key.
-- CRYPTO_ADMIN_TOKEN: at least 32 random characters. Must be entered by a
-  trusted operator in the dashboard UI, over HTTPS. It is not stored in the browser.
 - CRYPTO_LEGACY_MODE=AES_ECB_PKCS7: set only after verifying an original ECB/PKCS7 sample.
 - CRYPTO_LEGACY_SAMPLE_CIPHERTEXT: a known original ECB test ciphertext.
 - CRYPTO_LEGACY_SAMPLE_SHA256: SHA-256 hex of its known original plaintext.
@@ -41,6 +39,8 @@ CRYPTO_STATE_DIR contains:
 - backups/RUN_ID.jsonl: authenticated snapshots of original SQL ciphertext
 - migration-status.json and migration.lock: operation journal/coordination
 
+The crypto endpoints no longer require separate operator tokens. Deploy this API only within your trusted application/network boundary. Anyone able to reach these endpoints can request decryption or migration operations. Keep backups and the existing confirmation checks.
+
 Keys and protected files must be writable only by the backend service account.
 Never put secrets, backups or PII in Git, public directories, CI artifacts,
 browser local storage, or ordinary logs.
@@ -61,7 +61,7 @@ SQL backups and filesystem backups must be coordinated.
 3. Verify original ECB test vector and import all known historical keys.
    Unknown formats or keys must stop migration.
 4. Deploy first against staging SQL and a private copy of the crypto files.
-5. Open Key Rotation in the dashboard. Authenticate with admin token.
+5. Open Key Rotation in the dashboard. Status loads automatically; no separate operator token is required.
 6. Explicitly create/activate a new GCM key. This action keeps the old keys and
    does not bulk-modify existing SQL ciphertext.
 7. Run read-only preflight. It verifies all existing ciphertext can decrypt,
