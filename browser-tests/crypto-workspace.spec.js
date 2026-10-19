@@ -47,7 +47,7 @@ async function openTab(page, width) {
   await page.waitForTimeout(1300);
   if (width < 800) await page.locator('.report-sidebar > button').first().click();
   await page.getByRole('button', { name: 'Key Rotation', exact: true }).click();
-  await expect(page.getByRole('heading', { name: 'Key Rotation' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Key Rotation', level: 1 })).toBeVisible();
   console.log('CRYPTO_PAGE_URL', page.url());
 }
 
