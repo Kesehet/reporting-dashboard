@@ -283,5 +283,62 @@ class CryptoRotationTests(unittest.TestCase):
         self.assertNotIn('"material"', result.data.decode())
 
 
+    def test_preflight_rejects_tampered_ciphertext_and_preserves_database(self):
+        crypto.key_rotation()
+        value = crypto.encrypt_string("original")
+        broken = value[:-2] + ("A" if value[-2] != "A" else "B") + value[-1]
+        db = {"Transactions": {1: [broken, None]}, "Properties": {}}
+        with mock.patch.object(rot, "_connection", side_effect=lambda: FakeSQL(db)):
+            result = rot.inspect_database()
+        self.assertFalse(result["ready"])
+        self.assertEqual(result["failures"], 1)
+        self.assertEqual(db["Transactions"][1][0], broken)
+
+    def test_preflight_rejects_missing_external_file(self):
+        crypto.key_rotation()
+        ref = crypto.encrypt_string("A long confidential customer name", max_length=50)
+        (Path(self.tmp.name) / "values" / (ref[4:] + ".enc")).unlink()
+        db = {"Transactions": {1: [ref, None]}, "Properties": {}}
+        with mock.patch.object(rot, "_connection", side_effect=lambda: FakeSQL(db)):
+            report = rot.inspect_database()
+        self.assertFalse(report["ready"])
+        self.assertEqual(report["failures"], 1)
+
+    def test_recovery_rejects_changed_row_without_overwriting_it(self):
+        crypto.key_rotation()
+        old = crypto.encrypt_string("before")
+        crypto.key_rotation()
+        db = {"Transactions": {1: [old, None]}, "Properties": {}}
+        with mock.patch.object(rot, "_connection", side_effect=lambda: FakeSQL(db)):
+            rot._migrate("c" * 32)
+            self.assertEqual(rot._status()["state"], "completed")
+            newer = crypto.encrypt_string("newer value")
+            db["Transactions"][1][0] = newer
+            with self.assertRaises(RuntimeError):
+                rot._rollback("c" * 32)
+        self.assertEqual(db["Transactions"][1][0], newer)
+
+    def test_corrupt_recovery_snapshot_never_updates_database(self):
+        crypto.key_rotation()
+        old = crypto.encrypt_string("before")
+        crypto.key_rotation()
+        db = {"Transactions": {1: [old, None]}, "Properties": {}}
+        with mock.patch.object(rot, "_connection", side_effect=lambda: FakeSQL(db)):
+            rot._migrate("d" * 32)
+            current = db["Transactions"][1][0]
+            backup = Path(self.tmp.name) / "backups" / ("d" * 32 + ".jsonl")
+            backup.write_text("corrupted snapshot")
+            with self.assertRaises(ValueError):
+                rot._rollback("d" * 32)
+        self.assertEqual(db["Transactions"][1][0], current)
+
+    def test_keyring_history_survives_multiple_rotations(self):
+        for _ in range(4):
+            crypto.key_rotation()
+        snapshots = list((Path(self.tmp.name) / "keyring-history").glob("*.json"))
+        self.assertGreaterEqual(len(snapshots), 3)
+        self.assertEqual(len(crypto.get_keyring()["keys"]), 4)
+
+
 if __name__ == "__main__":
     unittest.main()
