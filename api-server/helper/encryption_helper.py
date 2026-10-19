@@ -123,13 +123,44 @@ def _insert(ring, raw, algorithm, source):
     return True
 
 
+def _legacy_env_files():
+    """Find known deployment env files independent of the process cwd."""
+    backend = Path(__file__).resolve().parents[1]
+    configured = os.getenv("CRYPTO_LEGACY_ENV_FILE")
+    paths = []
+    if configured:
+        path = Path(configured).expanduser()
+        if not path.is_absolute():
+            raise ValueError("CRYPTO_LEGACY_ENV_FILE must be absolute")
+        paths.append(path)
+    paths.extend((backend / ".env", backend.parent / ".env", Path.cwd() / ".env"))
+    return list(dict.fromkeys(path.resolve() for path in paths))
+
+
+def _legacy_key_dirs():
+    backend = Path(__file__).resolve().parents[1]
+    configured = os.getenv("CRYPTO_LEGACY_KEY_DIR")
+    paths = []
+    if configured:
+        path = Path(configured).expanduser()
+        if not path.is_absolute():
+            raise ValueError("CRYPTO_LEGACY_KEY_DIR must be absolute")
+        paths.append(path)
+    paths.extend((backend, Path.cwd()))
+    return list(dict.fromkeys(path.resolve() for path in paths))
+
+
 def _legacy_env():
     value = os.getenv("ENCRYPTION_KEY")
     if value:
         return value
-    # Compatible with this repository's non-exported .env reading pattern.
     from config import get_env_value
-    return get_env_value("ENCRYPTION_KEY")
+    for path in _legacy_env_files():
+        if path.is_file():
+            value = get_env_value("ENCRYPTION_KEY", env_path=str(path))
+            if value:
+                return value
+    return None
 
 
 @contextmanager
@@ -165,10 +196,19 @@ def _sync_ring():
     env_key = _legacy_env()
     if env_key:
         legacy_sources.append(("env", env_key))
-    for name in (CURRENT_KEY_FILE, OLD_KEY_FILE):
-        path = Path(name)
+    # Import all known old env values, not only the first: different deploys
+    # may have used different .env files.
+    from config import get_env_value
+    for path in _legacy_env_files():
         if path.is_file():
-            legacy_sources.append((name, path.read_text(encoding="utf-8")))
+            value = get_env_value("ENCRYPTION_KEY", env_path=str(path))
+            if value:
+                legacy_sources.append(("env-file", value))
+    for folder in _legacy_key_dirs():
+        for name in (CURRENT_KEY_FILE, OLD_KEY_FILE):
+            path = folder / name
+            if path.is_file():
+                legacy_sources.append((name, path.read_text(encoding="utf-8")))
     archive = _root() / "import"
     if archive.is_dir():
         for path in sorted(archive.glob("*.key")):
