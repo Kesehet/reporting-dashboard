@@ -44,7 +44,8 @@ def post_process_txns(sql, txn, tracking_codes_added_this_run=None):
     try:
         encrypt_all_pii_columns(sql, txn)
     except Exception as e:
-        print("Error encrypting PII columns" + str(e))
+        logger.exception("PII encryption failed; do not silently persist unencrypted data")
+        raise
     
     try:
         load_workspace_data(we, txn, tracking_codes_added_this_run)
@@ -412,126 +413,30 @@ def get_dds_dollar_amount(acct_number, appstartdate):
 
 
 def encrypt_all_pii_columns(sql, txn):
-    pii_columns = ["PrimaryName", "PrimarySSN"]
-    cursor = sql.connection.cursor()
-
-    logger.info("Starting PII encryption pass for %s", ", ".join(pii_columns))
-
-    reencrypt_old_values = False
-
-    if os.path.exists("old_enc.key"):
-        age_days = (
-            datetime.now() - datetime.fromtimestamp(os.path.getmtime("old_enc.key"))
-        ).days
-
-        reencrypt_old_values = age_days < 30
-
-        if reencrypt_old_values:
-            logger.info(
-                "old_enc.key is %s days old. Re-encrypting values with current key.",
-                age_days,
-            )
-
-    for table_name in (
-        "[DigitalReport].[dbo].[Transactions]",
-        "[DigitalReport].[dbo].[Properties]",
-    ):
-        table_scanned = 0
-        table_encrypted = 0
-
-        try:
-            cursor.execute(
-                f"""
-                SELECT eCATrackingCode, {", ".join(pii_columns)}
-                FROM {table_name}
-                WHERE ({pii_columns[0]} IS NOT NULL AND {pii_columns[0]} != '')
-                   OR ({pii_columns[1]} IS NOT NULL AND {pii_columns[1]} != '')
-            """
-            )
-
-            rows = cursor.fetchall()
-            table_scanned = len(rows)
-
-            logger.info(
-                "PII encryption scanned %d rows in %s",
-                table_scanned,
-                table_name,
-            )
-
-        except Exception:
-            logger.exception(
-                "Failed to read PII columns from %s",
-                table_name,
-            )
-            continue
-
-        for row in rows:
-            tracking_code = row[0]
-            update_values = {}
-
-            for index, column in enumerate(pii_columns, start=1):
-                value = row[index]
-
-                if value is None or value == "":
-                    continue
-
-                try:
-                    # Plain text value
-                    if not is_encrypted(value):
-                        update_values[column] = encrypt_decrypt_string(
-                            str(value),
-                            mode="encrypt",
-                        )
-
-                    # Key rotation window active
-                    elif reencrypt_old_values:
-                        plaintext = encrypt_decrypt_string(
-                            value,
-                            mode="decrypt",
-                        )
-
-                        new_encrypted_value = encrypt_decrypt_string(
-                            plaintext,
-                            mode="encrypt",
-                        )
-
-                        # Only update if ciphertext changes
-                        if new_encrypted_value != value:
-                            update_values[column] = new_encrypted_value
-
-                except Exception:
-                    logger.exception(
-                        "Failed processing %s for tracking code %s",
-                        column,
-                        tracking_code,
-                    )
-
-            if update_values:
-                try:
-                    set_clause = ", ".join(
-                        f"{column} = ?"
-                        for column in update_values
-                    )
-
-                    cursor.execute(
-                        f"UPDATE {table_name} SET {set_clause} WHERE eCATrackingCode = ?",
-                        (*update_values.values(), tracking_code),
-                    )
-
-                    table_encrypted += 1
-
-                except Exception:
-                    logger.exception(
-                        "Failed to encrypt a PII row in %s",
-                        table_name,
-                    )
-
-        logger.info(
-            "PII encryption completed for %s: scanned=%d, updated=%d",
-            table_name,
-            table_scanned,
-            table_encrypted,
-        )
-
+    """Encrypt new plaintext only; migrate historic ciphertext separately."""
+    for table_name in ("[DigitalReport].[dbo].[Transactions]",
+                       "[DigitalReport].[dbo].[Properties]"):
+        cursor = sql.connection.cursor()
+        cursor.execute("SELECT eCATrackingCode, PrimaryName, PrimarySSN FROM " + table_name)
+        rows = cursor.fetchall()
+        for tracking_code, primary_name, primary_ssn in rows:
+            updated = []
+            for value in (primary_name, primary_ssn):
+                if value is None or value == "" or is_encrypted(value):
+                    updated.append(value)
+                else:
+                    updated.append(encrypt_decrypt_string(str(value), mode="encrypt"))
+            if updated != [primary_name, primary_ssn]:
+                cursor.execute(
+                    "UPDATE " + table_name +
+                    " SET PrimaryName=?, PrimarySSN=? "
+                    "WHERE eCATrackingCode=? "
+                    "AND (PrimaryName=? OR (PrimaryName IS NULL AND ? IS NULL)) "
+                    "AND (PrimarySSN=? OR (PrimarySSN IS NULL AND ? IS NULL))",
+                    (updated[0], updated[1], tracking_code,
+                     primary_name, primary_name, primary_ssn, primary_ssn),
+                )
+                if cursor.rowcount != 1:
+                    sql.connection.rollback()
+                    raise RuntimeError("PII write conflict; transaction rolled back")
     sql.connection.commit()
-    logger.info("Completed PII encryption pass")
