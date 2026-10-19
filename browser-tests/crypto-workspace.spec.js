@@ -38,6 +38,9 @@ async function openTab(page, width) {
   await page.setViewportSize({ width, height: 860 });
   await mockBackend(page);
   await page.goto('/');
+  // Dashboard startup briefly switches the entire page to a loading state.
+  // Wait for its existing 1-second initialization timers before selecting a tab.
+  await page.waitForTimeout(1300);
   if (width < 800) await page.locator('.report-sidebar > button').first().click();
   await page.getByRole('button', { name: 'Crypto & Key Rotation', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Encryption & Key Rotation' })).toBeVisible();
