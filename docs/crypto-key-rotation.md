@@ -28,6 +28,7 @@ No key is generated automatically during module import.
 
 CRYPTO_STATE_DIR contains:
 - keyring.json: every historical key, with stable fingerprints and current ID
+- keyring-history/*.json: immutable snapshots of previous keyring states
 - values/*.enc: AES-GCM-protected files for encrypted values that exceed the
   existing SQL column length
 - backups/RUN_ID.jsonl: authenticated snapshots of original SQL ciphertext
