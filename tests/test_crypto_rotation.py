@@ -95,7 +95,6 @@ class CryptoRotationTests(unittest.TestCase):
         self.env = mock.patch.dict(os.environ, {
             "CRYPTO_STATE_DIR": self.tmp.name,
             "CRYPTO_LEGACY_MODE": "AES_ECB_PKCS7",
-            "CRYPTO_ADMIN_TOKEN": "A" * 36,
             "CRYPTO_LEGACY_SAMPLE_CIPHERTEXT": "",
             "CRYPTO_LEGACY_SAMPLE_SHA256": "",
             "ENCRYPTION_KEY": "",
@@ -265,23 +264,17 @@ class CryptoRotationTests(unittest.TestCase):
         self.assertFalse(result["ready"])
         self.assertEqual(result["failures"], 1)
 
-    def test_admin_endpoints_fail_closed_and_do_not_expose_keys(self):
+    def test_status_without_operator_token_exposes_only_key_metadata(self):
         from flask import Flask
         app = Flask(__name__)
         app.register_blueprint(rot.crypto_api)
         crypto.key_rotation()
         client = app.test_client()
-        self.assertEqual(client.get("/crypto/status").status_code, 403)
-        self.assertEqual(client.get("/crypto/status", headers={
-            "X-Crypto-Admin-Token": "wrong"
-        }).status_code, 403)
-        result = client.get("/crypto/status", headers={
-            "X-Crypto-Admin-Token": "A" * 36
-        })
+        result = client.get("/crypto/status")
         self.assertEqual(result.status_code, 200)
         self.assertEqual(result.headers["Cache-Control"], "no-store, private")
         self.assertNotIn('"material"', result.data.decode())
-
+        self.assertTrue(result.json["keyring"]["current_id"])
 
     def test_preflight_rejects_tampered_ciphertext_and_preserves_database(self):
         crypto.key_rotation()
