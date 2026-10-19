@@ -118,17 +118,13 @@ def runtime():
     def forbidden(*args, **kwargs):
         raise AssertionError('Contract tests must not perform external I/O')
     driver.connect = forbidden
-    # ETL encryption is unrelated to chart reads; its import runs a demo with
-    # filesystem/crypto side effects. Fail if a chart unexpectedly uses it.
-    encryption = types.ModuleType('helper.encryption_helper')
-    encryption.encrypt_decrypt_string = forbidden
-    encryption.is_encrypted = forbidden
+    # Encryption imports are now side-effect-free and tested independently.
     with tempfile.TemporaryDirectory() as folder, contextlib.ExitStack() as stack:
         previous = Path.cwd()
         stack.callback(os.chdir, previous)
         os.chdir(folder)
         stack.enter_context(freeze_time('2026-07-15 12:00:00'))
-        stack.enter_context(patch.dict(sys.modules, {'pyodbc': driver, 'helper.encryption_helper': encryption}))
+        stack.enter_context(patch.dict(sys.modules, {'pyodbc': driver}))
         stack.enter_context(patch.dict(os.environ, {'JM_BASE_URL': 'https://fixture.invalid'}))
         stack.enter_context(patch.object(socket.socket, 'connect', forbidden))
         stack.enter_context(patch('time.sleep'))
