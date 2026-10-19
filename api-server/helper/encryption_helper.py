@@ -231,7 +231,7 @@ def encrypted_key_id(value):
     if isinstance(value, str) and value.startswith(_VERSION + ":"):
         sections = value.split(":", 2)
         if len(sections) != 3:
-            raise ValueError("Malformed ciphertext envelope")
+            return None  # Older authenticated v2 envelopes did not carry a key ID.
         return sections[1]
     return None
 
@@ -267,6 +267,30 @@ def _read_external(reference):
     if len(content) > 1000000 or not content.startswith("v2:"):
         raise ValueError("Invalid external ciphertext")
     return content
+
+
+def _decrypt_v2_legacy(value, ring):
+    """Read two-part authenticated GCM values produced by the earlier dashboard.
+
+    Older v2 envelopes have no key ID and did not authenticate associated data.
+    Try retained keys; GCM verification, not guessing, selects the correct key.
+    New encryption always writes a key-ID-bound three-part v2 envelope.
+    """
+    try:
+        packed = base64.b64decode(value[len(_VERSION) + 1:], validate=True)
+    except (ValueError, binascii.Error) as exc:
+        raise ValueError("Malformed legacy GCM envelope") from exc
+    if len(packed) < _NONCE_SIZE + _TAG_SIZE:
+        raise ValueError("Truncated legacy GCM envelope")
+    nonce, tag, ciphertext = packed[:12], packed[12:28], packed[28:]
+    for item in ring["keys"]:
+        try:
+            raw = base64.b64decode(item["material"], validate=True)
+            cipher = AES.new(raw, AES.MODE_GCM, nonce=nonce)
+            return cipher.decrypt_and_verify(ciphertext, tag).decode("utf-8")
+        except (ValueError, UnicodeDecodeError):
+            continue
+    raise ValueError("Legacy authenticated GCM ciphertext requires its historical key")
 
 
 def _decrypt_v2(value, ring):
@@ -324,6 +348,8 @@ def decrypt_string(value, ring=None):
         if not plaintext.startswith(prefix):
             raise ValueError("File reference authentication failed")
         return plaintext[len(prefix):]
+    if value.startswith(_VERSION + ":") and value.count(":") == 1:
+        return _decrypt_v2_legacy(value, ring)
     if is_versioned(value):
         return _decrypt_v2(value, ring)
     return _decrypt_legacy(value, ring)
