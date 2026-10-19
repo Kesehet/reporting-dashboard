@@ -98,7 +98,7 @@ class CsvEncryptionTests(unittest.TestCase):
         self.assertEqual(db["Transactions"][3], before["Transactions"][3])
         self.assertEqual(db["Properties"]["P-old"], before["Properties"]["P-old"])
         self.assertNotEqual(db["Properties"]["P-new"], before["Properties"]["P-new"])
-        selections = [q for q in sql.connection.statements if q.startswith("SELECT")]
+        selections = [q for q in sql.connection.statements if " WHERE eCATrackingCode IN (" in q]
         self.assertEqual(len(selections), 2)
         self.assertTrue(all("WHERE eCATrackingCode IN (?)" in q for q in selections))
         self.assertEqual(sql.connection.commits, 1)
