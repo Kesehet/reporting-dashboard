@@ -414,15 +414,17 @@ def get_dds_dollar_amount(acct_number, appstartdate):
 
 def encrypt_all_pii_columns(sql, txn):
     """Encrypt new plaintext only; migrate historic ciphertext separately."""
-    from helper.encryption_helper import decrypt_string, is_versioned
+    from helper.encryption_helper import decrypt_string, encrypt_string
+    from helper.crypto_rotation import _column_lengths
     for table_name, primary_key in (("[DigitalReport].[dbo].[Transactions]", "tId"),
                                     ("[DigitalReport].[dbo].[Properties]", "eCATrackingCode")):
         cursor = sql.connection.cursor()
         cursor.execute("SELECT " + primary_key + ", PrimaryName, PrimarySSN FROM " + table_name)
         rows = cursor.fetchall()
+        limits = _column_lengths(cursor, table_name.split("].[")[-1].rstrip("]"))
         for row_id, primary_name, primary_ssn in rows:
             updated = []
-            for value in (primary_name, primary_ssn):
+            for column, value in zip(("PrimaryName", "PrimarySSN"), (primary_name, primary_ssn)):
                 if value is None or value == "":
                     updated.append(value)
                 elif is_encrypted(value):
@@ -430,7 +432,7 @@ def encrypt_all_pii_columns(sql, txn):
                     decrypt_string(value)
                     updated.append(value)
                 else:
-                    updated.append(encrypt_decrypt_string(str(value), mode="encrypt"))
+                    updated.append(encrypt_string(str(value), max_length=limits[column]))
             if updated != [primary_name, primary_ssn]:
                 cursor.execute(
                     "UPDATE " + table_name +
