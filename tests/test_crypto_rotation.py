@@ -332,6 +332,25 @@ class CryptoRotationTests(unittest.TestCase):
                 rot._rollback("d" * 32)
         self.assertEqual(db["Transactions"][1][0], current)
 
+    def test_backward_compatible_two_part_gcm_from_merged_decryption_tab(self):
+        legacy_key = bytes(range(32))
+        key_dir = Path(self.tmp.name) / "import"
+        key_dir.mkdir()
+        (key_dir / "previous-dashboard.key").write_text(base64.b64encode(legacy_key).decode())
+        cipher = AES.new(legacy_key, AES.MODE_GCM, nonce=b"N" * 12)
+        encoded, tag = cipher.encrypt_and_digest("old dashboard text".encode())
+        prior = "v2:" + base64.b64encode(cipher.nonce + tag + encoded).decode()
+        crypto.key_rotation()
+        self.assertEqual(crypto.decrypt_string(prior), "old dashboard text")
+        self.assertIsNone(crypto.encrypted_key_id(prior))
+        db = {"Transactions": {1: [prior, None]}, "Properties": {}}
+        with mock.patch.object(rot, "_connection", side_effect=lambda: FakeSQL(db)):
+            self.assertTrue(rot.inspect_database()["ready"])
+            rot._migrate("e" * 32)
+        self.assertEqual(rot._status()["state"], "completed")
+        self.assertNotEqual(db["Transactions"][1][0], prior)
+        self.assertEqual(crypto.decrypt_string(db["Transactions"][1][0]), "old dashboard text")
+
     def test_keyring_history_survives_multiple_rotations(self):
         for _ in range(4):
             crypto.key_rotation()
