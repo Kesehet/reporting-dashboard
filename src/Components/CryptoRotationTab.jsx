@@ -86,9 +86,7 @@ export default function CryptoRotationTab() {
   return (
     <main className="crypto-page" aria-label="Encryption administration">
       <header className="crypto-hero">
-        <span className="crypto-eyebrow">ADMINISTRATION / ENCRYPTION</span>
-        <h1>Encryption &amp; Key Rotation</h1>
-        <p>Decrypt values, inspect saved keys, and manage PII migration.</p>
+        <h1>Key Rotation</h1>
       </header>
 
       <section className="crypto-panel" aria-label="Administrator access">
@@ -110,7 +108,7 @@ export default function CryptoRotationTab() {
 
       <div className="crypto-columns">
         <section className="crypto-panel" aria-label="Decrypt encrypted string">
-          <div className="crypto-panel-title"><div><h2>Decrypt string</h2><p>Uses the matching historical key, if available. No plaintext is logged or saved.</p></div></div>
+          <div className="crypto-panel-title"><div><h2>Decrypt string</h2></div></div>
           <label htmlFor="crypto-ciphertext">Encrypted value</label>
           <textarea id="crypto-ciphertext" rows="5" value={ciphertext} spellCheck="false"
             onChange={(e) => { setCiphertext(e.target.value); setPlaintext(''); setReveal(false); }}
@@ -130,7 +128,7 @@ export default function CryptoRotationTab() {
         </section>
 
         <section className="crypto-panel" aria-label="Historical keyring">
-          <div className="crypto-panel-title"><div><h2>Historical keyring</h2><p>All imported keys remain available for older records.</p></div></div>
+          <div className="crypto-panel-title"><div><h2>Historical keys</h2></div></div>
           <div className="crypto-metrics">
             <div><span>Stored keys</span><strong>{keyring?.keys?.length ?? '—'}</strong></div>
             <div><span>Current key</span><strong className="crypto-small">{keyring?.current_id || 'Not created'}</strong></div>
@@ -143,24 +141,18 @@ export default function CryptoRotationTab() {
               </div>
             ))}
           </div>
-          <p className="crypto-help">Secrets are not returned to the browser. Import older key files on the server before migration.</p>
+          
           <button type="button" disabled={blocked || !status || confirmation !== 'CREATE_GCM_KEY'}
             onClick={() => action('key', '/keys/rotate', { confirm: confirmation }, { message: 'New GCM key archived and activated. Historical keys retained.' })}>
-            Create &amp; activate new GCM key
+            Create new GCM key
           </button>
         </section>
       </div>
 
       <section className="crypto-panel" aria-label="Migration control">
         <div className="crypto-panel-title">
-          <div><h2>Production migration</h2><p>Migrations check column capacity and keep an encrypted recovery journal.</p></div>
+          <div><h2>Key Rotation</h2></div>
           <span className="crypto-pill" data-testid="crypto-job-state">{job?.state || 'Not started'}</span>
-        </div>
-        <div className="crypto-steps">
-          <div><span className="crypto-step">01</span><strong>Prepare</strong><p>Preserve keyring backups and pause competing ETL writers.</p></div>
-          <div><span className="crypto-step">02</span><strong>Preflight</strong><p>Decrypt every value, validate existing column widths, and identify failures.</p></div>
-          <div><span className="crypto-step">03</span><strong>Migrate</strong><p>Re-encrypt in one transaction, verify and securely journal originals.</p></div>
-          <div><span className="crypto-step">04</span><strong>Verify / restore</strong><p>Review results and retain rollback files.</p></div>
         </div>
         <div className="crypto-metrics">
           <div><span>Rows scanned</span><strong>{job?.processed ?? 0}</strong></div>
@@ -169,24 +161,24 @@ export default function CryptoRotationTab() {
         </div>
         {job?.run_id && <p className="crypto-help">Recovery run ID: <code>{job.run_id}</code></p>}
         {preflight && <div role="status" className="crypto-help"><p>Preflight: {preflight.scanned} rows scanned, {preflight.values_to_rotate} values to rotate, {preflight.failures} failures.</p>{(preflight.examples || []).map((example, idx) => <p key={idx}>{example.table} / {example.column}: {example.error}</p>)}</div>}
-        <label htmlFor="crypto-confirm">Type the exact confirmation required for your next action</label>
+        <label htmlFor="crypto-confirm">Confirmation</label>
         <input id="crypto-confirm" type="text" autoComplete="off" spellCheck="false"
           value={confirmation} onChange={(e) => setConfirmation(e.target.value)}
           placeholder="CREATE_GCM_KEY · MIGRATE_PII · RESTORE_ORIGINAL" />
         <div className="crypto-actions">
           <button type="button" disabled={blocked || !status} onClick={() => action('preflight', '/preflight', {})}>
-            {busy === 'preflight' ? 'Checking…' : 'Run read-only preflight'}
+            {busy === 'preflight' ? 'Checking…' : 'Check compatibility'}
           </button>
           <button type="button" disabled={blocked || !preflight?.ready || confirmation !== 'MIGRATE_PII'} onClick={() => action('migration', '/start', { confirm: confirmation })}>
-            Start checked migration
+            Migrate now
           </button>
           <button type="button" className="crypto-danger"
             disabled={blocked || confirmation !== 'RESTORE_ORIGINAL' || !job?.run_id || !['completed', 'reconciliation_required', 'restore_failed'].includes(job?.state)}
             onClick={() => action('rollback', '/rollback', { run_id: job.run_id, confirm: confirmation })}>
-            Restore original ciphertext
+            Restore previous encryption
           </button>
         </div>
-        <p className="crypto-help">Preflight is read-only. Pause other database writers before migration. Missing keys, invalid ciphertext, oversized values, and concurrent updates block the operation.</p>
+        
       </section>
     </main>
   );
