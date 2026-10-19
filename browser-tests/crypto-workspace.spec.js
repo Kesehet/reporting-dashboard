@@ -46,8 +46,8 @@ async function openTab(page, width) {
   // Wait for its existing 1-second initialization timers before selecting a tab.
   await page.waitForTimeout(1300);
   if (width < 800) await page.locator('.report-sidebar > button').first().click();
-  await page.getByRole('button', { name: 'Crypto & Key Rotation', exact: true }).click();
-  await expect(page.getByRole('heading', { name: 'Encryption & Key Rotation' })).toBeVisible();
+  await page.getByRole('button', { name: 'Key Rotation', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Key Rotation' })).toBeVisible();
   console.log('CRYPTO_PAGE_URL', page.url());
 }
 
@@ -84,7 +84,7 @@ for (const width of [375, 768, 1440]) {
 
 test('real browser: decrypt is masked; preflight must run before migrate', async ({ page }) => {
   await openTab(page, 1280);
-  await expect(page.getByRole('button', { name: 'Start checked migration' })).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'Migrate now' })).toBeDisabled();
   const tokenInput = page.getByLabel('Administrator token');
   await tokenInput.fill('A'.repeat(36));
   await expect(page.getByText('Connected')).toBeVisible();
@@ -95,12 +95,12 @@ test('real browser: decrypt is masked; preflight must run before migrate', async
   await expect(page.getByLabel('Decryption result')).toHaveText('SYNTHETIC_SECRET_123');
   await page.getByLabel('Encrypted value').fill('new-value');
   await expect(page.getByLabel('Decryption result')).toHaveCount(0);
-  await page.getByRole('button', { name: 'Run read-only preflight' }).click();
+  await page.getByRole('button', { name: 'Check compatibility' }).click();
   await expect(page.getByText(/125 rows scanned/)).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Start checked migration' })).toBeDisabled();
-  await page.getByLabel(/Type the exact confirmation required/).fill('MIGRATE_PII');
-  await expect(page.getByRole('button', { name: 'Start checked migration' })).toBeEnabled();
-  await page.getByRole('button', { name: 'Start checked migration' }).click();
+  await expect(page.getByRole('button', { name: 'Migrate now' })).toBeDisabled();
+  await page.getByLabel(/Confirmation/).fill('MIGRATE_PII');
+  await expect(page.getByRole('button', { name: 'Migrate now' })).toBeEnabled();
+  await page.getByRole('button', { name: 'Migrate now' }).click();
   await expect(page.getByTestId('crypto-job-state')).toHaveText('starting');
   await page.getByRole('button', { name: 'Clear session' }).click();
   await expect(tokenInput).toHaveValue('');
