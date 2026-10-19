@@ -105,7 +105,7 @@ const SidebarLayout = ({ items, mainContent, pageToShow }) => {
                       }}
                       style={{ textAlign: 'left', padding: '12px 16px', fontSize: '14px' }}
                     >
-                      {item.icon && <i aria-hidden="true" aria-hidden="true"
+                      {item.icon && <i aria-hidden="true"
  className={`pi ${item.icon}`} style={{ marginRight: '8px' }}></i>}
                       {item.render ? item.template() : item.label}
                     </button>

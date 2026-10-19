@@ -1,10 +1,7 @@
-"""Administrator-only PII key-rotation API.
+"""PII migration endpoints and encrypted recovery journaling.
 
-All SQL work happens in ONE explicit transaction. Any failure calls rollback;
-process termination before commit causes SQL Server to abort the open transaction.
-Every changed row is backed up as authenticated ciphertext in a private file,
-durably fsynced BEFORE committing, enabling a later explicit, conditional revert.
-No DDL, new SQL tables, or SQL schema changes are performed.
+Migration updates existing columns in one SQL transaction. Recovery snapshots
+are synced to disk before commit; post-commit recovery requires reconciliation.
 """
 import hashlib
 import hmac
