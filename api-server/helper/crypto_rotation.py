@@ -126,6 +126,8 @@ def _converted(value, current_id):
 
 def inspect_database():
     """Full dry-run: decrypt EVERY value and check column widths, no writes."""
+    from helper.encryption_helper import verify_legacy_probe
+    verify_legacy_probe()
     current_id = get_keyring().get("current_id")
     if not current_id:
         return {"ready": False, "reason": "Create an active GCM key first", "scanned": 0}
@@ -201,6 +203,7 @@ def _migrate(run_id):
               "processed": 0, "updated": 0}
     _write_status(status)
     sql = None
+    committed = False
     try:
         # Recheck the entire dataset immediately before writing.
         preflight = inspect_database()
@@ -246,13 +249,15 @@ def _migrate(run_id):
                        "backup_rows": status["updated"], "backup_run_id": run_id})
         _write_status(status)
         sql.connection.commit()
+        committed = True
         status.update({"state": "completed", "finished_at": _now()})
         _write_status(status)
     except Exception:
-        if sql is not None:
+        if sql is not None and not committed:
             sql.connection.rollback()
-        status.update({"state": "failed", "finished_at": _now(),
-                       "error": "Migration aborted; SQL transaction rolled back"})
+        status.update({"state": "reconciliation_required" if committed else "failed",
+                       "finished_at": _now(),
+                       "error": "Commit outcome requires review" if committed else "Migration aborted; SQL transaction rolled back"})
         _write_status(status)
     finally:
         if sql is not None:
@@ -298,7 +303,8 @@ def _async_runner(run_id, action):
         _locked_run(run_id, action)
     except Exception:
         old = _status()
-        old.update({"state": "failed", "error": "Migration could not acquire lock or complete"})
+        old.update({"state": "reconciliation_required",
+                    "error": "Migration or recovery operation needs investigation; no overwrite attempted"})
         _write_status(old)
     finally:
         with _active_lock:
@@ -320,7 +326,7 @@ def _launch(run_id, action):
 def status_api():
     job = _status()
     # Never claim success for a crashed or unknown post-commit state.
-    if job.get("state") in ("running", "committing") and not _active:
+    if job.get("state") in ("running", "committing") and not _active and not (_root() / "migration.lock").exists():
         job["state"] = "reconciliation_required"
     return jsonify({"keyring": key_metadata(), "job": job})
 
@@ -355,7 +361,7 @@ def preflight_api():
         return jsonify({"error": "Migration already running"}), 409
     try:
         report = inspect_database()
-        return jsonify(report), 200 if report["ready"] else 409
+        return jsonify(report), 200
     except Exception:
         return jsonify({"ready": False, "error": "Preflight failed; check DB and key configuration"}), 503
 
