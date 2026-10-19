@@ -16,12 +16,6 @@ const fakeStatus = {
 async function mockBackend(page) {
   await page.route('**/api/crypto/**', async route => {
     const path = new URL(route.request().url()).pathname;
-    console.log('CRYPTO_MOCK', route.request().method(), path, 'authorized=', route.request().headers()['x-crypto-admin-token'] === 'A'.repeat(36));
-    const authed = route.request().headers()['x-crypto-admin-token'] === 'A'.repeat(36);
-    if (!authed) {
-      return route.fulfill({ status: 403, contentType: 'application/json',
-        body: JSON.stringify({ error: 'Administrator authorization required' }) });
-    }
     let payload;
     if (path.endsWith('/status')) payload = fakeStatus;
     else if (path.endsWith('/preflight')) {
@@ -73,8 +67,8 @@ for (const width of [375, 768, 1440]) {
       expect(rect.right).toBeLessThanOrEqual(result.viewport + 2);
       expect(rect.width).toBeGreaterThan(170);
     }
-    await page.getByLabel('Administrator token').fill('A'.repeat(36));
-    await expect(page.getByText('Connected')).toBeVisible();
+    await expect(page.getByText('synthetic-old-key-id')).toBeVisible();
+    await expect(page.getByLabel('Administrator token')).toHaveCount(0);
     await expect(page.getByText('synthetic-old-key-id')).toBeVisible();
     const location = path.join(__dirname, 'screenshots', 'crypto-' + width + '.png');
     fs.mkdirSync(path.dirname(location), { recursive: true });
@@ -85,9 +79,8 @@ for (const width of [375, 768, 1440]) {
 test('real browser: scoped key rotation and preflight before migrate', async ({ page }) => {
   await openTab(page, 1280);
   await expect(page.getByRole('button', { name: 'Migrate now' })).toBeDisabled();
-  const tokenInput = page.getByLabel('Administrator token');
-  await tokenInput.fill('A'.repeat(36));
-  await expect(page.getByText('Connected')).toBeVisible();
+  await expect(page.getByText('synthetic-old-key-id')).toBeVisible();
+  await expect(page.getByLabel('Administrator token')).toHaveCount(0);
   await expect(page.getByRole('heading', { name: 'Decrypt string' })).toHaveCount(0);
   await expect(page.getByLabel('Encrypted value')).toHaveCount(0);
   await page.getByRole('button', { name: 'Check compatibility' }).click();
@@ -98,6 +91,5 @@ test('real browser: scoped key rotation and preflight before migrate', async ({ 
   await expect(page.getByRole('button', { name: 'Migrate now' })).toBeEnabled();
   await page.getByRole('button', { name: 'Migrate now' }).click();
   await expect(page.getByTestId('crypto-job-state')).toHaveText('starting');
-  await page.getByRole('button', { name: 'Clear session' }).click();
-  await expect(tokenInput).toHaveValue('');
+  await expect(page.getByRole('button', { name: 'Refresh status' })).toBeEnabled();
 });
