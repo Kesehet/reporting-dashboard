@@ -26,7 +26,7 @@ jobs:
       - name: Install Python test dependencies
         run: python -m pip install Flask==3.0.3 pycryptodome==3.20.0
       - name: AES-GCM and restricted API regression tests
-        run: python -m unittest discover -s tests -p 'test_decryption.py' -v
+        run: python -m unittest discover -s tests/decryption -p 'test_decryption.py' -v
       - name: Install JavaScript dependencies
         run: npm ci --no-audit --no-fund
       - name: UI, navigation, and HTTP contract tests

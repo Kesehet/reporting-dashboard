@@ -7,7 +7,7 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "api-server"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "api-server"))
 
 from flask import Flask
 from helper import encryption_helper as crypto

@@ -26,6 +26,6 @@ Neither key file is auto-generated during imports or startup, preventing acciden
 
 ## Tests and CI
 
-- `python -m unittest discover -s tests -p 'test_decryption.py' -v`
+- `python -m unittest discover -s tests/decryption -p 'test_decryption.py' -v`
 - `npm run test:nocov -- --runInBand --testPathPattern=Decryption`
 - `.github/workflows/decryption.yml` runs backend tests, frontend tests, and production build.
