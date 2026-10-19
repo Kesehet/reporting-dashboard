@@ -374,9 +374,14 @@ def _launch(run_id, action, kind="migration"):
 @crypto_api.get("/status")
 def status_api():
     job = _status()
-    # Never claim success for a crashed or unknown post-commit state.
-    if job.get("state") in ("starting", "running", "committing", "restoring") and not _active and not (_root() / "migration.lock").exists():
-        job["state"] = "reconciliation_required"
+    if job.get("state") in ("starting", "running", "committing", "restoring"):
+        # Re-read under the worker lock. A worker may have finished between
+        # reading the status file and checking whether it is still active.
+        with _active_lock:
+            if not _active and not (_root() / "migration.lock").exists():
+                job = _status()
+                if job.get("state") in ("starting", "running", "committing", "restoring"):
+                    job["state"] = "reconciliation_required"
     return jsonify({"keyring": key_metadata(), "job": job})
 
 

@@ -252,6 +252,31 @@ class EncryptionHttpFlow(unittest.TestCase):
         self.assertEqual(self.db, changed)
         self.assert_no_ddl()
 
+    def test_status_does_not_misreport_a_completed_restore_as_uncertain(self):
+        self.activate()
+        # The worker can complete after the first file read but before the
+        # status endpoint checks whether the worker is still active.
+        pending = {"state": "restoring", "run_id": "a" * 32}
+        finished = {"state": "restore_failed", "run_id": "a" * 32}
+        with mock.patch.object(rot, "_active", False), mock.patch.object(
+            rot, "_status", side_effect=[pending, finished]
+        ) as read_status:
+            code, response = self.api("GET", "/status")
+        self.assertEqual(code, 200)
+        self.assertEqual(response["job"]["state"], "restore_failed")
+        self.assertEqual(read_status.call_count, 2)
+
+    def test_status_flags_a_stale_running_operation_for_reconciliation(self):
+        self.activate()
+        stale = {"state": "restoring", "run_id": "a" * 32}
+        with mock.patch.object(rot, "_active", False), mock.patch.object(
+            rot, "_status", return_value=stale
+        ) as read_status:
+            code, response = self.api("GET", "/status")
+        self.assertEqual(code, 200)
+        self.assertEqual(response["job"]["state"], "reconciliation_required")
+        self.assertEqual(read_status.call_count, 2)
+
     def test_sql_commit_timeout_is_reconciliation_not_false_rollback(self):
         self.activate()
         original = FakeConnection.commit
