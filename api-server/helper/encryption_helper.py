@@ -1,137 +1,110 @@
-import os
+"""Encryption at rest for PII. Keep key files on the server, never in the UI.
+
+v2 stores the random AES-GCM nonce and authentication tag with the ciphertext.
+Older unversioned values written by this project's former AES-GCM helper omitted
+both nonce and tag; they cannot be recovered from the ciphertext and key alone.
+"""
 import base64
+import binascii
+import os
 import secrets
+
 from Crypto.Cipher import AES
 
 CURRENT_KEY_FILE = "enc.key"
 OLD_KEY_FILE = "old_enc.key"
+PREFIX = "v2:"
+NONCE_SIZE = 12
+TAG_SIZE = 16
 
 
 def load_key(key_file=CURRENT_KEY_FILE):
-    """
-    Load key from file.
-    Key file contains a base64 encoded 32-byte key.
-    """
-    with open(key_file, "r") as f:
-        return base64.b64decode(f.read().strip())
+    """Load a base64-encoded AES-256 key from a server-side file."""
+    with open(key_file, "r", encoding="ascii") as handle:
+        data = handle.read().strip()
+    try:
+        key = base64.b64decode(data, validate=True)
+    except (ValueError, binascii.Error) as exc:
+        raise ValueError("Invalid key file") from exc
+    if len(key) != 32:
+        raise ValueError("Encryption key must contain 32 bytes")
+    return key
 
 
 def save_key(key_bytes, key_file):
-    with open(key_file, "w") as f:
-        f.write(base64.b64encode(key_bytes).decode("utf-8"))
+    if len(key_bytes) != 32:
+        raise ValueError("Encryption key must contain 32 bytes")
+    # Only used for explicitly requested key provisioning/rotation.
+    with open(key_file, "w", encoding="ascii") as handle:
+        handle.write(base64.b64encode(key_bytes).decode("ascii"))
 
 
 def key_rotation():
-    """
-    Move current enc.key to old_enc.key and create a new enc.key.
-    """
+    """Retain the previous key for decrypting v2 values during rotation."""
     if os.path.exists(CURRENT_KEY_FILE):
-        with open(CURRENT_KEY_FILE, "r") as src:
-            current_key = src.read()
-
-        with open(OLD_KEY_FILE, "w") as dst:
-            dst.write(current_key)
-
-    new_key = secrets.token_bytes(32)
-    save_key(new_key, CURRENT_KEY_FILE)
+        with open(CURRENT_KEY_FILE, "rb") as source:
+            current_key = source.read()
+        with open(OLD_KEY_FILE, "wb") as target:
+            target.write(current_key)
+    save_key(secrets.token_bytes(32), CURRENT_KEY_FILE)
 
 
 def _decrypt_with_key(encoded_value, key):
-    cipher = AES.new(key, AES.MODE_GCM)
+    if not isinstance(encoded_value, str) or not encoded_value.startswith(PREFIX):
+        raise ValueError("Unsupported ciphertext format")
+    try:
+        raw = base64.b64decode(encoded_value[len(PREFIX):], validate=True)
+    except (ValueError, binascii.Error) as exc:
+        raise ValueError("Invalid ciphertext encoding") from exc
 
-    decoded = base64.b64decode(encoded_value)
-    decrypted = cipher.decrypt(decoded)
-
-    padding_length = decrypted[-1]
-
-    if padding_length < 1 or padding_length > AES.block_size:
-        raise ValueError("Invalid padding")
-
-    if decrypted[-padding_length:] != bytes([padding_length]) * padding_length:
-        raise ValueError("Invalid padding")
-
-    return decrypted[:-padding_length].decode("utf-8")
+    if len(raw) < NONCE_SIZE + TAG_SIZE:
+        raise ValueError("Invalid ciphertext length")
+    nonce = raw[:NONCE_SIZE]
+    tag = raw[NONCE_SIZE:NONCE_SIZE + TAG_SIZE]
+    ciphertext = raw[NONCE_SIZE + TAG_SIZE:]
+    cipher = AES.new(key, AES.MODE_GCM, nonce=nonce)
+    return cipher.decrypt_and_verify(ciphertext, tag).decode("utf-8")
 
 
 def is_encrypted(value):
+    """Conservatively protect stored ciphertext from a second encryption pass.
+
+    The v2 prefix identifies new ciphertext. Legacy base64 AES-block-sized
+    values are treated as encrypted *without* claiming they can be decrypted.
+    This is intentional: the old format has no nonce or authentication tag.
+    """
     if not isinstance(value, str) or not value:
         return False
-
+    if value.startswith(PREFIX):
+        return True
     try:
         decoded = base64.b64decode(value, validate=True)
-
-        if not decoded or len(decoded) % AES.block_size != 0:
-            return False
-
-        keys_to_try = []
-
-        if os.path.exists(CURRENT_KEY_FILE):
-            keys_to_try.append(load_key(CURRENT_KEY_FILE))
-
-        if os.path.exists(OLD_KEY_FILE):
-            keys_to_try.append(load_key(OLD_KEY_FILE))
-
-        for key in keys_to_try:
-            try:
-                _decrypt_with_key(value, key)
-                return True
-            except Exception:
-                pass
-
-        return False
-
-    except Exception:
+        return bool(decoded) and len(decoded) % AES.block_size == 0
+    except (ValueError, binascii.Error):
         return False
 
 
 def encrypt_decrypt_string(input_string, mode="encrypt"):
+    if not isinstance(input_string, str):
+        raise ValueError("Input must be a string")
+
     if mode == "encrypt":
         key = load_key(CURRENT_KEY_FILE)
+        cipher = AES.new(key, AES.MODE_GCM, nonce=secrets.token_bytes(NONCE_SIZE))
+        ciphertext, tag = cipher.encrypt_and_digest(input_string.encode("utf-8"))
+        return PREFIX + base64.b64encode(cipher.nonce + tag + ciphertext).decode("ascii")
 
-        cipher = AES.new(key, AES.MODE_GCM)
-
-        padding_len = AES.block_size - (len(input_string.encode("utf-8")) % AES.block_size)
-
-        padded = input_string + chr(padding_len) * padding_len
-
-        encrypted = cipher.encrypt(padded.encode("utf-8"))
-
-        return base64.b64encode(encrypted).decode("utf-8")
-
-    elif mode == "decrypt":
-
-        keys_to_try = []
-
-        if os.path.exists(CURRENT_KEY_FILE):
-            keys_to_try.append(load_key(CURRENT_KEY_FILE))
-
-        if os.path.exists(OLD_KEY_FILE):
-            keys_to_try.append(load_key(OLD_KEY_FILE))
-
-        for key in keys_to_try:
+    if mode == "decrypt":
+        if not input_string.startswith(PREFIX):
+            raise ValueError("Unsupported legacy ciphertext (missing AES-GCM nonce/tag)")
+        for key_file in (CURRENT_KEY_FILE, OLD_KEY_FILE):
+            if not os.path.exists(key_file):
+                continue
+            key = load_key(key_file)
             try:
                 return _decrypt_with_key(input_string, key)
-            except Exception:
-                pass
-
+            except (ValueError, UnicodeDecodeError):
+                continue
         raise ValueError("Unable to decrypt with current or previous key")
 
-    else:
-        raise ValueError("Mode must be 'encrypt' or 'decrypt'")
-
-
-
-
-
-if not os.path.exists(CURRENT_KEY_FILE):
-    save_key(secrets.token_bytes(32), CURRENT_KEY_FILE)
-
-encrypted = encrypt_decrypt_string("hello world", "encrypt")
-print(f"Encrypted: {encrypted}")
-
-print(f"Is Encrypted: {is_encrypted(encrypted)}")
-
-decrypted = encrypt_decrypt_string(encrypted, "decrypt")
-print(f"Decrypted: {decrypted}")
-
-print(f"Is Decrypted Value Encrypted: {is_encrypted(decrypted)}")
+    raise ValueError("Mode must be 'encrypt' or 'decrypt'")
