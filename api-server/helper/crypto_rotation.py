@@ -196,15 +196,10 @@ def _compare_update(cursor, table, pk, identity, before, after):
         raise RuntimeError("Concurrent row modification detected; rolling back")
 
 
-def _locked_run(run_id, operation):
-    """OS-level exclusive migration lock across Flask workers."""
-    # An O_EXCL lock prevents competing workers; never override a stale lock
-    # automatically. Crash recovery uses SQL's transaction rollback.
+def _locked_run(run_id, operation, fd):
+    """Run with the interprocess lock acquired before the HTTP request returns."""
     lock_path = _root() / "migration.lock"
-    fd = os.open(str(lock_path), os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
     try:
-        os.write(fd, run_id.encode("ascii"))
-        os.fsync(fd)
         return operation()
     finally:
         os.close(fd)
@@ -327,14 +322,14 @@ def _rollback(run_id):
         sql.disconnect()
 
 
-def _async_runner(run_id, action):
+def _async_runner(run_id, action, fd):
     global _active
     try:
-        _locked_run(run_id, action)
+        _locked_run(run_id, action, fd)
     except Exception:
         old = _status()
         old.update({"state": "reconciliation_required",
-                    "error": "Migration or recovery operation needs investigation; no overwrite attempted"})
+                    "error": "Migration or recovery operation requires investigation"})
         _write_status(old)
     finally:
         with _active_lock:
@@ -344,11 +339,25 @@ def _async_runner(run_id, action):
 def _launch(run_id, action):
     global _active
     with _active_lock:
-        if _active or (_root() / "migration.lock").exists():
+        if _active:
             return False
-        _active = True
-    threading.Thread(target=_async_runner, args=(run_id, action),
-                     daemon=True, name="pii-rotation").start()
+        try:
+            # Do this synchronously; two HTTP workers cannot both get a lease.
+            fd = os.open(str(_root() / "migration.lock"),
+                         os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+        except FileExistsError:
+            return False
+        try:
+            os.write(fd, run_id.encode("ascii"))
+            os.fsync(fd)
+            _active = True
+            threading.Thread(target=_async_runner, args=(run_id, action, fd),
+                             daemon=True, name="pii-rotation").start()
+        except Exception:
+            _active = False
+            os.close(fd)
+            (_root() / "migration.lock").unlink(missing_ok=True)
+            raise
     return True
 
 
