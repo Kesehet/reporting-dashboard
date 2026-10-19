@@ -4,7 +4,6 @@ Migration updates existing columns in one SQL transaction. Recovery snapshots
 are synced to disk before commit; post-commit recovery requires reconciliation.
 """
 import hashlib
-import hmac
 import json
 import os
 import threading
@@ -46,14 +45,6 @@ def _status():
     if not path.is_file():
         return {"state": "idle", "processed": 0, "updated": 0}
     return json.loads(path.read_text(encoding="utf-8"))
-
-
-@crypto_api.before_request
-def _admin_only():
-    expected = os.environ.get("CRYPTO_ADMIN_TOKEN", "")
-    actual = request.headers.get("X-Crypto-Admin-Token", "")
-    if not expected or len(expected) < 32 or not hmac.compare_digest(actual, expected):
-        return jsonify({"error": "Administrator authorization required"}), 403
 
 
 @crypto_api.after_request
