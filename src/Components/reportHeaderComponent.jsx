@@ -123,6 +123,12 @@ const ReportHeaderComponent = ( dates, setDates, CorBFilter, setCorBFilter, setP
                     section: "Document Center",
                 },
                 {
+                    label: 'Business String Decryption',
+                    icon: 'pi pi-lock',
+                    command: () => setPage('Business String Decryption'),
+                    section: "Tools",
+                },
+                {
                     label: 'CSV Loader Reports',
                     icon: 'pi pi-file-excel',
                     command: () => {
