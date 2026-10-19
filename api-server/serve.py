@@ -31,6 +31,8 @@ load_dotenv()
 
 app = Flask(__name__)
 CORS(app)
+from helper.crypto_rotation import crypto_api
+app.register_blueprint(crypto_api)
 CSV_FOLDER_REPORT = 'uploads/report'
 CSV_FOLDER_REPORTS = 'uploads/reports'
 
