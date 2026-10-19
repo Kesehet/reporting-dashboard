@@ -1,11 +1,7 @@
-"""Operator-only string decryption route.
+"""String decryption using server-side historical keys.
 
-The existing reporting dashboard has no active session-auth middleware. This
-sensitive endpoint therefore requires a separate, long random access token.
-It never accepts an encryption key from the browser.
+Key material never leaves the backend. Responses are not cached.
 """
-import hmac
-import os
 
 from flask import Blueprint, jsonify, request
 
@@ -25,25 +21,6 @@ def prevent_sensitive_caching(response):
 
 @decrypt_tools.route("/tools/decrypt", methods=["POST"])
 def decrypt_string():
-    expected = os.getenv("DECRYPT_TOOL_API_KEY", "")
-    if len(expected) < 32:
-        return jsonify(error="Decryption tool is not configured."), 503
-
-    supplied = request.headers.get("X-Decrypt-Access-Key", "")
-    if not supplied or not hmac.compare_digest(supplied, expected):
-        return jsonify(error="Access denied."), 403
-
-    # Only permit same-origin requests, or explicitly configured dashboard
-    # origins. This also protects installations with permissive global CORS.
-    origin = request.headers.get("Origin")
-    allowed = {
-        item.strip().rstrip("/")
-        for item in os.getenv("DECRYPT_TOOL_ALLOWED_ORIGINS", "").split(",")
-        if item.strip()
-    }
-    if origin and origin.rstrip("/") not in allowed | {request.host_url.rstrip("/")}:
-        return jsonify(error="Origin not allowed."), 403
-
     data = request.get_json(silent=True)
     if not isinstance(data, dict):
         return jsonify(error="A JSON object is required."), 400
