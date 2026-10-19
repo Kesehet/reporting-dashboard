@@ -27,6 +27,18 @@ describe('CryptoRotationTab', () => {
     cryptoRequest.mockImplementation(async (path) => path === '/status' ? state : { plaintext: 'Secret customer' });
   });
 
+  it('keeps the key rotation screen compact and focused', () => {
+    render(<CryptoRotationTab />);
+    expect(screen.getByRole('heading', { level: 1, name: 'Key Rotation' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 2, name: 'Key Rotation' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Check compatibility' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Migrate now' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Restore previous encryption' })).toBeDisabled();
+    expect(screen.queryByText('Production migration')).not.toBeInTheDocument();
+    expect(screen.queryByText('Prepare')).not.toBeInTheDocument();
+    expect(screen.queryByText('Verify / restore')).not.toBeInTheDocument();
+  });
+
   it('keeps admin access in memory and hides keys', async () => {
     render(<CryptoRotationTab />);
     expect(screen.getByText(/token stays in this tab/i)).toBeInTheDocument();
