@@ -121,7 +121,13 @@ const ReportHeaderComponent = ( dates, setDates, CorBFilter, setCorBFilter, setP
                         setPage('Customer Document Center');
                     },
                     section: "Document Center",
+                },                {
+                    label: 'Crypto & Key Rotation',
+                    icon: 'pi pi-lock',
+                    command: () => setPage('Crypto & Key Rotation'),
+                    section: 'Administration',
                 },
+
                 {
                     label: 'CSV Loader Reports',
                     icon: 'pi pi-file-excel',
