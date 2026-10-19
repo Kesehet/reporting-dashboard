@@ -30,6 +30,7 @@ import TransactionLogger from './Utils/Components/TransactionLogger';
 import { Dropdown } from 'primereact/dropdown';
 import ChartDataService from './Services/ChartDataService';
 import CsvLoaderReportsTab from './Components/CsvLoaderReportsTab';
+import CryptoRotationTab from './Components/CryptoRotationTab';
 
 class PageErrorBoundary extends React.Component {
     constructor(props) {
@@ -705,6 +706,9 @@ function App() {
                         
                     </>
                 )
+            }
+            else if (page === "Crypto & Key Rotation") {
+                return <CryptoRotationTab />;
             }
             else if (page === "CSV Loader Reports") {
                 return <CsvLoaderReportsTab />;
