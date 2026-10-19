@@ -81,3 +81,8 @@ crypto-state/
 **/migration.lock
 **/backups/*.jsonl
 **/import/*.key
+
+# Inter-process lock and file-backed authenticated ciphertext
+**/keyring.lock
+**/values/*.enc
+**/backups/**
