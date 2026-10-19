@@ -61,7 +61,14 @@ export default function CryptoRotationTab() {
         setConfirmation('');
         setNotice(options.message || 'Request accepted. Refresh the job status to monitor progress.');
       }
-      await refresh();
+      if (name === 'migration' || name === 'rollback') {
+        setStatus((prev) => ({
+          ...prev,
+          job: { ...(prev?.job || {}), run_id: data.run_id, state: 'starting' },
+        }));
+      } else {
+        await refresh();
+      }
     } catch (e) {
       setError(e.message);
       if (name === 'preflight') setPreflight(null);
