@@ -1,7 +1,12 @@
 /** Sensitive API requests use an operator-entered, memory-only admin token. */
-const baseUrl = () => process.env.NODE_ENV === 'production'
-  ? (window.location.href + 'api')
-  : 'http://localhost:5000';
+const baseUrl = () => {
+  if (process.env.REACT_APP_API_SERVER_BASE_URL) {
+    return process.env.REACT_APP_API_SERVER_BASE_URL.replace(/\/$/, '');
+  }
+  if (process.env.NODE_ENV !== 'production') return 'http://localhost:5000';
+  // Resolve relative to the deployed dashboard directory, not its query or hash.
+  return new URL('api', new URL('.', window.location.href)).href.replace(/\/$/, '');
+};
 
 export async function cryptoRequest(path, token, body, signal) {
   if (!token || token.length < 32) {
