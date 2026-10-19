@@ -48,20 +48,10 @@ describe('CryptoRotationTab', () => {
     expect(screen.queryByText('Secret customer')).not.toBeInTheDocument();
   });
 
-  it('decrypts using admin API but masks plaintext until operator reveals it', async () => {
+  it('keeps manual decryption out of the key rotation screen', () => {
     render(<CryptoRotationTab />);
-    await authorize();
-    fireEvent.change(screen.getByLabelText('Encrypted value'), { target: { value: 'v2:example' } });
-    fireEvent.click(screen.getByText('Decrypt value'));
-    await waitFor(() => expect(cryptoRequest).toHaveBeenCalledWith(
-      '/decrypt', 'A'.repeat(36), { value: 'v2:example' }
-    ));
-    await waitFor(() => expect(screen.getByText('••••••••••••••••')).toBeInTheDocument());
-    expect(screen.queryByText('Secret customer')).not.toBeInTheDocument();
-    fireEvent.click(screen.getByText('Reveal'));
-    expect(screen.getByText('Secret customer')).toBeInTheDocument();
-    fireEvent.change(screen.getByLabelText('Encrypted value'), { target: { value: 'other' } });
-    expect(screen.queryByText('Secret customer')).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Decrypt string' })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Encrypted value')).not.toBeInTheDocument();
   });
 
   it('requires successful preflight and exact confirmation before migrating', async () => {
@@ -76,6 +66,7 @@ describe('CryptoRotationTab', () => {
     expect(screen.getByText('Migrate now')).toBeDisabled();
     fireEvent.click(screen.getByText('Check compatibility'));
     await waitFor(() => expect(screen.getByText(/10 rows scanned/)).toBeInTheDocument());
+    expect(screen.getByText('Rows scanned').nextElementSibling).toHaveTextContent('10');
     expect(screen.getByText('Migrate now')).toBeDisabled();
     fireEvent.change(screen.getByLabelText(/Confirmation/), { target: { value: 'MIGRATE_PII' } });
     expect(screen.getByText('Migrate now')).toBeEnabled();
