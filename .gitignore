@@ -72,3 +72,12 @@ exe_dist/
 
 # Generated backend/frontend contract comparison artifacts
 /contract-results/
+
+# Durable encryption keyring and encrypted recovery snapshots
+.crypto-state/
+crypto-state/
+**/keyring.json
+**/migration-status.json
+**/migration.lock
+**/backups/*.jsonl
+**/import/*.key
