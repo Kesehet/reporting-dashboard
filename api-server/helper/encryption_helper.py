@@ -1,137 +1,281 @@
-import os
+"""Versioned, authenticated field encryption and durable file-backed historical keys.
+
+No key is generated during import. Existing production key files and ENCRYPTION_KEY
+are imported, never deleted, and never overwritten. State is outside the web root.
+Unversioned ciphertext is decrypted ONLY with an explicitly configured legacy mode.
+"""
 import base64
+import binascii
+import hashlib
+import json
+import os
 import secrets
+import tempfile
+from datetime import datetime, timezone
+from pathlib import Path
+from threading import RLock
+
 from Crypto.Cipher import AES
 
+_VERSION = "v2"
+_NONCE_SIZE = 12
+_TAG_SIZE = 16
+_LOCK = RLock()
 CURRENT_KEY_FILE = "enc.key"
 OLD_KEY_FILE = "old_enc.key"
 
 
-def load_key(key_file=CURRENT_KEY_FILE):
-    """
-    Load key from file.
-    Key file contains a base64 encoded 32-byte key.
-    """
-    with open(key_file, "r") as f:
-        return base64.b64decode(f.read().strip())
+def _root():
+    configured = os.environ.get("CRYPTO_STATE_DIR")
+    path = Path(configured).expanduser() if configured else Path.home() / ".reporting-dashboard-crypto"
+    if not path.is_absolute():
+        raise ValueError("CRYPTO_STATE_DIR must be an absolute, private directory")
+    path.mkdir(parents=True, exist_ok=True, mode=0o700)
+    if os.name != "nt":
+        os.chmod(path, 0o700)
+    return path
 
 
-def save_key(key_bytes, key_file):
-    with open(key_file, "w") as f:
-        f.write(base64.b64encode(key_bytes).decode("utf-8"))
+def _atomic_write(path, payload):
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, temp = tempfile.mkstemp(prefix=".crypto-", dir=str(path.parent))
+    try:
+        if os.name != "nt":
+            os.fchmod(fd, 0o600)
+        with os.fdopen(fd, "w", encoding="utf-8") as output:
+            output.write(payload)
+            output.flush()
+            os.fsync(output.fileno())
+        os.replace(temp, path)
+        if os.name != "nt":
+            os.chmod(path, 0o600)
+        if hasattr(os, "O_DIRECTORY"):
+            dfd = os.open(str(path.parent), os.O_RDONLY | os.O_DIRECTORY)
+            try:
+                os.fsync(dfd)
+            finally:
+                os.close(dfd)
+    finally:
+        if os.path.exists(temp):
+            os.unlink(temp)
+
+
+def _decode_key(value):
+    value = value.strip()
+    if value.startswith("hex:"):
+        raw = bytes.fromhex(value[4:])
+    elif value.startswith("raw:"):
+        raw = value[4:].encode("utf-8")
+    else:
+        try:
+            raw = base64.b64decode(value, validate=True)
+        except (ValueError, binascii.Error):
+            raw = value.encode("utf-8")
+    if len(raw) not in (16, 24, 32):
+        raise ValueError("Legacy key must be a 16-, 24-, or 32-byte AES key")
+    return raw
+
+
+def _key_id(raw):
+    return hashlib.sha256(raw).hexdigest()[:20]
+
+
+def _load_ring():
+    path = _root() / "keyring.json"
+    if path.exists():
+        data = json.loads(path.read_text(encoding="utf-8"))
+        if data.get("version") != 1 or not isinstance(data.get("keys"), list):
+            raise ValueError("Invalid keyring format; refusing to create a replacement")
+    else:
+        data = {"version": 1, "current_id": None, "keys": []}
+    return data
+
+
+def _save_ring(ring):
+    _atomic_write(_root() / "keyring.json", json.dumps(ring, sort_keys=True, indent=2))
+
+
+def _insert(ring, raw, algorithm, source):
+    kid = _key_id(raw)
+    for existing in ring["keys"]:
+        if existing["id"] == kid:
+            if base64.b64decode(existing["material"]) != raw:
+                raise ValueError("Key fingerprint collision")
+            return False
+    ring["keys"].append({
+        "id": kid, "algorithm": algorithm,
+        "material": base64.b64encode(raw).decode("ascii"),
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "source": source,
+    })
+    return True
+
+
+def _legacy_env():
+    value = os.getenv("ENCRYPTION_KEY")
+    if value:
+        return value
+    # Compatible with this repository's non-exported .env reading pattern.
+    from config import get_env_value
+    return get_env_value("ENCRYPTION_KEY")
+
+
+def get_keyring():
+    """Archive any available legacy sources before returning a ring snapshot.
+
+    Key files remain untouched. A missing historic key can be added by placing a
+    base64 key in CRYPTO_STATE_DIR/import/*.key (or explicit env/file paths).
+    """
+    with _LOCK:
+        ring = _load_ring()
+        changed = False
+        legacy_sources = []
+        env_key = _legacy_env()
+        if env_key:
+            legacy_sources.append(("env", env_key))
+        for name in (CURRENT_KEY_FILE, OLD_KEY_FILE):
+            path = Path(name)
+            if path.is_file():
+                legacy_sources.append((name, path.read_text(encoding="utf-8")))
+        archive = _root() / "import"
+        if archive.is_dir():
+            for path in sorted(archive.glob("*.key")):
+                legacy_sources.append(("historical-file", path.read_text(encoding="utf-8")))
+        for source, value in legacy_sources:
+            changed |= _insert(ring, _decode_key(value), "AES_ECB_PKCS7", source)
+        if changed:
+            _save_ring(ring)
+        return ring
+
+
+def key_metadata():
+    ring = get_keyring()
+    return {
+        "current_id": ring["current_id"],
+        "keys": [
+            {"id": key["id"], "algorithm": key["algorithm"],
+             "created_at": key["created_at"], "active": key["id"] == ring["current_id"]}
+            for key in ring["keys"]
+        ],
+    }
 
 
 def key_rotation():
+    """Create and activate a new AES-GCM key; *never* discard historical keys.
+
+    Activating a key does not migrate existing data. Trigger explicitly after
+    preflight, and retain the entire protected state directory across deploys.
     """
-    Move current enc.key to old_enc.key and create a new enc.key.
-    """
-    if os.path.exists(CURRENT_KEY_FILE):
-        with open(CURRENT_KEY_FILE, "r") as src:
-            current_key = src.read()
-
-        with open(OLD_KEY_FILE, "w") as dst:
-            dst.write(current_key)
-
-    new_key = secrets.token_bytes(32)
-    save_key(new_key, CURRENT_KEY_FILE)
+    with _LOCK:
+        ring = get_keyring()
+        raw = secrets.token_bytes(32)
+        _insert(ring, raw, "AES_GCM", "rotation")
+        ring["current_id"] = _key_id(raw)
+        _save_ring(ring)
+        return ring["current_id"]
 
 
-def _decrypt_with_key(encoded_value, key):
-    cipher = AES.new(key, AES.MODE_GCM)
+def _key_bytes(ring, kid, algorithm):
+    for item in ring["keys"]:
+        if item["id"] == kid and item["algorithm"] == algorithm:
+            key = base64.b64decode(item["material"], validate=True)
+            if len(key) not in (16, 24, 32):
+                raise ValueError("Invalid key material")
+            return key
+    raise ValueError("Required historical encryption key is unavailable")
 
-    decoded = base64.b64decode(encoded_value)
-    decrypted = cipher.decrypt(decoded)
 
-    padding_length = decrypted[-1]
+def is_versioned(value):
+    return isinstance(value, str) and value.startswith(_VERSION + ":")
 
-    if padding_length < 1 or padding_length > AES.block_size:
-        raise ValueError("Invalid padding")
 
-    if decrypted[-padding_length:] != bytes([padding_length]) * padding_length:
-        raise ValueError("Invalid padding")
+def encrypted_key_id(value):
+    if is_versioned(value):
+        sections = value.split(":", 2)
+        if len(sections) != 3:
+            raise ValueError("Malformed ciphertext envelope")
+        return sections[1]
+    return None
 
-    return decrypted[:-padding_length].decode("utf-8")
+
+def encrypt_string(value):
+    if not isinstance(value, str):
+        raise TypeError("Plaintext must be a string")
+    ring = get_keyring()
+    kid = ring.get("current_id")
+    if not kid:
+        raise ValueError("No active GCM key; provision it explicitly before writing")
+    raw = _key_bytes(ring, kid, "AES_GCM")
+    cipher = AES.new(raw, AES.MODE_GCM, nonce=secrets.token_bytes(_NONCE_SIZE), mac_len=_TAG_SIZE)
+    cipher.update(("reporting-dashboard:" + _VERSION + ":" + kid).encode("ascii"))
+    ciphertext, tag = cipher.encrypt_and_digest(value.encode("utf-8"))
+    packed = cipher.nonce + tag + ciphertext
+    return _VERSION + ":" + kid + ":" + base64.b64encode(packed).decode("ascii")
+
+
+def _decrypt_v2(value, ring):
+    chunks = value.split(":", 2)
+    if len(chunks) != 3:
+        raise ValueError("Malformed encrypted envelope")
+    _, kid, encoded = chunks
+    packed = base64.b64decode(encoded, validate=True)
+    if len(packed) < _NONCE_SIZE + _TAG_SIZE:
+        raise ValueError("Truncated encrypted envelope")
+    raw = _key_bytes(ring, kid, "AES_GCM")
+    nonce, tag, encrypted = packed[:_NONCE_SIZE], packed[_NONCE_SIZE:28], packed[28:]
+    cipher = AES.new(raw, AES.MODE_GCM, nonce=nonce, mac_len=_TAG_SIZE)
+    cipher.update(("reporting-dashboard:" + _VERSION + ":" + kid).encode("ascii"))
+    return cipher.decrypt_and_verify(encrypted, tag).decode("utf-8")
+
+
+def _legacy_ciphertext(value):
+    if not isinstance(value, str) or not value:
+        return False
+    try:
+        decoded = base64.b64decode(value, validate=True)
+        return bool(decoded) and len(decoded) % AES.block_size == 0
+    except (ValueError, binascii.Error):
+        return False
+
+
+def _decrypt_legacy(value, ring):
+    if os.getenv("CRYPTO_LEGACY_MODE", "").upper() != "AES_ECB_PKCS7":
+        raise ValueError("Unversioned ciphertext requires verified CRYPTO_LEGACY_MODE=AES_ECB_PKCS7")
+    if not _legacy_ciphertext(value):
+        raise ValueError("Unrecognized legacy ciphertext")
+    raw_value = base64.b64decode(value, validate=True)
+    for item in ring["keys"]:
+        if item["algorithm"] != "AES_ECB_PKCS7":
+            continue
+        try:
+            decrypted = AES.new(_key_bytes(ring, item["id"], "AES_ECB_PKCS7"), AES.MODE_ECB).decrypt(raw_value)
+            size = decrypted[-1]
+            if not 1 <= size <= 16 or decrypted[-size:] != bytes([size]) * size:
+                continue
+            return decrypted[:-size].decode("utf-8")
+        except (ValueError, UnicodeDecodeError):
+            continue
+    raise ValueError("Cannot authenticate or decrypt legacy ciphertext with available keys")
+
+
+def decrypt_string(value):
+    if not isinstance(value, str):
+        raise TypeError("Ciphertext must be a string")
+    ring = get_keyring()
+    if is_versioned(value):
+        return _decrypt_v2(value, ring)
+    return _decrypt_legacy(value, ring)
 
 
 def is_encrypted(value):
-    if not isinstance(value, str) or not value:
-        return False
-
-    try:
-        decoded = base64.b64decode(value, validate=True)
-
-        if not decoded or len(decoded) % AES.block_size != 0:
-            return False
-
-        keys_to_try = []
-
-        if os.path.exists(CURRENT_KEY_FILE):
-            keys_to_try.append(load_key(CURRENT_KEY_FILE))
-
-        if os.path.exists(OLD_KEY_FILE):
-            keys_to_try.append(load_key(OLD_KEY_FILE))
-
-        for key in keys_to_try:
-            try:
-                _decrypt_with_key(value, key)
-                return True
-            except Exception:
-                pass
-
-        return False
-
-    except Exception:
-        return False
+    # Conservative classification: unknown legacy blocks MUST NOT be encrypted again.
+    return is_versioned(value) or _legacy_ciphertext(value)
 
 
 def encrypt_decrypt_string(input_string, mode="encrypt"):
     if mode == "encrypt":
-        key = load_key(CURRENT_KEY_FILE)
-
-        cipher = AES.new(key, AES.MODE_GCM)
-
-        padding_len = AES.block_size - (len(input_string.encode("utf-8")) % AES.block_size)
-
-        padded = input_string + chr(padding_len) * padding_len
-
-        encrypted = cipher.encrypt(padded.encode("utf-8"))
-
-        return base64.b64encode(encrypted).decode("utf-8")
-
-    elif mode == "decrypt":
-
-        keys_to_try = []
-
-        if os.path.exists(CURRENT_KEY_FILE):
-            keys_to_try.append(load_key(CURRENT_KEY_FILE))
-
-        if os.path.exists(OLD_KEY_FILE):
-            keys_to_try.append(load_key(OLD_KEY_FILE))
-
-        for key in keys_to_try:
-            try:
-                return _decrypt_with_key(input_string, key)
-            except Exception:
-                pass
-
-        raise ValueError("Unable to decrypt with current or previous key")
-
-    else:
-        raise ValueError("Mode must be 'encrypt' or 'decrypt'")
-
-
-
-
-
-if not os.path.exists(CURRENT_KEY_FILE):
-    save_key(secrets.token_bytes(32), CURRENT_KEY_FILE)
-
-encrypted = encrypt_decrypt_string("hello world", "encrypt")
-print(f"Encrypted: {encrypted}")
-
-print(f"Is Encrypted: {is_encrypted(encrypted)}")
-
-decrypted = encrypt_decrypt_string(encrypted, "decrypt")
-print(f"Decrypted: {decrypted}")
-
-print(f"Is Decrypted Value Encrypted: {is_encrypted(decrypted)}")
+        return encrypt_string(input_string)
+    if mode == "decrypt":
+        return decrypt_string(input_string)
+    raise ValueError("Mode must be 'encrypt' or 'decrypt'")
