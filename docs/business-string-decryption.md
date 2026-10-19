@@ -6,17 +6,15 @@ Open **Tools → Business String Decryption** on the reporting dashboard sidebar
 
 The tool uses server-side keys from the encryption keyring, including existing `enc.key` and `old_enc.key` files when present. Supported AES keys are 16, 24, or 32 bytes. Key material must never be configured through `REACT_APP_*` variables.
 
-Set `DECRYPT_TOOL_API_KEY` to a random, private string of **at least 32 characters**, distinct from the AES key. It is an operator authorization token, not a decryption key. If unset, the endpoint is disabled (HTTP 503).
+The endpoint requires no separate tool access token. The frontend uses `REACT_APP_API_SERVER_BASE_URL` if configured, otherwise `http://localhost:5000` in development and `/api` in production.
 
-For a separate frontend origin, set `DECRYPT_TOOL_ALLOWED_ORIGINS` to a comma-separated list of trusted origins such as `http://localhost:3000`. Same-origin calls work without this setting. The frontend uses `REACT_APP_API_SERVER_BASE_URL` if configured, otherwise `http://localhost:5000` in development and `/api` in production.
-
-Run over HTTPS, and limit operator access using your organization's controls. The dashboard currently has no active authentication middleware, so this endpoint requires its own token.
+**Deployment warning:** There is no application session-auth middleware. Anyone able to reach the API can submit ciphertext and retrieve decrypted values. Restrict network exposure through the deployment infrastructure and use HTTPS.
 
 ## How to use
 
-Enter the tool access token, paste an encrypted value, and click **Decrypt string**. Copy the result only when authorized. **Clear all** removes the token, input, result and status from the UI. The endpoint is POST-only (`/tools/decrypt`), returns JSON, and has `no-store` caching headers. The app does not log the values, place them into URL query strings, or save them to browser storage.
+Paste an encrypted value and click **Decrypt string**. **Clear all** removes the input, result and status from the UI. The endpoint is POST-only (`/tools/decrypt`), returns JSON, and has `no-store` caching headers. The app does not log the values, place them into URL query strings, or save them to browser storage.
 
-Status codes: 403 bad token/unauthorized origin; 400 malformed request; 413 oversized input; 422 invalid, unsupported or tampered ciphertext; 503 missing key/configuration.
+Status codes: 400 malformed request; 413 oversized input; 422 invalid, unsupported or tampered ciphertext; 503 unavailable key files.
 
 ## Important legacy limitation
 
