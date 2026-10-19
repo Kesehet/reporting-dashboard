@@ -14,6 +14,8 @@ test vector before enabling legacy migration.
 Set these only on the backend server (never as `REACT_APP_*` variables):
 - CRYPTO_STATE_DIR: absolute persistent private directory outside the web root.
   Back up the entire directory, not just the keyring file.
+- CRYPTO_LEGACY_ENV_FILE: optional absolute path to the original production .env.
+- CRYPTO_LEGACY_KEY_DIR: optional absolute directory containing enc.key and old_enc.key.
 - CRYPTO_ADMIN_TOKEN: at least 32 random characters. Must be entered by a
   trusted operator in the dashboard UI, over HTTPS. It is not stored in the browser.
 - CRYPTO_LEGACY_MODE=AES_ECB_PKCS7: set only after verifying an original ECB/PKCS7 sample.
@@ -21,8 +23,13 @@ Set these only on the backend server (never as `REACT_APP_*` variables):
 - CRYPTO_LEGACY_SAMPLE_SHA256: SHA-256 hex of its known original plaintext.
 - ENCRYPTION_KEY: existing legacy key from environment or .env.
 
-On access, historical AES keys are automatically archived from ENCRYPTION_KEY,
-enc.key, old_enc.key, and every .key file in CRYPTO_STATE_DIR/import. Valid
+On access, historical AES keys are imported from ENCRYPTION_KEY in the process
+environment, and every known deployment .env in the backend and repository root
+(and optionally CRYPTO_LEGACY_ENV_FILE). The original enc.key and old_enc.key are
+discovered in the backend directory, optionally CRYPTO_LEGACY_KEY_DIR, and the
+original working-directory location for backward compatibility. All .key files
+in CRYPTO_STATE_DIR/import are also imported. Sources are deduplicated by
+fingerprint and preserved even when only one key is active. Valid
 formats are base64 and explicit hex: or raw: prefixes. Do not delete any keys.
 No key is generated automatically during module import.
 
@@ -67,6 +74,11 @@ SQL backups and filesystem backups must be coordinated.
    journal, historical keys and file-backed values; only then resume writers.
 
 This migration does not change SQL tables or columns.
+
+CSV post-processing now encrypts PII only for tracking codes touched by the
+current import. Historical ciphertext is not decrypted or rewritten in CSV
+processing. Run migration preflight separately for complete legacy validation.
+One-time backfills outside the CSV scope still require an audit before rollout.
 
 ## Rollback and crash recovery
 

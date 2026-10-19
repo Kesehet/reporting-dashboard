@@ -66,7 +66,7 @@ for (const width of [375, 768, 1440]) {
         }),
       };
     });
-    expect(result.panels.length).toBeGreaterThanOrEqual(3);
+    expect(result.panels.length).toBeGreaterThanOrEqual(2);
     expect(result.scroll).toBeLessThanOrEqual(width + 2);
     for (const rect of result.panels) {
       expect(rect.left).toBeGreaterThanOrEqual(0);
@@ -82,21 +82,17 @@ for (const width of [375, 768, 1440]) {
   });
 }
 
-test('real browser: decrypt is masked; preflight must run before migrate', async ({ page }) => {
+test('real browser: scoped key rotation and preflight before migrate', async ({ page }) => {
   await openTab(page, 1280);
   await expect(page.getByRole('button', { name: 'Migrate now' })).toBeDisabled();
   const tokenInput = page.getByLabel('Administrator token');
   await tokenInput.fill('A'.repeat(36));
   await expect(page.getByText('Connected')).toBeVisible();
-  await page.getByLabel('Encrypted value').fill('synthetic-ciphertext');
-  await page.getByRole('button', { name: 'Decrypt value' }).click();
-  await expect(page.getByLabel('Decryption result')).toHaveText('••••••••••••••••');
-  await page.getByRole('button', { name: 'Reveal' }).click();
-  await expect(page.getByLabel('Decryption result')).toHaveText('SYNTHETIC_SECRET_123');
-  await page.getByLabel('Encrypted value').fill('new-value');
-  await expect(page.getByLabel('Decryption result')).toHaveCount(0);
+  await expect(page.getByRole('heading', { name: 'Decrypt string' })).toHaveCount(0);
+  await expect(page.getByLabel('Encrypted value')).toHaveCount(0);
   await page.getByRole('button', { name: 'Check compatibility' }).click();
   await expect(page.getByText(/125 rows scanned/)).toBeVisible();
+  await expect(page.locator('[aria-label="Migration control"] .crypto-metrics strong').first()).toHaveText('125');
   await expect(page.getByRole('button', { name: 'Migrate now' })).toBeDisabled();
   await page.getByLabel(/Confirmation/).fill('MIGRATE_PII');
   await expect(page.getByRole('button', { name: 'Migrate now' })).toBeEnabled();

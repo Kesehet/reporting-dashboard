@@ -27,6 +27,8 @@ jobs:
       - name: End-to-end encrypted HTTP and SQL transaction fault-injection tests
         run: |
           python -m unittest discover -s tests -p 'test_crypto_flow_e2e.py' -v
+      - name: CSV encryption and legacy key path regressions
+        run: python -m unittest discover -s tests -p 'test_crypto_csv_integration.py' -v
       - name: Parse changed Python sources
         run: python -m py_compile api-server/helper/encryption_helper.py api-server/helper/crypto_rotation.py api-server/post_process.py api-server/serve.py
 

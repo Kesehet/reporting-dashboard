@@ -6,9 +6,6 @@ export default function CryptoRotationTab() {
   const [token, setToken] = useState('');
   const [status, setStatus] = useState(null);
   const [preflight, setPreflight] = useState(null);
-  const [ciphertext, setCiphertext] = useState('');
-  const [plaintext, setPlaintext] = useState('');
-  const [reveal, setReveal] = useState(false);
   const [confirmation, setConfirmation] = useState('');
   const [busy, setBusy] = useState('');
   const [error, setError] = useState('');
@@ -23,8 +20,6 @@ export default function CryptoRotationTab() {
   useEffect(() => {
     setStatus(null);
     setPreflight(null);
-    setPlaintext('');
-    setReveal(false);
     setError('');
     if (!token || token.length < 32) return undefined;
     const controller = new AbortController();
@@ -50,10 +45,7 @@ export default function CryptoRotationTab() {
     setError('');
     try {
       const data = await cryptoRequest(path, token, body);
-      if (name === 'decrypt') {
-        setPlaintext(data.plaintext);
-        setReveal(false);
-      } else if (name === 'preflight') {
+      if (name === 'preflight') {
         setPreflight(data);
         setNotice(data.ready ? 'Preflight passed. Existing ciphertext is unchanged.' : 'Preflight blocked. Review failures and configuration before migration.');
       } else {
@@ -72,7 +64,6 @@ export default function CryptoRotationTab() {
     } catch (e) {
       setError(e.message);
       if (name === 'preflight') setPreflight(null);
-      if (name === 'decrypt') setPlaintext('');
     } finally {
       setBusy('');
     }
@@ -99,7 +90,7 @@ export default function CryptoRotationTab() {
           value={token} onChange={(e) => setToken(e.target.value)} placeholder="Enter private admin token" />
         <div className="crypto-actions">
           <button type="button" disabled={Boolean(busy) || token.length < 32} onClick={() => action('refresh', '/status')}>Refresh status</button>
-          <button type="button" className="crypto-quiet" onClick={() => { setToken(''); setPlaintext(''); setCiphertext(''); }}>Clear session</button>
+          <button type="button" className="crypto-quiet" onClick={() => { setToken(''); }}>Clear session</button>
         </div>
       </section>
 
@@ -107,26 +98,6 @@ export default function CryptoRotationTab() {
       {notice && <div className="crypto-notice" role="status">{notice}</div>}
 
       <div className="crypto-columns">
-        <section className="crypto-panel" aria-label="Decrypt encrypted string">
-          <div className="crypto-panel-title"><div><h2>Decrypt string</h2></div></div>
-          <label htmlFor="crypto-ciphertext">Encrypted value</label>
-          <textarea id="crypto-ciphertext" rows="5" value={ciphertext} spellCheck="false"
-            onChange={(e) => { setCiphertext(e.target.value); setPlaintext(''); setReveal(false); }}
-            placeholder="Paste ciphertext here" />
-          <div className="crypto-actions">
-            <button type="button" disabled={blocked || !ciphertext.trim() || !status} onClick={() => action('decrypt', '/decrypt', { value: ciphertext.trim() })}>
-              {busy === 'decrypt' ? 'Decrypting…' : 'Decrypt value'}
-            </button>
-            <button type="button" className="crypto-quiet" onClick={() => { setCiphertext(''); setPlaintext(''); }}>Clear</button>
-          </div>
-          {plaintext !== '' && <div className="crypto-output">
-            <div className="crypto-panel-title"><strong>Decrypted value</strong>
-              <button type="button" className="crypto-quiet" onClick={() => setReveal((value) => !value)}>{reveal ? 'Hide' : 'Reveal'}</button>
-            </div>
-            <div className="crypto-result" aria-label="Decryption result">{reveal ? plaintext : '••••••••••••••••'}</div>
-          </div>}
-        </section>
-
         <section className="crypto-panel" aria-label="Historical keyring">
           <div className="crypto-panel-title"><div><h2>Historical keys</h2></div></div>
           <div className="crypto-metrics">
@@ -154,7 +125,7 @@ export default function CryptoRotationTab() {
           <span className="crypto-pill" data-testid="crypto-job-state">{job?.state || 'Not started'}</span>
         </div>
         <div className="crypto-metrics">
-          <div><span>Rows scanned</span><strong>{job?.processed ?? 0}</strong></div>
+          <div><span>Rows scanned</span><strong>{preflight?.scanned ?? job?.processed ?? 0}</strong></div>
           <div><span>Rows updated</span><strong>{job?.updated ?? 0}</strong></div>
           <div><span>Preflight failures</span><strong>{preflight?.failures ?? '—'}</strong></div>
         </div>
