@@ -104,7 +104,7 @@ function App() {
         pageConfig["Direct Deposit Switch Current Total DDS Amount"] = null
         pageConfig["Direct Deposit Switch Total Number of Successful Switches"] = null
         setTimeout(() => {
-            setPage(pNow);
+            setPage((current) => current === "loading" ? pNow : current);
         }, 1000);
     }, [CorBFilter]);
 
@@ -113,7 +113,7 @@ function App() {
         let pNow = showPage;
         setPage("loading");
         setTimeout(() => {
-            setPage(pNow);
+            setPage((current) => current === "loading" ? pNow : current);
         }, 1000);
     }, [pageConfig]);
 
@@ -126,7 +126,7 @@ function App() {
         pageConfig["Direct Deposit Switch Total Number of Successful Switches"] = null
         setPage("loading");
         setTimeout(() => {
-            setPage(pNow);
+            setPage((current) => current === "loading" ? pNow : current);
         }, 1000);
     }, [dates]);
 
