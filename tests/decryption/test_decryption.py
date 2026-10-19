@@ -92,6 +92,8 @@ class DecryptionCompatibilityTests(unittest.TestCase):
         self.assertTrue(crypto.is_encrypted("v2:bad"))
         self.assertFalse(crypto.is_encrypted("plain"))
         keyring=crypto.get_keyring()
+        # Remove the legacy import source too, otherwise the keyring correctly restores it.
+        Path("enc.key").unlink()
         keyring["keys"]=[]
         crypto._save_ring(keyring)
         with self.assertRaises(ValueError):
