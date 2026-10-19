@@ -141,7 +141,6 @@ export default function CryptoRotationTab() {
               </div>
             ))}
           </div>
-          
           <button type="button" disabled={blocked || !status || confirmation !== 'CREATE_GCM_KEY'}
             onClick={() => action('key', '/keys/rotate', { confirm: confirmation }, { message: 'New GCM key archived and activated. Historical keys retained.' })}>
             Create new GCM key
@@ -178,7 +177,6 @@ export default function CryptoRotationTab() {
             Restore previous encryption
           </button>
         </div>
-        
       </section>
     </main>
   );
