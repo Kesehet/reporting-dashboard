@@ -124,6 +124,8 @@ const SidebarLayout = ({ items, mainContent, pageToShow }) => {
   className="w3-bar w3-light-grey report-topbar"
   style={{
     marginLeft: isNarrow ? '60px' : (collapsed ? '60px' : '250px'),
+    width: isNarrow ? 'calc(100% - 60px)' : (collapsed ? 'calc(100% - 60px)' : 'calc(100% - 250px)'),
+    boxSizing: 'border-box',
     transition: 'margin-left 0.3s ease',
     padding: '1rem',
     display: 'flex',
