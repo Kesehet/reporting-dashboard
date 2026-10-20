@@ -11,6 +11,7 @@ import 'primereact/resources/themes/lara-light-indigo/theme.css';
 import ReportHeaderComponent from './Components/reportHeaderComponent';
 import ReportLoginComponent from './Components/reportLoginComponent';
 import AuthorizationService from './Services/AuthorizationService';
+import { establishSsoSession } from './Services/msalInstance';
 import ReportFooterComponent from './Components/reportFooterComponent';
 import AnalyticsReportComponent from './Components/analyticsReportComponent';
 import ChartCard from './Utils/Components/ChartCard';
@@ -75,6 +76,23 @@ class PageErrorBoundary extends React.Component {
 }
 
 function App() {
+    const [ssoReady, setSsoReady] = useState(
+        () => localStorage.getItem('login_method') !== 'msal'
+    );
+
+    useEffect(() => {
+        if (ssoReady || localStorage.getItem('login_method') !== 'msal') return;
+        let mounted = true;
+        // Recover an existing Microsoft session before mounting chart requests.
+        establishSsoSession().then(() => {
+            if (mounted) setSsoReady(true);
+        }).catch(() => {
+            new AuthorizationService('', '').clearSession();
+            if (mounted) setSsoReady(true);
+        });
+        return () => { mounted = false; };
+    }, [ssoReady]);
+
     const [dates, setDates] = useState(() => {
         const today = new Date();
         const tonight = new Date(today.setHours(23, 59, 59, 999));
@@ -136,6 +154,7 @@ function App() {
     
 
     if (!new AuthorizationService('', '').isLoggedIn()) return <ReportLoginComponent />;
+    if (!ssoReady) return <div role="status">Completing Microsoft sign-in...</div>;
 
     const getPage = (page) => {
         try {
