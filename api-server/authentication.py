@@ -58,9 +58,11 @@ def verify_microsoft_token(token):
         key = microsoft_jwks(tenant).get_signing_key_from_jwt(token)
         payload = jwt.decode(
             token, key.key, algorithms=['RS256'],
-            audience=client_id, issuer=accepted_issuers,
+            audience=client_id,
             options={'require': ['exp', 'iss', 'aud', 'tid']},
         )
+        if payload.get('iss') not in accepted_issuers:
+            return None
         if payload.get('tid', '').lower() != tenant.lower():
             return None
         return payload
