@@ -82,9 +82,11 @@ class AuthenticationTests(unittest.TestCase):
             f'https://sts.windows.net/{tenant}/',
             f'https://login.microsoftonline.com/{tenant}/v2.0',
         )
-        with mock.patch('authentication.microsoft_jwks', return_value=SimpleNamespace(
+        signing_keys = SimpleNamespace(
             get_signing_key_from_jwt=lambda token: SimpleNamespace(key=key.public_key())
-        )):
+        )
+        with mock.patch('authentication.microsoft_jwks', return_value=signing_keys), \
+             mock.patch('authentication.microsoft_v1_jwks', return_value=signing_keys):
             for issuer in issuers:
                 claims = {
                     'tid': tenant, 'aud': client, 'iss': issuer, 'sub': 'fixture-user',
