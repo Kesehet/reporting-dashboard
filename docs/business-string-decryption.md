@@ -1,6 +1,6 @@
 # Business String Decryption
 
-Open **Tools → Business String Decryption** on the reporting dashboard sidebar.
+The Business String Decryption page is currently hidden from dashboard navigation and routing. The backend decryption endpoint and standalone React component are retained, but the utility is not accessible through the dashboard UI.
 
 ## Server configuration
 
@@ -10,7 +10,7 @@ The frontend uses `REACT_APP_API_SERVER_BASE_URL` if configured, otherwise `http
 
 The decryption endpoint does not require a separate token. Only expose this backend to a trusted network; anyone able to call the endpoint can decrypt values when the server has a matching key.
 
-## How to use
+## Retained manual utility (not exposed in the dashboard)
 
 Paste an encrypted value and click **Decrypt string**. **Clear all** removes the input, result and status from the UI. The endpoint is POST-only (`/tools/decrypt`), returns JSON, and has `no-store` caching headers. The app does not log the values, place them into URL query strings, or save them to browser storage.
 
