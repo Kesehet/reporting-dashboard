@@ -124,7 +124,18 @@ def runtime():
         stack.callback(os.chdir, previous)
         os.chdir(folder)
         stack.enter_context(freeze_time('2026-07-15 12:00:00'))
-        stack.enter_context(patch.dict(sys.modules, {'pyodbc': driver}))
+        # patch.dict(sys.modules) replaces the whole module mapping on exit.
+        # That unloads already-imported numpy modules while their native
+        # extensions remain loaded, breaking the next contract test class.
+        had_driver = 'pyodbc' in sys.modules
+        old_driver = sys.modules.get('pyodbc')
+        sys.modules['pyodbc'] = driver
+        def restore_driver():
+            if had_driver:
+                sys.modules['pyodbc'] = old_driver
+            else:
+                sys.modules.pop('pyodbc', None)
+        stack.callback(restore_driver)
         stack.enter_context(patch.dict(os.environ, {'JM_BASE_URL': 'https://fixture.invalid'}))
         stack.enter_context(patch.object(socket.socket, 'connect', forbidden))
         stack.enter_context(patch('time.sleep'))
