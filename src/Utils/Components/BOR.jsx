@@ -146,7 +146,7 @@ export default function BOR({dates, chartName, applicationTypeFilter=false}) {
 
         return (
             <div className="p-3">
-            <div className="flex flex-wrap gap-3">
+            <div className="report-cards">
                 {orderedKeys.map((key, index) => {
                 if (key.startsWith('_report_') || data[key] === "All") return null;
                 if ( key === "Start-Date"||  key === "End-Date") return null;
@@ -155,7 +155,7 @@ export default function BOR({dates, chartName, applicationTypeFilter=false}) {
                 return (
                     <div
                     key={index}
-                    className="p-card p-component p-mb-3"
+                    className="report-card p-card p-component"
                     style={{
                         width: '250px',
                         padding: '1rem',

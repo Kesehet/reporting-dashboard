@@ -82,7 +82,7 @@ export default function CardReport({
       )}
 
       {!loading && kv && keys.length > 0 && (
-        <div style={{ display: "flex", gap: "12px", width: "100%", flexWrap: "nowrap", justifyContent: "center", alignItems: "stretch"}}>
+        <div className="report-cards report-cards-centered">
               {getBox(keys, kv, cardWidth, title)}
         </div>
       )}
@@ -99,7 +99,7 @@ function getBox(keys, kv, cardWidth, title) {
             return (
               <div
                 key={key}
-                className="p-card p-component p-2"
+                className="report-card p-card p-component p-2"
                 style={{
                   width: cardWidth,
                   boxShadow: '0 2px 4px rgba(0,0,0,.08)',

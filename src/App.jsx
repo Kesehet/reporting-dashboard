@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import 'primeicons/primeicons.css';
 import 'primereact/resources/themes/nova/theme.css';
 import 'primereact/resources/primereact.min.css';
+import './primeflex.css';
 import './Styles/App.css';
 import './Styles/header.css';
 import 'primereact/resources/primereact.css';
