@@ -166,9 +166,32 @@ class CryptoRotationTests(unittest.TestCase):
         os.environ["CRYPTO_LEGACY_SAMPLE_SHA256"] = hashlib.sha256(plaintext.encode()).hexdigest()
         self.assertTrue(crypto.verify_legacy_probe())
         self.assertEqual(crypto.decrypt_string(ciphertext), plaintext)
+        # The legacy ECB reader works by default, including on unmodified
+        # production installations which only have ENCRYPTION_KEY in .env.
         os.environ["CRYPTO_LEGACY_MODE"] = ""
+        self.assertEqual(crypto.decrypt_string(ciphertext), plaintext)
+        os.environ["CRYPTO_LEGACY_MODE"] = "unsupported"
         with self.assertRaises(ValueError):
             crypto.decrypt_string(ciphertext)
+
+    def test_raw_32_character_env_key_is_not_misread_as_base64(self):
+        raw = b"ABCDEFGHIJKLMNOPQRSTUVWXYZ123456"
+        self.assertEqual(len(raw), 32)
+        with tempfile.TemporaryDirectory() as keys:
+            env_file = Path(keys) / ".env"
+            env_file.write_text("ENCRYPTION_KEY=" + raw.decode("ascii") + "\n")
+            with mock.patch.dict(os.environ, {
+                "ENCRYPTION_KEY": "",
+                "CRYPTO_LEGACY_ENV_FILE": str(env_file),
+                "CRYPTO_LEGACY_MODE": "",
+            }):
+                plaintext = "An original ECB value"
+                pad = 16 - len(plaintext.encode("utf-8")) % 16
+                data = plaintext.encode("utf-8") + bytes([pad] * pad)
+                value = base64.b64encode(AES.new(raw, AES.MODE_ECB).encrypt(data)).decode()
+                ring = crypto.get_keyring()
+                self.assertIn(crypto._key_id(raw), {key["id"] for key in ring["keys"]})
+                self.assertEqual(crypto.decrypt_string(value), plaintext)
 
     def test_unknown_base64_blocks_not_treated_as_plaintext(self):
         self.assertTrue(crypto.is_encrypted(base64.b64encode(b"Z" * 16).decode()))
