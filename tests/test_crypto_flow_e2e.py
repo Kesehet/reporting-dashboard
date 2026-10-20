@@ -292,7 +292,7 @@ class EncryptionHttpFlow(unittest.TestCase):
 
     def test_legacy_unknown_mode_blocks_all_sql_changes(self):
         self.activate()
-        os.environ["CRYPTO_LEGACY_MODE"] = ""
+        os.environ["CRYPTO_LEGACY_MODE"] = "UNSUPPORTED"
         code, info = self.api("POST", "/preflight", {})
         self.assertEqual(code, 200)
         self.assertFalse(info["ready"])
@@ -326,7 +326,7 @@ class EncryptionHttpFlow(unittest.TestCase):
 
     def test_one_click_failed_preflight_retains_previous_active_key(self):
         previous_id = self.activate()
-        os.environ["CRYPTO_LEGACY_MODE"] = ""
+        os.environ["CRYPTO_LEGACY_MODE"] = "UNSUPPORTED"
         code, result = self.api("POST", "/rotate", {})
         self.assertEqual(code, 202, result)
         state = self.wait_for_state(result["run_id"])
