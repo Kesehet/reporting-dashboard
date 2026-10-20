@@ -32,6 +32,23 @@ jobs:
       - name: Parse changed Python sources
         run: python -m py_compile api-server/helper/encryption_helper.py api-server/helper/crypto_rotation.py api-server/post_process.py api-server/serve.py
 
+  crypto-frozen-startup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install frozen runtime test dependencies
+        run: python -m pip install "pycryptodome==3.20.0" "python-dotenv==1.0.1" "pyinstaller>=6.10,<7"
+      - name: Check normal Python startup without process env
+        run: python tests/crypto_frozen_smoke.py
+      - name: Build actual onefile crypto executable
+        run: python -m PyInstaller --clean --onefile --paths api-server --name crypto_frozen_smoke tests/crypto_frozen_smoke.py
+      - name: Run packaged executable against synthetic ECB .env key
+        run: ./dist/crypto_frozen_smoke
+
   crypto-frontend:
     runs-on: ubuntu-latest
     timeout-minutes: 12

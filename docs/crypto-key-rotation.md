@@ -16,10 +16,10 @@ Set these only on the backend server (never as `REACT_APP_*` variables):
   Back up the entire directory, not just the keyring file.
 - CRYPTO_LEGACY_ENV_FILE: optional absolute path to the original production .env.
 - CRYPTO_LEGACY_KEY_DIR: optional absolute directory containing enc.key and old_enc.key.
-- CRYPTO_LEGACY_MODE=AES_ECB_PKCS7: set only after verifying an original ECB/PKCS7 sample.
+- CRYPTO_LEGACY_MODE: optional; unversioned ciphertext is read as AES-ECB/PKCS7 by default. An explicit unsupported value is rejected.
 - CRYPTO_LEGACY_SAMPLE_CIPHERTEXT: a known original ECB test ciphertext.
 - CRYPTO_LEGACY_SAMPLE_SHA256: SHA-256 hex of its known original plaintext.
-- ENCRYPTION_KEY: existing legacy key from environment or .env.
+- ENCRYPTION_KEY: existing legacy key from environment or .env. Ambiguous 16/24/32-character unprefixed keys are retained as both raw and base64 candidates. Use raw:, hex: or base64: to select exactly one interpretation.
 
 On access, historical AES keys are imported from ENCRYPTION_KEY in the process
 environment, and every known deployment .env in the backend and repository root
@@ -29,7 +29,7 @@ original working-directory location for backward compatibility. All .key files
 in CRYPTO_STATE_DIR/import are also imported. Sources are deduplicated by
 fingerprint and preserved even when only one key is active. Valid
 formats are base64 and explicit hex: or raw: prefixes. Do not delete any keys.
-No key is generated automatically during module import.
+No key is generated automatically during module import. Old executables that ran an AES-GCM demo during import must be rebuilt; that demo discarded its nonce and caused startup crashes. When frozen, .env and legacy key files beside the executable are also discovered.
 
 CRYPTO_STATE_DIR contains:
 - keyring.json: every historical key, with stable fingerprints and current ID

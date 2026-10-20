@@ -1,10 +1,18 @@
 from flask import Flask, json, request, jsonify, abort, render_template_string
 from flask_cors import CORS
+import sys
+from pathlib import Path
+from dotenv import load_dotenv
+
+# Configuration must load before encrypted-data imports.
+if getattr(sys, "frozen", False):
+    load_dotenv(Path(sys.executable).resolve().parent / ".env", override=False)
+load_dotenv(Path.cwd() / ".env", override=False)
+
 from decrypt_tools import decrypt_tools
 from helper.crypto_rotation import crypto_api
 from datetime import datetime
 import os
-from dotenv import load_dotenv
 from DB import SQLConn, Transaction
 from waitress import serve
 import sched
@@ -29,7 +37,6 @@ import json as _pyjson
 # exit()
 
 scheduler = sched.scheduler(time.time, time.sleep)
-load_dotenv()
 
 app = Flask(__name__)
 CORS(app)

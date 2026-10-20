@@ -10,6 +10,7 @@ import hashlib
 import json
 import os
 import secrets
+import sys
 import tempfile
 import uuid
 from contextlib import contextmanager
@@ -79,6 +80,33 @@ def _decode_key(value):
     return raw
 
 
+def _decode_key_candidates(value):
+    """Keep both interpretations of ambiguous legacy keys.
+
+    A 32-character raw AES key can also be valid base64 for a *different*
+    24-byte key. The former importer silently chose the wrong one. Retain
+    both candidates without modifying the original env or key files.
+    Prefix with raw:, hex: or base64: to select one interpretation.
+    """
+    value = value.strip()
+    if value.startswith("base64:"):
+        return [_decode_key(value[len("base64:"):])]
+    if value.startswith(("raw:", "hex:")):
+        return [_decode_key(value)]
+    candidates = []
+    try:
+        decoded = base64.b64decode(value, validate=True)
+        if len(decoded) in (16, 24, 32):
+            candidates.append(decoded)
+    except (ValueError, binascii.Error):
+        pass
+    plain = value.encode("utf-8")
+    if len(plain) in (16, 24, 32) and plain not in candidates:
+        candidates.append(plain)
+    if not candidates:
+        raise ValueError("Legacy key must be a 16-, 24-, or 32-byte AES key")
+    return candidates
+
 def _key_id(raw):
     return hashlib.sha256(raw).hexdigest()[:20]
 
@@ -133,6 +161,9 @@ def _legacy_env_files():
         if not path.is_absolute():
             raise ValueError("CRYPTO_LEGACY_ENV_FILE must be absolute")
         paths.append(path)
+    # A onefile PyInstaller app runs from _MEIPASS, not its installation folder.
+    if getattr(sys, "frozen", False):
+        paths.append(Path(sys.executable).resolve().parent / ".env")
     paths.extend((backend / ".env", backend.parent / ".env", Path.cwd() / ".env"))
     return list(dict.fromkeys(path.resolve() for path in paths))
 
@@ -146,6 +177,8 @@ def _legacy_key_dirs():
         if not path.is_absolute():
             raise ValueError("CRYPTO_LEGACY_KEY_DIR must be absolute")
         paths.append(path)
+    if getattr(sys, "frozen", False):
+        paths.append(Path(sys.executable).resolve().parent)
     paths.extend((backend, Path.cwd()))
     return list(dict.fromkeys(path.resolve() for path in paths))
 
@@ -214,7 +247,8 @@ def _sync_ring():
         for path in sorted(archive.glob("*.key")):
             legacy_sources.append(("historical-file", path.read_text(encoding="utf-8")))
     for source, value in legacy_sources:
-        changed |= _insert(ring, _decode_key(value), "AES_ECB_PKCS7", source)
+        for raw in _decode_key_candidates(value):
+            changed |= _insert(ring, raw, "AES_ECB_PKCS7", source)
     if changed:
         _save_ring(ring)
     return ring
@@ -376,8 +410,12 @@ def _legacy_ciphertext(value):
 
 
 def _decrypt_legacy(value, ring):
-    if os.getenv("CRYPTO_LEGACY_MODE", "").upper() != "AES_ECB_PKCS7":
-        raise ValueError("Unversioned ciphertext requires verified CRYPTO_LEGACY_MODE=AES_ECB_PKCS7")
+    # Historical unversioned fields are AES-ECB with PKCS7 padding. Allow
+    # reads by default so deployed .env keys work without a second flag.
+    # Bulk migration still requires verify_legacy_probe() before any SQL write.
+    mode = os.getenv("CRYPTO_LEGACY_MODE", "").strip().upper()
+    if mode and mode != "AES_ECB_PKCS7":
+        raise ValueError("Unsupported legacy cipher mode; expected AES_ECB_PKCS7")
     if not _legacy_ciphertext(value):
         raise ValueError("Unrecognized legacy ciphertext")
     raw_value = base64.b64decode(value, validate=True)
