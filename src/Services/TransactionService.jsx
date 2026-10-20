@@ -1,10 +1,11 @@
 import { isArray } from 'chart.js/helpers';
 import XMLParser from 'react-xml-parser';
+import apiBaseUrl from './apiBaseUrl';
 
 class TransactionService {
   constructor(onload = null, startDate = "2024-04-09", endDate = "2024-04-11", requestedTransactions = []) {
     this.onload = onload;
-    let base = process.env.NODE_ENV === 'production' ? (window.location.href + "api") : "http://localhost:5000";
+    let base = apiBaseUrl();
 
     const params = new URLSearchParams({
       start_date: startDate,
@@ -22,7 +23,9 @@ class TransactionService {
 
 
     try {
-      const response = await fetch(this.url);
+      const response = await fetch(this.url, {
+        headers: localStorage.getItem('token') ? { Authorization: localStorage.getItem('token') } : {},
+      });
       if (response.status !== 200) {
         throw new Error(`Failed to fetch data: Error code ${response.status}`);
 

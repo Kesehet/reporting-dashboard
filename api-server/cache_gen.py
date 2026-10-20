@@ -46,13 +46,8 @@ for url_path in urls:
     ctr += 1
     resolved_path = resolve_url_placeholders(url_path)
     full_url = BASE_URL.rstrip("/") + resolved_path
-    if "?" in full_url:
-        full_url = full_url + "&api_key="+API_KEY
-    else:
-        full_url = full_url + "?api_key="+API_KEY
-    
     try:
-        response = requests.get(full_url)
+        response = requests.get(full_url, headers={'X-API-Key': API_KEY}, timeout=60)
         response.raise_for_status()
         update_metrics("cache_gen_error", f"Generated cache for {ctr}/{len(urls)}.")
     except Exception as e:

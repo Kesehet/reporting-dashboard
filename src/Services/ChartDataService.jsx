@@ -1,6 +1,7 @@
+import apiBaseUrl from './apiBaseUrl';
 class ChartDataService {
     constructor(name, extraParams = {}) {
-        let base = process.env.NODE_ENV === 'production' ? (window.location.href + "api") : "http://localhost:5000";
+        let base = apiBaseUrl();
         this.url = base + "/charts/" + name;
         this.extraParams = extraParams;
     }
@@ -28,6 +29,7 @@ class ChartDataService {
                 const response = await fetch(fullUrl, {
                     headers: {
                         'Content-Type': 'application/json',
+                        ...(localStorage.getItem('token') ? { Authorization: localStorage.getItem('token') } : {}),
                     },
                     method: 'POST',
                     body: JSON.stringify(extraPostParams)
@@ -42,6 +44,7 @@ class ChartDataService {
                 const response = await fetch(fullUrl, {
                     headers: {
                         'Content-Type': 'application/json',
+                        ...(localStorage.getItem('token') ? { Authorization: localStorage.getItem('token') } : {}),
                     },
                     method: 'GET',
                 });
