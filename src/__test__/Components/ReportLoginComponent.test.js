@@ -13,6 +13,6 @@ test('original LDAP and Microsoft login choices appear together', async () => {
   render(<ReportLoginComponent />);
   expect(screen.getByPlaceholderText('User Name')).toBeInTheDocument();
   expect(screen.getByPlaceholderText('Password')).toBeInTheDocument();
-  expect(screen.getByRole('button', { name: /Sign In/i })).toBeInTheDocument();
-  expect(screen.getByRole('button', { name: /SSO Sign In/i })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: /^Sign In$/i })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: /^SSO Sign In$/i })).toBeInTheDocument();
 });

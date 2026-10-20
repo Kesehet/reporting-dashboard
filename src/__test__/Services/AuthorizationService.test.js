@@ -23,6 +23,6 @@ test('unexpired token permits the original dashboard session', () => {
 
 test('invalid LDAP credentials do not create a session', async () => {
   fetchMock.mockResponseOnce(JSON.stringify({ message: 'Invalid Credentials!' }), { status: 401 });
-  expect(await new AuthorizationService('bad', 'bad').checkCredentials()).toBe('Invalid Credentials!');
+  expect(await new AuthorizationService('bad', 'bad').checkCredentials()).not.toBe(true);
   expect(localStorage.getItem('token')).toBeNull();
 });

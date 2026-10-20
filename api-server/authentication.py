@@ -1,5 +1,6 @@
 """Legacy LDAP, Azure MSAL and chart API-key authentication."""
 import hmac
+from functools import lru_cache
 import os
 from datetime import datetime, timedelta, timezone
 from flask import Blueprint, current_app, jsonify, request
@@ -9,6 +10,12 @@ authentication = Blueprint('authentication', __name__)
 
 def setting(key, default=None):
     return os.environ.get(key) or get_env_value(key) or default
+
+@lru_cache(maxsize=16)
+def microsoft_jwks(tenant):
+    import jwt
+    return jwt.PyJWKClient(f'https://login.microsoftonline.com/{tenant}/discovery/v2.0/keys', cache_keys=True)
+
 
 def verify_token(value):
     """Accept only verified, unexpired, server-issued or Microsoft identity tokens."""
@@ -28,8 +35,7 @@ def verify_token(value):
         tenant = setting('REACT_APP_AZURE_TENANT_ID')
         client_id = setting('REACT_APP_AZURE_CLIENT_ID')
         if tenant and client_id:
-            jwks_url = f'https://login.microsoftonline.com/{tenant}/discovery/v2.0/keys'
-            key = jwt.PyJWKClient(jwks_url, cache_keys=True).get_signing_key_from_jwt(token)
+            key = microsoft_jwks(tenant).get_signing_key_from_jwt(token)
             return jwt.decode(
                 token, key.key, algorithms=['RS256'], audience=client_id,
                 issuer=f'https://login.microsoftonline.com/{tenant}/v2.0',
