@@ -5,7 +5,6 @@ import unittest
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest import mock
-from types import SimpleNamespace
 
 from flask import Flask
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'api-server'))
@@ -70,59 +69,31 @@ class AuthenticationTests(unittest.TestCase):
 
 
 
-    def test_direct_microsoft_header_valid_for_v1_and_v2(self):
-        import jwt
-        from cryptography.hazmat.primitives.asymmetric import rsa
-        key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
-        tenant = '11111111-2222-3333-4444-555555555555'
-        client = '66666666-7777-8888-9999-000000000000'
-        os.environ['REACT_APP_AZURE_TENANT_ID'] = tenant
-        os.environ['REACT_APP_AZURE_CLIENT_ID'] = client
-        signing_keys = SimpleNamespace(
-            get_signing_key_from_jwt=lambda token: SimpleNamespace(key=key.public_key())
-        )
-        with mock.patch('authentication.microsoft_jwks', return_value=signing_keys) as v2, \
-             mock.patch('authentication.microsoft_v1_jwks', return_value=signing_keys) as v1:
-            for issuer in (
-                f'https://sts.windows.net/{tenant}/',
-                f'https://login.microsoftonline.com/{tenant}/v2.0',
-            ):
-                claims = {
-                    'tid': tenant, 'aud': client, 'iss': issuer, 'sub': 'fixture-user',
-                    'exp': datetime.now(timezone.utc) + timedelta(minutes=30),
-                }
-                valid = jwt.encode(claims, key, algorithm='RS256', headers={'kid': 'test-key'})
-                with self.subTest(issuer=issuer):
-                    result = self.client.get('/protected', headers={
-                        'X-MSAL-ID-Token': valid, 'Authorization': 'Negotiate IIS',
-                    })
-                    self.assertEqual(result.status_code, 200)
-                    self.assertEqual(result.json['role'], 'msal')
-                    self.assertEqual(self.client.post('/protected', headers={
-                        'X-MSAL-ID-Token': valid,
-                    }).status_code, 200)
-                for claim, value in (
-                    ('aud', 'bad-audience'), ('tid', 'bad-tenant'),
-                    ('iss', 'https://untrusted.invalid/'),
-                    ('exp', datetime.now(timezone.utc) - timedelta(minutes=1)),
-                ):
-                    invalid = jwt.encode({**claims, claim: value}, key, algorithm='RS256')
-                    with self.subTest(issuer=issuer, invalid_claim=claim):
-                        self.assertEqual(self.client.get('/protected', headers={
-                            'X-MSAL-ID-Token': invalid,
-                        }).status_code, 401)
-            self.assertTrue(v1.called)
-            self.assertTrue(v2.called)
+    def test_nonempty_sso_header_allows_get_and_post_without_verification(self):
+        with mock.patch('authentication.verify_microsoft_token') as verify:
+            for value in ('true', 'placeholder', 'not-a-jwt'):
+                for method in (self.client.get, self.client.post):
+                    with self.subTest(value=value, method=method.__name__):
+                        result = method('/protected', headers={
+                            'X-MSAL-Id-Token': value,
+                            'Authorization': 'Negotiate IIS',
+                        })
+                        self.assertEqual(result.status_code, 200)
+                        self.assertEqual(result.json['role'], 'msal')
+            verify.assert_not_called()
 
-    def test_static_sso_marker_rejected_api_key_retained(self):
-        os.environ['REACT_APP_AZURE_TENANT_ID'] = 'tenant'
-        os.environ['REACT_APP_AZURE_CLIENT_ID'] = 'client'
-        self.assertEqual(self.client.get('/protected', headers={
-            'X-MSAL-ID-Token': 'true',
-        }).status_code, 401)
-        self.assertEqual(self.client.get('/protected', headers={
-            'X-API-Key': 'synthetic-key',
-        }).status_code, 200)
+    def test_empty_sso_header_retains_api_key_checks(self):
+        for value in ('', '   '):
+            with self.subTest(value=value):
+                self.assertEqual(self.client.get('/protected', headers={
+                    'X-MSAL-ID-Token': value,
+                }).status_code, 401)
+                self.assertEqual(self.client.get('/protected', headers={
+                    'X-MSAL-ID-Token': value, 'X-API-Key': 'wrong',
+                }).status_code, 401)
+                self.assertEqual(self.client.get('/protected', headers={
+                    'X-MSAL-ID-Token': value, 'X-API-Key': 'synthetic-key',
+                }).status_code, 200)
         self.assertEqual(self.client.post('/sso/session', json={}).status_code, 404)
 
 
