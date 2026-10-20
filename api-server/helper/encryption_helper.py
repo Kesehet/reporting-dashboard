@@ -251,6 +251,23 @@ def key_rotation():
             return ring["current_id"]
 
 
+
+def revert_active_key(previous_id, expected_id):
+    """Undo an uncommitted rotation without deleting any historical key."""
+    with _LOCK:
+        with _ring_file_lock():
+            ring = _sync_ring()
+            if ring["current_id"] != expected_id:
+                raise ValueError("Active key changed; manual reconciliation required")
+            if previous_id is not None and not any(
+                entry["id"] == previous_id and entry["algorithm"] == "AES_GCM"
+                for entry in ring["keys"]
+            ):
+                raise ValueError("Previous GCM key is unavailable")
+            ring["current_id"] = previous_id
+            _save_ring(ring)
+
+
 def _key_bytes(ring, kid, algorithm):
     for item in ring["keys"]:
         if item["id"] == kid and item["algorithm"] == algorithm:
