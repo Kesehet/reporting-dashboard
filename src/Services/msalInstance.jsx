@@ -25,6 +25,18 @@ export async function ensureMsal() {
   return clientPromise;
 }
 
+export async function establishSsoSession(token = localStorage.getItem('token')) {
+  if (!token) throw new Error('Microsoft login token is missing.');
+  const response = await fetch(apiBaseUrl() + '/sso/session', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify({ id_token: token }),
+  });
+  if (!response.ok) throw new Error('Unable to establish the Microsoft SSO session.');
+  return true;
+}
+
 export function storeMsalSession(result) {
   const token = result?.idToken;
   const account = result?.account;
@@ -43,6 +55,7 @@ export async function bootMsalActiveAccount() {
   if (redirect?.account) {
     client.setActiveAccount(redirect.account);
     storeMsalSession(redirect);
+    await establishSsoSession(redirect.idToken);
     return redirect.account;
   }
   const account = client.getActiveAccount() || client.getAllAccounts()[0];
@@ -52,6 +65,7 @@ export async function bootMsalActiveAccount() {
     try {
       const session = await client.acquireTokenSilent({ account, scopes: ['openid', 'profile', 'email'] });
       storeMsalSession(session);
+      await establishSsoSession(session.idToken);
     } catch (error) {
       return null;
     }
@@ -66,6 +80,7 @@ export async function msalLoginPopup() {
     const result = await client.loginPopup({ scopes: ['openid', 'profile', 'email'], prompt: 'select_account' });
     client.setActiveAccount(result.account);
     storeMsalSession(result);
+    await establishSsoSession(result.idToken);
     return result;
   } catch (error) {
     if (['popup_window_error', 'popup_window_open_error'].includes(error?.errorCode)) {
@@ -77,6 +92,7 @@ export async function msalLoginPopup() {
 }
 
 export async function msalLogoutPopup() {
+  await fetch(apiBaseUrl() + '/logout', { method: 'POST', credentials: 'include' });
   const client = await ensureMsal();
   const account = client.getActiveAccount() || client.getAllAccounts()[0];
   if (account) await client.logoutPopup({ account });
