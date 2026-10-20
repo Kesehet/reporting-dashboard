@@ -16,6 +16,11 @@ def microsoft_jwks(tenant):
     import jwt
     return jwt.PyJWKClient(f'https://login.microsoftonline.com/{tenant}/discovery/v2.0/keys', cache_keys=True)
 
+@lru_cache(maxsize=16)
+def microsoft_v1_jwks(tenant):
+    import jwt
+    return jwt.PyJWKClient(f'https://login.microsoftonline.com/{tenant}/discovery/keys', cache_keys=True)
+
 
 def verify_token(value):
     """Accept only verified, unexpired, server-issued or Microsoft identity tokens."""
@@ -55,21 +60,27 @@ def verify_microsoft_token(token):
         f'https://sts.windows.net/{tenant}/',
     )
     try:
-        key = microsoft_jwks(tenant).get_signing_key_from_jwt(token)
+        # Choose the matching Microsoft's signing-key endpoint. Some corporate
+        # tenants still issue Azure AD v1 ID tokens, which use a different JWKS.
+        # This initial issuer hint is NOT trusted until RSA verification below.
+        hint = jwt.decode(token, options={'verify_signature': False}, algorithms=['RS256'])
+        issuer = hint.get('iss')
+        if issuer not in accepted_issuers:
+            return None
+        key_source = microsoft_v1_jwks if issuer == accepted_issuers[1] else microsoft_jwks
+        key = key_source(tenant).get_signing_key_from_jwt(token)
         payload = jwt.decode(
             token, key.key, algorithms=['RS256'],
             audience=client_id,
             options={'require': ['exp', 'iss', 'aud', 'tid']},
         )
-        if payload.get('iss') not in accepted_issuers:
-            return None
-        if payload.get('tid', '').lower() != tenant.lower():
+        if payload.get('iss') != issuer or payload.get('tid', '').lower() != tenant.lower():
             return None
         return payload
-    except (jwt.PyJWTError, ValueError, TypeError):
-        return None
-    except Exception:
-        # Network outages and missing packaged cryptography must fail closed.
+    except Exception as exc:
+        # The previous code hid *every* failure behind the same 401. Record
+        # only the exception class, never the token or user's credentials.
+        current_app.logger.warning('SSO identity verification failed: %s', type(exc).__name__)
         return None
 
 def request_identity():
