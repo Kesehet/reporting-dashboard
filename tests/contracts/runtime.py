@@ -136,7 +136,7 @@ def runtime():
             else:
                 sys.modules.pop('pyodbc', None)
         stack.callback(restore_driver)
-        stack.enter_context(patch.dict(os.environ, {'JM_BASE_URL': 'https://fixture.invalid'}))
+        stack.enter_context(patch.dict(os.environ, {'JM_BASE_URL': 'https://fixture.invalid', 'ALL_FILTERS_CHART_API_KEY': 'fixture-chart-api-key'}))
         stack.enter_context(patch.object(socket.socket, 'connect', forbidden))
         stack.enter_context(patch('time.sleep'))
         import DB
@@ -183,9 +183,9 @@ def collect(consumers):
                                 req = {**params, 'showComma': comma}
                                 if method == 'GET':
                                     req = {k: str(v).lower() if isinstance(v, bool) else v for k, v in req.items()}
-                                    response = client.get('/charts/' + name, query_string=req)
+                                    response = client.get('/charts/' + name, query_string=req, headers={'X-API-Key': 'fixture-chart-api-key'})
                                 else:
-                                    response = client.post('/charts/' + name, json=req)
+                                    response = client.post('/charts/' + name, json=req, headers={'X-API-Key': 'fixture-chart-api-key'})
                                 payload = response.get_json()
                                 if response.status_code != 200:
                                     payload = {'error': payload.get('error'), 'chartName': payload.get('chartName')}
