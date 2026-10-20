@@ -22,7 +22,9 @@
     "react-scripts": "^5.0.1",
     "react-spinners": "^0.15.0",
     "react-xml-parser": "^1.1.8",
-    "web-vitals": "^2.1.4"
+    "web-vitals": "^2.1.4",
+    "@azure/msal-browser": "^4.25.1",
+    "@azure/msal-react": "^3.0.20"
   },
   "scripts": {
     "start": "react-scripts start",
