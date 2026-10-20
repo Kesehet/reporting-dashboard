@@ -123,12 +123,6 @@ const ReportHeaderComponent = ( dates, setDates, CorBFilter, setCorBFilter, setP
                     section: "Document Center",
                 },
                 {
-                    label: 'Key Rotation',
-                    icon: 'pi pi-lock',
-                    command: () => setPage('Key Rotation'),
-                    section: 'Administration',
-                },
-                {
                     label: 'CSV Loader Reports',
                     icon: 'pi pi-file-excel',
                     command: () => {
@@ -223,6 +217,13 @@ const ReportHeaderComponent = ( dates, setDates, CorBFilter, setCorBFilter, setP
                         setPage('Student Checking Report');
                     },
                     section: "Customer & Product Reports",
+                },
+        
+                {
+                    label: 'Key Rotation',
+                    icon: 'pi pi-lock',
+                    command: () => setPage('Key Rotation'),
+                    section: 'Administration',
                 },
 
                 
