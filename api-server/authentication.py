@@ -32,20 +32,51 @@ def verify_token(value):
                 return jwt.decode(token, secret, algorithms=['HS256'], options={'require': ['exp']})
             except jwt.InvalidTokenError:
                 pass
-        tenant = setting('REACT_APP_AZURE_TENANT_ID')
-        client_id = setting('REACT_APP_AZURE_CLIENT_ID')
-        if tenant and client_id:
-            key = microsoft_jwks(tenant).get_signing_key_from_jwt(token)
-            return jwt.decode(
-                token, key.key, algorithms=['RS256'], audience=client_id,
-                issuer=f'https://login.microsoftonline.com/{tenant}/v2.0',
-                options={'require': ['exp', 'iss', 'aud']},
-            )
+        return verify_microsoft_token(token)
     except Exception:
         return None
     return None
 
+
+def verify_microsoft_token(token):
+    """Validate signed Azure AD v1 or v2 ID tokens for this exact tenant and app.
+
+    Some enterprise app registrations still issue v1 tokens with sts.windows.net
+    as issuer. Never accept an unverified token, client-supplied role, or an
+    arbitrary token placeholder.
+    """
+    import jwt
+    tenant = setting('REACT_APP_AZURE_TENANT_ID')
+    client_id = setting('REACT_APP_AZURE_CLIENT_ID')
+    if not tenant or not client_id:
+        return None
+    accepted_issuers = (
+        f'https://login.microsoftonline.com/{tenant}/v2.0',
+        f'https://sts.windows.net/{tenant}/',
+    )
+    try:
+        key = microsoft_jwks(tenant).get_signing_key_from_jwt(token)
+        payload = jwt.decode(
+            token, key.key, algorithms=['RS256'],
+            audience=client_id, issuer=accepted_issuers,
+            options={'require': ['exp', 'iss', 'aud', 'tid']},
+        )
+        if payload.get('tid', '').lower() != tenant.lower():
+            return None
+        return payload
+    except (jwt.PyJWTError, ValueError, TypeError):
+        return None
+    except Exception:
+        # Network outages and missing packaged cryptography must fail closed.
+        return None
+
 def request_identity():
+    # IIS ARR and Windows Integrated Authentication may consume Authorization.
+    # An explicit ID-token header preserves MSAL auth across that proxy while
+    # still requiring the full Azure signature, issuer and audience checks.
+    msal_token = request.headers.get('X-MSAL-ID-Token', '').strip()
+    if msal_token:
+        return verify_microsoft_token(msal_token)
     token = request.headers.get('Authorization', '').strip()
     if token:
         return verify_token(token)

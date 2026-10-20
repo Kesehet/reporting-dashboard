@@ -5,6 +5,7 @@ import unittest
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest import mock
+from types import SimpleNamespace
 
 from flask import Flask
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'api-server'))
@@ -66,6 +67,57 @@ class AuthenticationTests(unittest.TestCase):
         resp = self.client.get('/msalConfig')
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(resp.json['auth']['authority'], 'https://login.microsoftonline.com/tenant-id')
+
+
+
+    def test_signed_microsoft_v1_and_v2_id_tokens_work_via_iis_safe_header(self):
+        import jwt
+        from cryptography.hazmat.primitives.asymmetric import rsa
+        key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+        tenant = '11111111-2222-3333-4444-555555555555'
+        client = '66666666-7777-8888-9999-000000000000'
+        os.environ['REACT_APP_AZURE_TENANT_ID'] = tenant
+        os.environ['REACT_APP_AZURE_CLIENT_ID'] = client
+        issuers = (
+            f'https://sts.windows.net/{tenant}/',
+            f'https://login.microsoftonline.com/{tenant}/v2.0',
+        )
+        with mock.patch('authentication.microsoft_jwks', return_value=SimpleNamespace(
+            get_signing_key_from_jwt=lambda token: SimpleNamespace(key=key.public_key())
+        )):
+            for issuer in issuers:
+                claims = {
+                    'tid': tenant, 'aud': client, 'iss': issuer, 'sub': 'fixture-user',
+                    'exp': datetime.now(timezone.utc) + timedelta(minutes=30),
+                }
+                jwt_token = jwt.encode(claims, key, algorithm='RS256', headers={'kid': 'test-kid'})
+                with self.subTest(issuer=issuer):
+                    # Works even when IIS owns the standard Authorization header.
+                    resp = self.client.get('/protected', headers={
+                        'X-MSAL-ID-Token': jwt_token, 'Authorization': 'Negotiate proxy-value',
+                    })
+                    self.assertEqual(resp.status_code, 200)
+                    self.assertEqual(resp.json['role'], 'msal')
+                for bad_claim, value in [
+                    ('aud', 'wrong-client'),
+                    ('tid', 'wrong-tenant'),
+                    ('iss', 'https://malicious.invalid/'),
+                    ('exp', datetime.now(timezone.utc) - timedelta(minutes=1)),
+                ]:
+                    corrupt = {**claims, bad_claim: value}
+                    token = jwt.encode(corrupt, key, algorithm='RS256', headers={'kid': 'test-kid'})
+                    with self.subTest(issuer=issuer, bad_claim=bad_claim):
+                        self.assertEqual(self.client.get('/protected', headers={
+                            'X-MSAL-ID-Token': token,
+                        }).status_code, 401)
+
+    def test_forged_static_sso_header_never_grants_access(self):
+        os.environ['REACT_APP_AZURE_TENANT_ID'] = 'fake-tenant'
+        os.environ['REACT_APP_AZURE_CLIENT_ID'] = 'fake-client'
+        self.assertEqual(self.client.get('/protected', headers={
+            'X-MSAL-ID-Token': 'sso_logged_in',
+            'X-API-Key': 'synthetic-key',
+        }).status_code, 401)
 
 
 if __name__ == '__main__':

@@ -1,6 +1,7 @@
 import { isArray } from 'chart.js/helpers';
 import XMLParser from 'react-xml-parser';
 import apiBaseUrl from './apiBaseUrl';
+import sessionHeaders from './sessionHeaders';
 
 class TransactionService {
   constructor(onload = null, startDate = "2024-04-09", endDate = "2024-04-11", requestedTransactions = []) {
@@ -24,7 +25,7 @@ class TransactionService {
 
     try {
       const response = await fetch(this.url, {
-        headers: localStorage.getItem('token') ? { Authorization: localStorage.getItem('token') } : {},
+        headers: sessionHeaders(),
       });
       if (response.status !== 200) {
         throw new Error(`Failed to fetch data: Error code ${response.status}`);

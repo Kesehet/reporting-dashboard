@@ -1,4 +1,5 @@
 import apiBaseUrl from './apiBaseUrl';
+import sessionHeaders from './sessionHeaders';
 class ChartDataService {
     constructor(name, extraParams = {}) {
         let base = apiBaseUrl();
@@ -29,7 +30,7 @@ class ChartDataService {
                 const response = await fetch(fullUrl, {
                     headers: {
                         'Content-Type': 'application/json',
-                        ...(localStorage.getItem('token') ? { Authorization: localStorage.getItem('token') } : {}),
+                        ...sessionHeaders(),
                     },
                     method: 'POST',
                     body: JSON.stringify(extraPostParams)
@@ -44,7 +45,7 @@ class ChartDataService {
                 const response = await fetch(fullUrl, {
                     headers: {
                         'Content-Type': 'application/json',
-                        ...(localStorage.getItem('token') ? { Authorization: localStorage.getItem('token') } : {}),
+                        ...sessionHeaders(),
                     },
                     method: 'GET',
                 });
