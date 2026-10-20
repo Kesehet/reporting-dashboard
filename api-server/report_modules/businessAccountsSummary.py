@@ -123,11 +123,11 @@ def get_number_of_apps_by_product_type(start_date, end_date, extraConditions = [
         # Total Applications
         resp["rows"][8].append(
             """<b class='greyed_out'>"""+
-            str(Q(
+            format_number(int(Q(
                 columns=[countColumn],
                 where= common_conditions,
                 
-            )) + """</b> 
+            ))) + """</b> 
             """
         )
 
@@ -155,16 +155,19 @@ def get_top_10_products(start_date, end_date, params=None):
     sql.connect()
     txn = Transaction(sql)
     for product_set_ids in get_all_product_set_ids(txn, "B"):
-        product_id = product_set_ids
+        if product_set_ids is None:
+            continue
+        product_id = str(product_set_ids).strip()
+        if product_id.endswith(".0"):
+            product_id = product_id[:-2]
+        if not product_id or product_id in all_counts:
+            continue
         count = get_product_count(product_id, start_date, end_date)
         all_counts[product_id] = count
     sql.disconnect()
-    # remove duplicates and sort by count and get top 10
+    # Rank unique product codes; alternate source spellings share one count.
     sorted_products = sorted(all_counts.items(), key=lambda x: x[1], reverse=True)[:10]
     for product_id, count in sorted_products:
-        product_id = str(product_id)
-        if product_id.endswith(".0"):
-            product_id = product_id[:-2]
         resp["rows"].append(
             [
                 get_product_name(product_id),
@@ -397,7 +400,6 @@ def get_current_balance_and_initial_deposit(start_date, end_date, params=None):
 
 
 def get_product_count(product_id, start_date = None, end_date = None, extraConditions = []):
-    ret = 0
     sql = SQLConn()
     sql.connect()
     txn = Transaction(sql)
@@ -413,29 +415,17 @@ def get_product_count(product_id, start_date = None, end_date = None, extraCondi
         isBusinessTxn
     ] + extraConditions
 
-    sql_query = f'''SELECT 
-       ProductSetId as ProductId,
-       COUNT(DISTINCT eCATrackingCode) AS DistinctECATrackingCodeCount
+    sql_query = f'''SELECT
+       COUNT(DISTINCT eCATrackingCode) AS data
         FROM [DigitalReport].[dbo].[Transactions]
         WHERE ProductSetId IS NOT NULL
         AND ProductSetId <> ''
         AND (ProductSetId = '{product_id}'
         OR ProductSetId = '{product_id}.0')
-        AND {" AND ".join(common_conditions)}
-        GROUP BY ProductSetId
-        ORDER BY COUNT(DISTINCT eCATrackingCode) DESC;
+        AND {" AND ".join(common_conditions)};
     '''
-    # remove repeated AND if any ..
     sql_query = sql_query.replace(" AND  AND ", " AND ")
-    result = txn.get_transactions_by_sql_query(sql_query)
-    if result == 0:
-        return 0
-    for row in result:        
-        
-        for all_products in process_product_id(row["ProductId"]):
-            if try_int(all_products) == try_int(product_id):
-                print(f"Product ID: {product_id}, Count: {row['DistinctECATrackingCodeCount']}, ret: {ret}")
-                ret = ret + try_int(row["DistinctECATrackingCodeCount"])
-                
-    sql.disconnect()
-    return ret
+    try:
+        return int(txn.get_transactions_by_sql_query(sql_query))
+    finally:
+        sql.disconnect()
