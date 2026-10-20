@@ -6,7 +6,7 @@ import { cryptoRequest } from '../../Services/CryptoRotationService';
 
 jest.mock('../../Services/CryptoRotationService', () => ({ cryptoRequest: jest.fn() }));
 
-const state = {
+const initial = {
   keyring: { current_id: 'current-kid', keys: [
     { id: 'historic-key', algorithm: 'AES_ECB_PKCS7', active: false },
     { id: 'current-kid', algorithm: 'AES_GCM', active: true },
@@ -14,89 +14,91 @@ const state = {
   job: { state: 'idle', processed: 0, updated: 0 },
 };
 
-const loadStatus = async () => {
-  await waitFor(() => expect(screen.getByText('historic-key')).toBeInTheDocument());
-};
-
 describe('CryptoRotationTab', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    cryptoRequest.mockImplementation(async (path) => path === '/status' ? state : { plaintext: 'Secret customer' });
+    cryptoRequest.mockImplementation(async (path) => path === '/status' ? initial : {});
   });
 
-  it('keeps the key rotation screen compact and focused', () => {
+  it('offers exactly two actions, with no manual confirmation or decryption fields', async () => {
     render(<CryptoRotationTab />);
-    expect(screen.getByRole('heading', { level: 1, name: 'Key Rotation' })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { level: 2, name: 'Key Rotation' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Check compatibility' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Migrate now' })).toBeDisabled();
-    expect(screen.getByRole('button', { name: 'Restore previous encryption' })).toBeDisabled();
-    expect(screen.queryByText('Production migration')).not.toBeInTheDocument();
-    expect(screen.queryByText('Prepare')).not.toBeInTheDocument();
-    expect(screen.queryByText('Verify / restore')).not.toBeInTheDocument();
-  });
-
-  it('loads key metadata automatically without operator tokens', async () => {
-    render(<CryptoRotationTab />);
+    await screen.findByText('historic-key');
+    expect(screen.getAllByRole('button')).toHaveLength(2);
+    expect(screen.getByRole('button', { name: 'Rotate' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Restore' })).toBeDisabled();
+    expect(screen.queryByLabelText('Confirmation')).not.toBeInTheDocument();
     expect(screen.queryByLabelText('Administrator token')).not.toBeInTheDocument();
-    await loadStatus();
-    expect(screen.getByText('historic-key')).toBeInTheDocument();
-    expect(screen.getByText('AES_ECB_PKCS7 · Historical')).toBeInTheDocument();
-    expect(screen.queryByText('Secret customer')).not.toBeInTheDocument();
-  });
-
-  it('keeps manual decryption out of the key rotation screen', () => {
-    render(<CryptoRotationTab />);
-    expect(screen.queryByRole('heading', { name: 'Decrypt string' })).not.toBeInTheDocument();
     expect(screen.queryByLabelText('Encrypted value')).not.toBeInTheDocument();
+    expect(screen.getByText('AES_ECB_PKCS7 · Historical')).toBeInTheDocument();
   });
 
-  it('requires successful preflight and exact confirmation before migrating', async () => {
+  it('starts the entire server-managed rotation with one click', async () => {
     cryptoRequest.mockImplementation(async (path) => {
-      if (path === '/status') return state;
-      if (path === '/preflight') return { ready: true, scanned: 10, values_to_rotate: 12, failures: 0 };
-      if (path === '/start') return { run_id: 'a'.repeat(32), state: 'starting' };
-      return {};
+      if (path === '/status') return initial;
+      if (path === '/rotate') return { run_id: 'a'.repeat(32), state: 'starting' };
+      throw new Error('Unexpected manual operation');
     });
     render(<CryptoRotationTab />);
-    await waitFor(() => expect(cryptoRequest).toHaveBeenCalledWith('/status', undefined, expect.anything()));
-    expect(screen.getByText('Migrate now')).toBeDisabled();
-    fireEvent.click(screen.getByText('Check compatibility'));
-    await waitFor(() => expect(screen.getByText(/10 rows scanned/)).toBeInTheDocument());
-    expect(screen.getByText('Rows scanned').nextElementSibling).toHaveTextContent('10');
-    expect(screen.getByText('Migrate now')).toBeDisabled();
-    fireEvent.change(screen.getByLabelText(/Confirmation/), { target: { value: 'MIGRATE_PII' } });
-    expect(screen.getByText('Migrate now')).toBeEnabled();
-    fireEvent.click(screen.getByText('Migrate now'));
-    await waitFor(() => expect(cryptoRequest).toHaveBeenCalledWith(
-      '/start', { confirm: 'MIGRATE_PII' }
-    ));
+    await screen.findByText('historic-key');
+    fireEvent.click(screen.getByRole('button', { name: 'Rotate' }));
+    await waitFor(() => expect(cryptoRequest).toHaveBeenCalledWith('/rotate', {}));
+    await waitFor(() => expect(screen.getByTestId('crypto-job-state')).toHaveTextContent('starting'));
+    expect(screen.getByText('Recovery run ID:').textContent).toContain('a'.repeat(32));
+    expect(screen.getByRole('button', { name: 'Rotate' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Restore' })).toBeDisabled();
+    expect(cryptoRequest).not.toHaveBeenCalledWith('/keys/rotate', expect.anything());
+    expect(cryptoRequest).not.toHaveBeenCalledWith('/start', expect.anything());
   });
 
-  it('blocks migration on a failed preflight', async () => {
-    cryptoRequest.mockImplementation(async (path) => path === '/status' ? state : {
-      ready: false, scanned: 4, values_to_rotate: 0, failures: 1,
-      examples: [{ table: 'Transactions', column: 'PrimarySSN', error: 'Missing key' }]
-    });
-    render(<CryptoRotationTab />);
-    await waitFor(() => expect(cryptoRequest).toHaveBeenCalledWith('/status', undefined, expect.anything()));
-    fireEvent.click(screen.getByText('Check compatibility'));
-    await waitFor(() => expect(screen.getByText(/Missing key/)).toBeInTheDocument());
-    fireEvent.change(screen.getByLabelText(/Confirmation/), { target: { value: 'MIGRATE_PII' } });
-    expect(screen.getByText('Migrate now')).toBeDisabled();
-  });
-
-  it('requires exact confirmation and a completed run before restoration', async () => {
+  it('restores a completed rotation using the current recovery run id', async () => {
     cryptoRequest.mockImplementation(async (path) => path === '/status' ? {
-      ...state, job: { state: 'completed', run_id: 'c'.repeat(32), processed: 100, updated: 90 }
-    } : { state: 'starting' });
+      ...initial,
+      job: { state: 'completed', run_id: 'c'.repeat(32), processed: 100, updated: 90, preflight: { scanned: 100, failures: 0 } },
+    } : { state: 'starting', run_id: 'c'.repeat(32) });
     render(<CryptoRotationTab />);
-    await waitFor(() => expect(cryptoRequest).toHaveBeenCalledWith('/status', undefined, expect.anything()));
-    expect(screen.getByText('Restore previous encryption')).toBeDisabled();
-    fireEvent.change(screen.getByLabelText(/Confirmation/), { target: { value: 'RESTORE_ORIGINAL' } });
-    fireEvent.click(screen.getByText('Restore previous encryption'));
+    await screen.findByText('historic-key');
+    expect(screen.getByRole('button', { name: 'Restore' })).toBeEnabled();
+    expect(screen.getByText('Preflight failures').nextElementSibling).toHaveTextContent('0');
+    fireEvent.click(screen.getByRole('button', { name: 'Restore' }));
     await waitFor(() => expect(cryptoRequest).toHaveBeenCalledWith(
       '/rollback', { run_id: 'c'.repeat(32), confirm: 'RESTORE_ORIGINAL' }
     ));
+    await waitFor(() => expect(screen.getByTestId('crypto-job-state')).toHaveTextContent('restoring'));
+  });
+
+  it('blocks both actions while a worker runs', async () => {
+    cryptoRequest.mockResolvedValue({ ...initial, job: { state: 'committing', run_id: 'b'.repeat(32) } });
+    render(<CryptoRotationTab />);
+    await screen.findByText('historic-key');
+    expect(screen.getByRole('button', { name: 'Rotate' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Restore' })).toBeDisabled();
+  });
+
+  it('only offers recovery when reconciliation is required', async () => {
+    cryptoRequest.mockResolvedValue({
+      ...initial,
+      job: { state: 'reconciliation_required', run_id: 'd'.repeat(32), error: 'SQL commit outcome needs reconciliation' },
+    });
+    render(<CryptoRotationTab />);
+    await screen.findByText('historic-key');
+    expect(screen.getByRole('button', { name: 'Rotate' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Restore' })).toBeEnabled();
+    expect(screen.getByRole('alert')).toHaveTextContent('reconciliation');
+  });
+
+  it('displays a failed preflight without creating an extra action', async () => {
+    cryptoRequest.mockResolvedValue({
+      ...initial,
+      job: {
+        state: 'failed', run_id: 'e'.repeat(32), error: 'Migration aborted; SQL transaction rolled back',
+        preflight: { scanned: 4, values_to_rotate: 0, failures: 1,
+          examples: [{ table: 'Transactions', column: 'PrimarySSN', error: 'Missing key' }] },
+      },
+    });
+    render(<CryptoRotationTab />);
+    await screen.findByText('historic-key');
+    expect(screen.getByText(/Missing key/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Rotate' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Restore' })).toBeDisabled();
   });
 });
