@@ -84,13 +84,11 @@ def verify_microsoft_token(token):
         return None
 
 def request_identity():
-    # SSO is proved by an unexpired Microsoft-signed ID token in a secure
-    # HttpOnly cookie, issued by our backend only after successful SSO.
-    cookie_token = request.cookies.get('report_sso')
-    if cookie_token:
-        identity = verify_microsoft_token(cookie_token)
-        if identity is not None:
-            return identity
+    # IIS can consume Authorization; Microsoft SSO uses a dedicated header.
+    # Only a cryptographically verified Microsoft token grants access.
+    msal_token = request.headers.get('X-MSAL-ID-Token', '').strip()
+    if msal_token:
+        return verify_microsoft_token(msal_token)
     token = request.headers.get('Authorization', '').strip()
     if token:
         return verify_token(token)
@@ -105,26 +103,6 @@ def request_identity():
 
 def unauthorized():
     return jsonify({'error': 'Invalid or missing login token / API key.'}), 401
-
-@authentication.route('/sso/session', methods=['POST'])
-def establish_sso_session():
-    """Exchange an authenticated Microsoft sign-in for an HttpOnly cookie."""
-    payload = request.get_json(silent=True) or {}
-    token = payload.get('id_token', '') if isinstance(payload, dict) else ''
-    identity = verify_microsoft_token(token) if isinstance(token, str) else None
-    if identity is None:
-        return unauthorized()
-    age = max(0, min(3600, int(identity['exp']) - int(datetime.now(timezone.utc).timestamp())))
-    if not age:
-        return unauthorized()
-    response = jsonify({'sso': True})
-    frontend = setting('REACT_APP_FE_SERVER_BASE_URL', request.url_root)
-    response.set_cookie(
-        'report_sso', token, httponly=True, secure=frontend.startswith('https://'),
-        samesite='Lax', max_age=age, path='/',
-    )
-    return response
-
 
 @authentication.route('/msalConfig', methods=['GET'])
 def msal_config():
@@ -202,6 +180,4 @@ def ldap_login():
 
 @authentication.route('/logout', methods=['GET', 'POST'])
 def logout():
-    response = jsonify({'message': 'Logged out successfully.'})
-    response.delete_cookie('report_sso', path='/')
-    return response
+    return jsonify({'message': 'Logged out successfully.'})

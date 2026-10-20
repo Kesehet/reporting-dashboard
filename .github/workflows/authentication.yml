@@ -29,5 +29,5 @@ jobs:
           node-version: '22'
           cache: npm
       - run: npm ci --no-audit --no-fund
-      - run: CI=true npm run test:nocov -- --runInBand --testPathPattern='AuthorizationService.test.js|ReportLoginComponent.test.js'
+      - run: CI=true npm run test:nocov -- --runInBand --testPathPattern='AuthorizationService.test.js|ReportLoginComponent.test.js|sessionHeaders.test.js'
       - run: CI=false npm run build
