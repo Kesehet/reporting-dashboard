@@ -28,6 +28,7 @@ class ChartDataService {
                 const fullUrl = `${this.url}`;
 
                 const response = await fetch(fullUrl, {
+                    credentials: 'include',
                     headers: {
                         'Content-Type': 'application/json',
                         ...sessionHeaders(),
@@ -43,6 +44,7 @@ class ChartDataService {
                 let extraGetParams = Object.entries(this.extraParams).map(([key, value]) => `${key}=${value}`).join('&');
                 const fullUrl = `${this.url}?${extraGetParams}`;
                 const response = await fetch(fullUrl, {
+                    credentials: 'include',
                     headers: {
                         'Content-Type': 'application/json',
                         ...sessionHeaders(),
