@@ -61,17 +61,23 @@ SQL backups and filesystem backups must be coordinated.
 3. Verify original ECB test vector and import all known historical keys.
    Unknown formats or keys must stop migration.
 4. Deploy first against staging SQL and a private copy of the crypto files.
-5. Open Key Rotation in the dashboard. Status loads automatically; no separate operator token is required.
-6. Explicitly create/activate a new GCM key. This action keeps the old keys and
-   does not bulk-modify existing SQL ciphertext.
-7. Run read-only preflight. It verifies all existing ciphertext can decrypt,
-   checks GCM round trips, SQL column lengths, and file-reference capacity.
-   Any failure prevents a production migration.
-8. Enter MIGRATE_PII and start. It repeats the preflight then processes
-   Transactions and Properties in one SQL transaction. The encrypted recovery
-   journal is synced to disk before SQL commit.
-9. Verify completed status and representative reports. Retain recovery
+5. Open Key Rotation in the dashboard. It has two controls: Rotate and Restore.
+   No operator token, confirmation text, or separate preflight click is needed.
+6. Click Rotate once. The backend starts one background job that creates the
+   next AES-GCM key, runs read-only preflight, then (only if compatible)
+   migrates encrypted PrimaryName/PrimarySSN values in Transactions and
+   Properties in a single SQL transaction. An authenticated recovery journal
+   is synced to disk before SQL commit.
+7. Watch job status, rows scanned/updated and preflight failures in the UI.
+   A pre-commit failure rolls back SQL and reactivates the previous GCM key
+   (if any), without deleting the newly created key from history. If SQL
+   commit status is uncertain, investigate reconciliation_required instead
+   of assuming rollback.
+8. Verify completed status and representative reports. Retain recovery
    journal, historical keys and file-backed values; only then resume writers.
+9. To undo the most recent completed migration, click Restore. Restore uses
+   the saved run ID and checks current ciphertext before reverting SQL data.
+   Restore does not change the active key for future GCM writes.
 
 This migration does not change SQL tables or columns.
 

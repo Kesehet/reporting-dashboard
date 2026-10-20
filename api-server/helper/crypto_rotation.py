@@ -15,7 +15,7 @@ from flask import Blueprint, jsonify, request
 
 from helper.encryption_helper import (
     _atomic_write, _root, decrypt_string, encrypt_string, encrypted_key_id,
-    get_keyring, is_versioned, key_metadata, key_rotation,
+    get_keyring, is_versioned, key_metadata, key_rotation, revert_active_key,
 )
 
 crypto_api = Blueprint("crypto_rotation", __name__, url_prefix="/crypto")
@@ -194,9 +194,10 @@ def _locked_run(run_id, operation, fd):
         lock_path.unlink(missing_ok=True)
 
 
-def _migrate(run_id):
+def _migrate(run_id, previous_key_id=None, activated_key_id=None):
     status = {"state": "running", "run_id": run_id, "started_at": _now(),
-              "processed": 0, "updated": 0}
+              "processed": 0, "updated": 0,
+              "previous_key_id": previous_key_id, "activated_key_id": activated_key_id}
     _write_status(status)
     sql = None
     committed = False
@@ -204,6 +205,13 @@ def _migrate(run_id):
     try:
         # Recheck the entire dataset immediately before writing.
         preflight = inspect_database()
+        status["preflight"] = {
+            "scanned": preflight.get("scanned", 0),
+            "values_to_rotate": preflight.get("values_to_rotate", 0),
+            "failures": preflight.get("failures", 0),
+            "examples": preflight.get("examples", []),
+        }
+        _write_status(status)
         if not preflight.get("ready"):
             raise RuntimeError("Preflight failed; no data was changed")
         sql = _connection()
@@ -310,6 +318,21 @@ def _rollback(run_id):
         sql.disconnect()
 
 
+
+def _rotate_and_migrate(run_id):
+    """One-click workflow: activate GCM, verify compatibility, migrate atomically."""
+    previous_id = get_keyring().get("current_id")
+    new_id = key_rotation()
+    try:
+        _migrate(run_id, previous_key_id=previous_id, activated_key_id=new_id)
+    finally:
+        # _migrate marks pre-commit failures as failed and rolls back SQL.
+        # Only restore the active pointer when commit is known not to have begun.
+        # Keep the generated key in history even after reverting the pointer.
+        if _status().get("state") in ("failed", "starting", "running"):
+            revert_active_key(previous_id, new_id)
+
+
 def _async_runner(run_id, action, fd, kind):
     global _active
     try:
@@ -398,6 +421,19 @@ def rotate_key_api():
     finally:
         os.close(fd)
         lock_path.unlink(missing_ok=True)
+
+
+
+@crypto_api.post("/rotate")
+def rotate_and_migrate_api():
+    """Start the full checked rotation in one durable background job."""
+    if _status().get("state") in ("starting", "running", "committing",
+                                 "restoring", "reconciliation_required", "restore_failed"):
+        return jsonify({"error": "Previous operation must be reconciled first"}), 409
+    run_id = uuid.uuid4().hex
+    if not _launch(run_id, lambda: _rotate_and_migrate(run_id)):
+        return jsonify({"error": "Another cryptographic operation is active"}), 409
+    return jsonify({"run_id": run_id, "state": "starting"}), 202
 
 
 @crypto_api.post("/decrypt")
