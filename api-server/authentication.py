@@ -32,20 +32,54 @@ def verify_token(value):
                 return jwt.decode(token, secret, algorithms=['HS256'], options={'require': ['exp']})
             except jwt.InvalidTokenError:
                 pass
-        tenant = setting('REACT_APP_AZURE_TENANT_ID')
-        client_id = setting('REACT_APP_AZURE_CLIENT_ID')
-        if tenant and client_id:
-            key = microsoft_jwks(tenant).get_signing_key_from_jwt(token)
-            return jwt.decode(
-                token, key.key, algorithms=['RS256'], audience=client_id,
-                issuer=f'https://login.microsoftonline.com/{tenant}/v2.0',
-                options={'require': ['exp', 'iss', 'aud']},
-            )
+        return verify_microsoft_token(token)
     except Exception:
         return None
     return None
 
+
+def verify_microsoft_token(token):
+    """Validate signed Azure AD v1 or v2 ID tokens for this exact tenant and app.
+
+    Some enterprise app registrations still issue v1 tokens with sts.windows.net
+    as issuer. Never accept an unverified token, client-supplied role, or an
+    arbitrary token placeholder.
+    """
+    import jwt
+    tenant = setting('REACT_APP_AZURE_TENANT_ID')
+    client_id = setting('REACT_APP_AZURE_CLIENT_ID')
+    if not tenant or not client_id:
+        return None
+    accepted_issuers = (
+        f'https://login.microsoftonline.com/{tenant}/v2.0',
+        f'https://sts.windows.net/{tenant}/',
+    )
+    try:
+        key = microsoft_jwks(tenant).get_signing_key_from_jwt(token)
+        payload = jwt.decode(
+            token, key.key, algorithms=['RS256'],
+            audience=client_id,
+            options={'require': ['exp', 'iss', 'aud', 'tid']},
+        )
+        if payload.get('iss') not in accepted_issuers:
+            return None
+        if payload.get('tid', '').lower() != tenant.lower():
+            return None
+        return payload
+    except (jwt.PyJWTError, ValueError, TypeError):
+        return None
+    except Exception:
+        # Network outages and missing packaged cryptography must fail closed.
+        return None
+
 def request_identity():
+    # SSO is proved by an unexpired Microsoft-signed ID token in a secure
+    # HttpOnly cookie, issued by our backend only after successful SSO.
+    cookie_token = request.cookies.get('report_sso')
+    if cookie_token:
+        identity = verify_microsoft_token(cookie_token)
+        if identity is not None:
+            return identity
     token = request.headers.get('Authorization', '').strip()
     if token:
         return verify_token(token)
@@ -60,6 +94,26 @@ def request_identity():
 
 def unauthorized():
     return jsonify({'error': 'Invalid or missing login token / API key.'}), 401
+
+@authentication.route('/sso/session', methods=['POST'])
+def establish_sso_session():
+    """Exchange an authenticated Microsoft sign-in for an HttpOnly cookie."""
+    payload = request.get_json(silent=True) or {}
+    token = payload.get('id_token', '') if isinstance(payload, dict) else ''
+    identity = verify_microsoft_token(token) if isinstance(token, str) else None
+    if identity is None:
+        return unauthorized()
+    age = max(0, min(3600, int(identity['exp']) - int(datetime.now(timezone.utc).timestamp())))
+    if not age:
+        return unauthorized()
+    response = jsonify({'sso': True})
+    frontend = setting('REACT_APP_FE_SERVER_BASE_URL', request.url_root)
+    response.set_cookie(
+        'report_sso', token, httponly=True, secure=frontend.startswith('https://'),
+        samesite='Lax', max_age=age, path='/',
+    )
+    return response
+
 
 @authentication.route('/msalConfig', methods=['GET'])
 def msal_config():
@@ -137,4 +191,6 @@ def ldap_login():
 
 @authentication.route('/logout', methods=['GET', 'POST'])
 def logout():
-    return jsonify({'message': 'Logged out successfully.'})
+    response = jsonify({'message': 'Logged out successfully.'})
+    response.delete_cookie('report_sso', path='/')
+    return response
