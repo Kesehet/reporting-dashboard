@@ -3,6 +3,7 @@ import ChartDataService from '../../Services/ChartDataService';
 import fetchMock from 'jest-fetch-mock';
 
 beforeEach(() => {
+  fetchMock.enableMocks();
   localStorage.clear();
   fetchMock.resetMocks();
   localStorage.setItem('start_date', '2026-10-01');
