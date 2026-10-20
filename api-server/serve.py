@@ -4,8 +4,7 @@ import sys
 from pathlib import Path
 from dotenv import load_dotenv
 
-# Configuration must be initialized before encrypted-data modules are imported.
-# PyInstaller extracts modules into a temporary directory, so use the exe path.
+# Configuration must load before encrypted-data imports.
 if getattr(sys, "frozen", False):
     load_dotenv(Path(sys.executable).resolve().parent / ".env", override=False)
 load_dotenv(Path.cwd() / ".env", override=False)
