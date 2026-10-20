@@ -1,0 +1,198 @@
+{
+  "apps": {
+    "headers": [
+      "-",
+      "2026/01 - JAN",
+      "2026/02 - FEB",
+      "2026/03 - MAR"
+    ],
+    "rows": [
+      [
+        "Started Promo Code",
+        "54",
+        "54",
+        "54"
+      ],
+      [
+        "Single Product Started Applications",
+        "54",
+        "54",
+        "54"
+      ],
+      [
+        "Multi Product Started Applications",
+        "54",
+        "54",
+        "54"
+      ],
+      [
+        "Deposit Product Started Applications",
+        "54",
+        "54",
+        "54"
+      ],
+      [
+        "Lending Product Started Applications",
+        "54",
+        "54",
+        "54"
+      ],
+      [
+        "Mixed Product Started Applications",
+        "54",
+        "54",
+        "54"
+      ],
+      [
+        "Online Started Applications",
+        "54",
+        "54",
+        "54"
+      ],
+      [
+        "Banker Assisted Started Applications",
+        "54",
+        "54",
+        "54"
+      ],
+      [
+        "Total Started Applications",
+        "<b class='greyed_out'>54</b> \n            ",
+        "<b class='greyed_out'>54</b> \n            ",
+        "<b class='greyed_out'>54</b> \n            "
+      ],
+      [
+        "Submitted Promo Code",
+        "54",
+        "54",
+        "54"
+      ],
+      [
+        "Single Product Submitted Applications",
+        "54",
+        "54",
+        "54"
+      ],
+      [
+        "Multi Product Submitted Applications",
+        "54",
+        "54",
+        "54"
+      ],
+      [
+        "Deposit Product Submitted Applications",
+        "54",
+        "54",
+        "54"
+      ],
+      [
+        "Lending Product Submitted Applications",
+        "54",
+        "54",
+        "54"
+      ],
+      [
+        "Mixed Product Submitted Applications",
+        "54",
+        "54",
+        "54"
+      ],
+      [
+        "Online Submitted Applications",
+        "54",
+        "54",
+        "54"
+      ],
+      [
+        "Banker Assisted Submitted Applications",
+        "54",
+        "54",
+        "54"
+      ],
+      [
+        "Total Submitted Applications",
+        "<b class='greyed_out'>54</b> \n            ",
+        "<b class='greyed_out'>54</b> \n            ",
+        "<b class='greyed_out'>54</b> \n            "
+      ],
+      [
+        "Opened/Approved Promo Code",
+        "54",
+        "54",
+        "54"
+      ],
+      [
+        "Single Product Opened/Approved Applications",
+        "54",
+        "54",
+        "54"
+      ],
+      [
+        "Multi Product Opened/Approved Applications",
+        "54",
+        "54",
+        "54"
+      ],
+      [
+        "Deposit Product Opened/Approved Applications",
+        "54",
+        "54",
+        "54"
+      ],
+      [
+        "Lending Product Opened/Approved Applications",
+        "54",
+        "54",
+        "54"
+      ],
+      [
+        "Mixed Product Opened/Approved Applications",
+        "54",
+        "54",
+        "54"
+      ],
+      [
+        "Online Opened/Approved Applications",
+        "54",
+        "54",
+        "54"
+      ],
+      [
+        "Banker Assisted Opened/Approved Applications",
+        "54",
+        "54",
+        "54"
+      ],
+      [
+        "Total Opened/Approved Applications",
+        "<b class='greyed_out'>54</b> \n            ",
+        "<b class='greyed_out'>54</b> \n            ",
+        "<b class='greyed_out'>54</b> \n            "
+      ]
+    ]
+  },
+  "products": {
+    "headers": [
+      "Product Description",
+      "Product Code",
+      "Number of Applications"
+    ],
+    "rows": [
+      [
+        "Free Small Business Checking",
+        "20903",
+        91
+      ],
+      [
+        "Business First Checking",
+        "20601",
+        31
+      ],
+      [
+        "Business Credit Card",
+        "101",
+        8
+      ]
+    ]
+  }
+}
