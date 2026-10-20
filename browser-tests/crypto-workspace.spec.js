@@ -13,11 +13,11 @@ const fakeStatus = {
   job: { state: 'idle', processed: 0, updated: 0 },
 };
 
-async function mockBackend(page) {
+async function mockBackend(page, job = fakeStatus.job) {
   await page.route('**/api/crypto/**', async route => {
     const path = new URL(route.request().url()).pathname;
     let payload;
-    if (path.endsWith('/status')) payload = fakeStatus;
+    if (path.endsWith('/status')) payload = { ...fakeStatus, job };
     else if (path.endsWith('/preflight')) {
       payload = { ready: true, scanned: 125, values_to_rotate: 160, failures: 0, examples: [] };
     } else if (path.endsWith('/decrypt')) payload = { plaintext: 'SYNTHETIC_SECRET_123' };
@@ -29,12 +29,12 @@ async function mockBackend(page) {
   });
 }
 
-async function openTab(page, width) {
+async function openTab(page, width, job) {
   await page.setViewportSize({ width, height: 860 });
   page.on('request', request => { if (request.url().includes('/crypto/')) console.log('CRYPTO_REQUEST', request.method(), request.url()); });
   page.on('console', message => { if (message.type() === 'error') console.log('PAGE_ERROR', message.text()); });
   page.on('pageerror', error => console.log('PAGE_EXCEPTION', error.message));
-  await mockBackend(page);
+  await mockBackend(page, job);
   await page.goto('/');
   // Dashboard startup briefly switches the entire page to a loading state.
   // Wait for its existing 1-second initialization timers before selecting a tab.
@@ -76,20 +76,30 @@ for (const width of [375, 768, 1440]) {
   });
 }
 
-test('real browser: scoped key rotation and preflight before migrate', async ({ page }) => {
+test('real browser: two-button rotation starts without technical confirmation fields', async ({ page }) => {
   await openTab(page, 1280);
-  await expect(page.getByRole('button', { name: 'Migrate now' })).toBeDisabled();
-  await expect(page.getByText('synthetic-old-key-id')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Rotate', exact: true })).toBeEnabled();
+  await expect(page.getByRole('button', { name: 'Restore', exact: true })).toBeDisabled();
   await expect(page.getByLabel('Administrator token')).toHaveCount(0);
-  await expect(page.getByRole('heading', { name: 'Decrypt string' })).toHaveCount(0);
+  await expect(page.getByLabel('Confirmation')).toHaveCount(0);
   await expect(page.getByLabel('Encrypted value')).toHaveCount(0);
-  await page.getByRole('button', { name: 'Check compatibility' }).click();
-  await expect(page.getByText(/125 rows scanned/)).toBeVisible();
-  await expect(page.locator('[aria-label="Migration control"] .crypto-metrics strong').first()).toHaveText('125');
-  await expect(page.getByRole('button', { name: 'Migrate now' })).toBeDisabled();
-  await page.getByLabel(/Confirmation/).fill('MIGRATE_PII');
-  await expect(page.getByRole('button', { name: 'Migrate now' })).toBeEnabled();
-  await page.getByRole('button', { name: 'Migrate now' }).click();
+  await expect(page.locator('[aria-label="Key rotation controls"] button')).toHaveCount(2);
+  const call = page.waitForRequest(req => req.url().endsWith('/crypto/rotate') && req.method() === 'POST');
+  await page.getByRole('button', { name: 'Rotate', exact: true }).click();
+  await call;
   await expect(page.getByTestId('crypto-job-state')).toHaveText('starting');
-  await expect(page.getByRole('button', { name: 'Refresh status' })).toBeEnabled();
+  await expect(page.getByRole('button', { name: 'Rotate', exact: true })).toBeDisabled();
+});
+
+test('real browser: restore uses the last successful recovery snapshot', async ({ page }) => {
+  await openTab(page, 1280, {
+    state: 'completed', run_id: 'a'.repeat(32), processed: 125, updated: 100,
+    preflight: { scanned: 125, values_to_rotate: 160, failures: 0 },
+  });
+  await expect(page.getByRole('button', { name: 'Restore', exact: true })).toBeEnabled();
+  const call = page.waitForRequest(req => req.url().endsWith('/crypto/rollback') && req.method() === 'POST');
+  await page.getByRole('button', { name: 'Restore', exact: true }).click();
+  const request = await call;
+  expect(JSON.parse(request.postData()).run_id).toBe('a'.repeat(32));
+  await expect(page.getByTestId('crypto-job-state')).toHaveText('restoring');
 });
