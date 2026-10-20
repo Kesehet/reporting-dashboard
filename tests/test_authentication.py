@@ -70,7 +70,7 @@ class AuthenticationTests(unittest.TestCase):
 
 
 
-    def test_signed_microsoft_v1_and_v2_id_tokens_work_via_iis_safe_header(self):
+    def test_signed_microsoft_tokens_establish_cookie_and_authorize_charts(self):
         import jwt
         from cryptography.hazmat.primitives.asymmetric import rsa
         key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
@@ -92,12 +92,15 @@ class AuthenticationTests(unittest.TestCase):
                 }
                 jwt_token = jwt.encode(claims, key, algorithm='RS256', headers={'kid': 'test-kid'})
                 with self.subTest(issuer=issuer):
-                    # Works even when IIS owns the standard Authorization header.
-                    resp = self.client.get('/protected', headers={
-                        'X-MSAL-ID-Token': jwt_token, 'Authorization': 'Negotiate proxy-value',
-                    })
-                    self.assertEqual(resp.status_code, 200)
-                    self.assertEqual(resp.json['role'], 'msal')
+                    response = self.client.post('/sso/session', json={'id_token': jwt_token})
+                    self.assertEqual(response.status_code, 200)
+                    self.assertIn('report_sso=', response.headers.get('Set-Cookie', ''))
+                    self.assertIn('HttpOnly', response.headers.get('Set-Cookie', ''))
+                    self.assertEqual(self.client.get('/protected').status_code, 200)
+                    # Logout deletes the server session; no token required for
+                    # subsequent requests, but the cookie itself must be valid.
+                    self.assertEqual(self.client.post('/logout').status_code, 200)
+                    self.assertEqual(self.client.get('/protected').status_code, 401)
                 for bad_claim, value in [
                     ('aud', 'wrong-client'),
                     ('tid', 'wrong-tenant'),
@@ -107,17 +110,18 @@ class AuthenticationTests(unittest.TestCase):
                     corrupt = {**claims, bad_claim: value}
                     token = jwt.encode(corrupt, key, algorithm='RS256', headers={'kid': 'test-kid'})
                     with self.subTest(issuer=issuer, bad_claim=bad_claim):
-                        self.assertEqual(self.client.get('/protected', headers={
-                            'X-MSAL-ID-Token': token,
-                        }).status_code, 401)
+                        self.assertEqual(
+                            self.client.post('/sso/session', json={'id_token': token}).status_code, 401
+                        )
 
     def test_forged_static_sso_header_never_grants_access(self):
         os.environ['REACT_APP_AZURE_TENANT_ID'] = 'fake-tenant'
         os.environ['REACT_APP_AZURE_CLIENT_ID'] = 'fake-client'
+        self.client.set_cookie('report_sso', 'sso_logged_in')
+        self.assertEqual(self.client.get('/protected').status_code, 401)
         self.assertEqual(self.client.get('/protected', headers={
-            'X-MSAL-ID-Token': 'sso_logged_in',
             'X-API-Key': 'synthetic-key',
-        }).status_code, 401)
+        }).status_code, 200)
 
 
 if __name__ == '__main__':
