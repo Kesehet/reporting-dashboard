@@ -39,6 +39,14 @@ pyi_cmd = [
     "chardet",
     "--collect-all",
     "charset_normalizer",
+    # pkg_resources loads jaraco through dynamic extern/vendor aliases that
+    # PyInstaller may not discover automatically.
+    "--collect-submodules",
+    "jaraco",
+    "--collect-submodules",
+    "pkg_resources._vendor",
+    "--collect-submodules",
+    "setuptools._vendor",
 ]
 
 # Define environments
