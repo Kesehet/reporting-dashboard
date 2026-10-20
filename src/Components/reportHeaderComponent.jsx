@@ -123,12 +123,6 @@ const ReportHeaderComponent = ( dates, setDates, CorBFilter, setCorBFilter, setP
                     section: "Document Center",
                 },
                 {
-                    label: 'Business String Decryption',
-                    icon: 'pi pi-lock',
-                    command: () => setPage('Business String Decryption'),
-                    section: "Tools",
-                },
-                {
                     label: 'Key Rotation',
                     icon: 'pi pi-lock',
                     command: () => setPage('Key Rotation'),
