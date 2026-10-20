@@ -301,5 +301,76 @@ class EncryptionHttpFlow(unittest.TestCase):
         self.assert_no_ddl()
 
 
+    def test_one_click_rotate_migrates_and_restores_without_schema_changes(self):
+        code, result = self.api("POST", "/rotate", {})
+        self.assertEqual(code, 202, result)
+        run_id = result["run_id"]
+        completed = self.wait_for_state(run_id)
+        self.assertEqual(completed["state"], "completed", completed)
+        self.assertEqual(completed["preflight"]["failures"], 0)
+        self.assertEqual(completed["preflight"]["scanned"], 3)
+        self.assertEqual(completed["updated"], 3)
+        self.assertIsNone(completed["previous_key_id"])
+        self.assertEqual(crypto.get_keyring()["current_id"], completed["activated_key_id"])
+        self.assertNotEqual(self.db, self.before)
+        for table, rows in self.db.items():
+            for identity, values in rows.items():
+                self.assertEqual(crypto.decrypt_string(values[0]),
+                                 {"1": "Alice", "2": "Bob", "P-01": "Carol"}[str(identity)])
+        code, result = self.api("POST", "/rollback",
+                                {"run_id": run_id, "confirm": "RESTORE_ORIGINAL"})
+        self.assertEqual(code, 202, result)
+        self.assertEqual(self.wait_for_state(run_id)["state"], "rolled_back")
+        self.assertEqual(self.db, self.before)
+        self.assert_no_ddl()
+
+    def test_one_click_failed_preflight_retains_previous_active_key(self):
+        previous_id = self.activate()
+        os.environ["CRYPTO_LEGACY_MODE"] = ""
+        code, result = self.api("POST", "/rotate", {})
+        self.assertEqual(code, 202, result)
+        state = self.wait_for_state(result["run_id"])
+        self.assertEqual(state["state"], "failed")
+        self.assertGreater(state["preflight"]["failures"], 0)
+        ring = crypto.get_keyring()
+        self.assertEqual(ring["current_id"], previous_id)
+        self.assertEqual(len(ring["keys"]), 3, "Generated key stays in history")
+        self.assertEqual(self.db, self.before)
+        self.assertEqual(sum(c.connection.commits for c in self.connections), 0)
+        self.assert_no_ddl()
+
+    def test_one_click_sql_failure_restores_previous_active_key(self):
+        previous_id = self.activate()
+        self.fail_pk = 2
+        code, result = self.api("POST", "/rotate", {})
+        self.assertEqual(code, 202, result)
+        state = self.wait_for_state(result["run_id"])
+        self.assertEqual(state["state"], "failed")
+        self.assertEqual(crypto.get_keyring()["current_id"], previous_id)
+        self.assertEqual(self.db, self.before)
+        self.assertEqual(sum(c.connection.commits for c in self.connections), 0)
+        self.assert_no_ddl()
+
+    def test_one_click_retry_is_blocked_while_work_is_running(self):
+        self.activate()
+        inside, release = threading.Event(), threading.Event()
+        original = rot._compare_update
+        def pause(*args, **kwargs):
+            inside.set()
+            if not release.wait(timeout=6):
+                raise RuntimeError("Simulated lock timeout")
+            return original(*args, **kwargs)
+        with mock.patch.object(rot, "_compare_update", side_effect=pause):
+            try:
+                code, result = self.api("POST", "/rotate", {})
+                self.assertEqual(code, 202, result)
+                self.assertTrue(inside.wait(timeout=4))
+                self.assertEqual(self.api("POST", "/rotate", {})[0], 409)
+            finally:
+                release.set()
+            self.assertEqual(self.wait_for_state(result["run_id"])["state"], "completed")
+
+
+
 if __name__ == "__main__":
     unittest.main()
