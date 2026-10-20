@@ -2,6 +2,7 @@ import { Calendar } from 'primereact/calendar';
 
 import '../Styles/analyticsRep.css';
 import '../Styles/header.css';
+import AuthorizationService from '../Services/AuthorizationService';
 import { Dropdown } from 'primereact/dropdown';
 
 const ReportHeaderComponent = ( dates, setDates, CorBFilter, setCorBFilter, setPage ) => {
@@ -227,6 +228,17 @@ const ReportHeaderComponent = ( dates, setDates, CorBFilter, setCorBFilter, setP
                 },
 
                 
+                {
+                    label: 'Profile: ' + (localStorage.getItem('display_name') || 'User'),
+                    icon: 'pi pi-user',
+                    section: 'Basic',
+                },
+                {
+                    label: 'Sign Out',
+                    icon: 'pi pi-sign-out',
+                    command: () => new AuthorizationService('', '').logout(),
+                    section: 'Basic',
+                },
                 {
                 template: () => (
                     <Calendar 

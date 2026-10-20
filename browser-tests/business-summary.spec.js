@@ -1,4 +1,13 @@
 const { test, expect } = require('@playwright/test');
+
+// No backend is used here; inject synthetic browser-only identity for layout tests.
+test.beforeEach(async ({ page }) => {
+  await page.addInitScript(() => {
+    localStorage.setItem('token', 'synthetic-browser-session');
+    localStorage.setItem('tokenExpiration', String(Date.now() + 3600000));
+    localStorage.setItem('display_name', 'Test User');
+  });
+});
 const fs = require('fs');
 const path = require('path');
 // Real chart HTTP responses with deferred cells resolved against synthetic SQL data.

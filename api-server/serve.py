@@ -1,5 +1,6 @@
 from flask import Flask, json, request, jsonify, abort, render_template_string
 from flask_cors import CORS
+from authentication import authentication, request_identity, unauthorized
 import sys
 from pathlib import Path
 from dotenv import load_dotenv
@@ -42,6 +43,7 @@ app = Flask(__name__)
 CORS(app)
 app.register_blueprint(decrypt_tools)
 app.register_blueprint(crypto_api)
+app.register_blueprint(authentication)
 CSV_FOLDER_REPORT = 'uploads/report'
 CSV_FOLDER_REPORTS = 'uploads/reports'
 
@@ -93,8 +95,40 @@ def log_unique_url(name, params):
 
 
 
+@app.route('/', methods=['GET', 'POST'])
+def all_transactions():
+    identity = request_identity()
+    if identity is None:
+        return unauthorized()
+    args = (request.get_json(silent=True) or {}) if request.method == 'POST' else request.args
+    start_date = args.get('start_date')
+    end_date = args.get('end_date')
+    if not start_date or not end_date:
+        return jsonify({"error": "Both dates are required."}), 400
+    try:
+        start = datetime.strptime(start_date, "%Y-%m-%d")
+        end = datetime.strptime(end_date, "%Y-%m-%d")
+    except ValueError:
+        return jsonify({"error": "Invalid date format."}), 400
+    sql = SQLConn()
+    sql.connect()
+    try:
+        values = Transaction(sql).get_transactions_by_date_range(start, end)
+        if isinstance(values, str):
+            values = _pyjson.loads(values)
+        role = identity.get('role')
+        if role in ('grp_SSO_DIS_ITBSReportAdmin', 'grp_SSO_DIS_ITBSReportUser'):
+            from role_filter import role_filter
+            values = role_filter(_pyjson.dumps(values), role)
+        return jsonify(values)
+    finally:
+        sql.disconnect()
+
+
 @app.route('/charts/<name>', methods=['GET', 'POST'])
 def charts(name):
+    if request_identity() is None:
+        return unauthorized()
     if request.method == 'POST':
         start_date = request.json.get("start_date")
         end_date = request.json.get("end_date")

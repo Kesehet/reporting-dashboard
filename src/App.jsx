@@ -9,6 +9,8 @@ import 'primereact/resources/primereact.css';
 import 'primereact/resources/themes/lara-light-indigo/theme.css';
 
 import ReportHeaderComponent from './Components/reportHeaderComponent';
+import ReportLoginComponent from './Components/reportLoginComponent';
+import AuthorizationService from './Services/AuthorizationService';
 import ReportFooterComponent from './Components/reportFooterComponent';
 import AnalyticsReportComponent from './Components/analyticsReportComponent';
 import ChartCard from './Utils/Components/ChartCard';
@@ -132,6 +134,8 @@ function App() {
     }, [dates]);
 
     
+
+    if (!new AuthorizationService('', '').isLoggedIn()) return <ReportLoginComponent />;
 
     const getPage = (page) => {
         try {
