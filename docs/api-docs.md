@@ -9,7 +9,7 @@ The eStore API is a Flask-based REST service that provides endpoints for data re
 The API supports two authentication methods:
 
 1. **JWT Token**: Bearer token in Authorization header
-2. **API Key**: Query parameter `api_key` for chart endpoints
+2. **API Key**: `X-API-KEY` header only; URL and JSON body API keys are not accepted. LDAP/MSAL login stays unchanged.
 
 ## Endpoints
 
@@ -32,10 +32,9 @@ Generates and returns chart data for specified chart type.
 **Parameters:**
 - `start_date` (required): Start date in YYYY-MM-DD format
 - `end_date` (required): End date in YYYY-MM-DD format
-- `api_key` (optional): API key for authentication
 - Additional parameters vary by chart type
 
-**Authentication:** JWT token or API key
+**Authentication:** Login token or `X-API-KEY` header
 
 **Response:** JSON object with chart data
 

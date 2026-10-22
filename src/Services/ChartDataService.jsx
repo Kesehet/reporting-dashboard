@@ -18,9 +18,14 @@ class ChartDataService {
             this.extraParams.eCATrackingCode = CorBFilter;
             this.extraParams.eCATrackingCode = this.extraParams.eCATrackingCode === "All" ? "%25" : this.extraParams.eCATrackingCode;
 
+            // Keep API credentials out of query strings and chart filter payloads.
+            const requestParams = Object.fromEntries(
+                Object.entries(this.extraParams).filter(([key]) => key.toLowerCase() !== 'api_key')
+            );
+
             // if this.extraParams.requestMethod is set to GET, use GET method else use POST
             if(this.extraParams.requestMethod && this.extraParams.requestMethod.toUpperCase() === "POST"){
-                let extraPostParams = Object.entries(this.extraParams).reduce((obj, [key, value]) => {
+                let extraPostParams = Object.entries(requestParams).reduce((obj, [key, value]) => {
                     obj[key] = value;
                     return obj;
                 }, {});
@@ -41,7 +46,7 @@ class ChartDataService {
                 
             }            
             else{
-                let extraGetParams = Object.entries(this.extraParams).map(([key, value]) => `${key}=${value}`).join('&');
+                let extraGetParams = Object.entries(requestParams).map(([key, value]) => `${key}=${value}`).join('&');
                 const fullUrl = `${this.url}?${extraGetParams}`;
                 const response = await fetch(fullUrl, {
                     credentials: 'include',

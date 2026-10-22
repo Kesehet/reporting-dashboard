@@ -59,7 +59,7 @@ def current_total_dds_amount(start_date, end_date, params):
 
 
 
-# Base_URL/charts/Direct%20Deposit%20Switch%20Reports%20Insights?start_date=2025-11-14&end_date=2026-02-12&eCATrackingCode=%25&return_format=csv&api_key=<API_KEY>
+# Base_URL/charts/Direct%20Deposit%20Switch%20Reports%20Insights?start_date=2025-11-14&end_date=2026-02-12&eCATrackingCode=%25&return_format=csv  (send X-API-KEY in the request header)
 def direct_deposit_switch_report_insights(start_date, end_date, params):
     resp = Q(columns=["AccountNumber","DDSAccountLast4","DDSAccountName","DDSAccountType","DDSStatus","DDSTranAmount"]+COMMON_EXPORT_COLUMNS, where=[get_date_filter(start_date, end_date), ddsFilter ], params=params)
     if resp == 0:

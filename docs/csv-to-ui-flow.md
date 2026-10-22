@@ -319,11 +319,10 @@ flowchart LR
 ### 11.2 Authorization and security
 - API access is controlled by either:
   - `Authorization` header token
-  - `X-API-Key` header (preferred)
-- The legacy `api_key` query/body parameter is still accepted for compatibility,
-  but should be replaced with the header because URLs are commonly logged.
+  - `X-API-KEY` header (required for API-key clients)
+- URL and JSON body `api_key` parameters no longer authenticate requests.
 - If a token is present, the request is verified by `verify_token(token)`
-- If no token exists, `api_key` is checked against `ALL_FILTERS_CHART_API_KEY`
+- If no login token exists, the `X-API-KEY` header is checked against `ALL_FILTERS_CHART_API_KEY`
 - Unauthenticated requests are rejected with a `401` or `400` error
 
 ### 11.3 Caching logic

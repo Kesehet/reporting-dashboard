@@ -23,9 +23,18 @@ def resolve_url_placeholders(url):
 
 
 
-# Read URLs from the text file
+def strip_api_key_query(url_path):
+    """Remove outdated URL credentials while preserving other encoded filters."""
+    path, separator, query = url_path.partition("?")
+    if not separator:
+        return url_path
+    filters = [part for part in query.split("&") if part.split("=", 1)[0].lower() != "api_key"]
+    return path + ("?" + "&".join(filters) if filters else "")
+
+
+# Read URLs from the text file, without replaying legacy URL credentials.
 with open("logged_chart_urls.txt", "r") as f:
-    urls = [line.strip() for line in f if line.strip()]
+    urls = [strip_api_key_query(line.strip()) for line in f if line.strip()]
 unique_urls = list(set(urls))
 unique_urls.sort()
 
@@ -47,7 +56,7 @@ for url_path in urls:
     resolved_path = resolve_url_placeholders(url_path)
     full_url = BASE_URL.rstrip("/") + resolved_path
     try:
-        response = requests.get(full_url, headers={'X-API-Key': API_KEY}, timeout=60)
+        response = requests.get(full_url, headers={'X-API-KEY': API_KEY}, timeout=60)
         response.raise_for_status()
         update_metrics("cache_gen_error", f"Generated cache for {ctr}/{len(urls)}.")
     except Exception as e:

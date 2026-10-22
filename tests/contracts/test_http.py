@@ -63,6 +63,16 @@ class ChartHttpTests(unittest.TestCase):
         self.assertEqual(get.status_code, 200)
         self.assertEqual(get.json, post.json)
 
+    def test_chart_api_key_header_only_for_get_and_post(self):
+        path = '/charts/' + quote(PIE)
+        params = {**BASE_PARAMS, 'start_date': '2026-01-01', 'end_date': '2026-03-31'}
+        self.assertEqual(self.client.get(path, query_string={**params, 'api_key': 'fixture-chart-api-key'}).status_code, 401)
+        self.assertEqual(self.client.post(path, json={**params, 'api_key': 'fixture-chart-api-key'}).status_code, 401)
+        self.assertEqual(self.client.get(path, query_string=params, headers={'X-API-KEY': 'incorrect'}).status_code, 401)
+        self.assertEqual(self.client.get(path, query_string=params, headers={'X-API-KEY': 'fixture-chart-api-key'}).status_code, 200)
+        self.assertEqual(self.client.post(path, json=params, headers={'X-API-KEY': 'fixture-chart-api-key'}).status_code, 200)
+        self.assertEqual(self.client.get('/', query_string={'api_key': 'fixture-chart-api-key'}).status_code, 401)
+
     def test_missing_and_malformed_dates_are_400_before_queries(self):
         for params in [{'end_date': '2026-01-01'}, {'start_date': 'wrong', 'end_date':'2026-01-01'}]:
             for method in ['GET', 'POST']:
