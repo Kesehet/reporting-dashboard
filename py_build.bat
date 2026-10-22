@@ -6,6 +6,7 @@ if exist ".venv\Scripts\python.exe" (set "PYTHON_EXEC=.venv\Scripts\python.exe")
 %PYTHON_EXEC% -m pip install pyinstaller || exit /b 1
 %PYTHON_EXEC% api-server\build\generate_build.py --check || exit /b 1
 %PYTHON_EXEC% -m unittest discover -s tests -p test_*.py || exit /b 1
+call npm install --package-lock-only --ignore-scripts --no-audit --no-fund || exit /b 1
 call npm ci --no-audit --no-fund || exit /b 1
 set "CI=true"
 call npm run test:nocov -- --runInBand || exit /b 1
