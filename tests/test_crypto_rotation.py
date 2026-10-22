@@ -98,12 +98,26 @@ class CryptoRotationTests(unittest.TestCase):
             "CRYPTO_LEGACY_SAMPLE_CIPHERTEXT": "",
             "CRYPTO_LEGACY_SAMPLE_SHA256": "",
             "ENCRYPTION_KEY": "",
+            "CRYPTO_LEGACY_ENV_FILE": "",
+            "CRYPTO_LEGACY_KEY_DIR": "",
         })
         self.env.start()
         self.addCleanup(self.env.stop)
         self.legacy = mock.patch.object(crypto, "_legacy_env", return_value=None)
         self.legacy.start()
         self.addCleanup(self.legacy.stop)
+        # Synthetic fixtures must never import host or checkout secrets.
+        for name, source in (
+            ("_legacy_env_files", lambda: [
+                Path(os.environ.get("CRYPTO_LEGACY_ENV_FILE") or Path(self.tmp.name) / ".env")
+            ]),
+            ("_legacy_key_dirs", lambda: [
+                Path(os.environ.get("CRYPTO_LEGACY_KEY_DIR") or self.tmp.name)
+            ]),
+        ):
+            isolation = mock.patch.object(crypto, name, side_effect=source)
+            isolation.start()
+            self.addCleanup(isolation.stop)
         self.cwd = os.getcwd()
         os.chdir(self.tmp.name)
         self.addCleanup(os.chdir, self.cwd)
@@ -259,6 +273,34 @@ class CryptoRotationTests(unittest.TestCase):
         self.assertTrue((Path(self.tmp.name) / "backups" / ("a" * 32 + ".jsonl")).exists())
         self.assertTrue(all("DROP " not in q.upper() and "ALTER " not in q.upper()
                             for c in connections for q in c.connection.statements))
+
+    def test_snapshot_digest_matches_exact_disk_bytes(self):
+        crypto.key_rotation()
+        original = crypto.encrypt_string("before")
+        crypto.key_rotation()
+        db = {"Transactions": {1: [original, None]}, "Properties": {}}
+        with mock.patch.object(rot, "_connection", side_effect=lambda: FakeSQL(db)):
+            rot._migrate("f" * 32)
+        status = rot._status()
+        self.assertEqual(status["state"], "completed")
+        raw = (Path(self.tmp.name) / "backups" / ("f" * 32 + ".jsonl")).read_bytes()
+        self.assertNotIn(b"\r\n", raw)
+        self.assertEqual(hashlib.sha256(raw).hexdigest(), status["backup_sha256"])
+
+    def test_older_windows_crlf_snapshot_can_be_restored_safely(self):
+        crypto.key_rotation()
+        original = crypto.encrypt_string("before")
+        crypto.key_rotation()
+        db = {"Transactions": {1: [original, None]}, "Properties": {}}
+        with mock.patch.object(rot, "_connection", side_effect=lambda: FakeSQL(db)):
+            rot._migrate("9" * 32)
+            path = Path(self.tmp.name) / "backups" / ("9" * 32 + ".jsonl")
+            original_bytes = path.read_bytes()
+            self.assertNotIn(b"\r\n", original_bytes)
+            path.write_bytes(original_bytes.replace(b"\n", b"\r\n"))
+            rot._rollback("9" * 32)
+        self.assertEqual(db["Transactions"][1][0], original)
+        self.assertEqual(rot._status()["state"], "rolled_back")
 
     def test_sql_failure_rolls_back_all_prior_updates(self):
         crypto.key_rotation()
