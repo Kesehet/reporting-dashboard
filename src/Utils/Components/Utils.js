@@ -205,16 +205,17 @@ export function generatePieChartData(chartData, name = "", pieColors = false) {
 }
 
 export function generateLineChartData (data) {
-    data = dataParser(data);
-    let pointers = data.labels;
-
-    let labels = Object.keys(data.datasetMap);
-    let values = Object.values(data.datasetMap);
+    data = data && typeof data === 'object' ? dataParser(data) : {};
+    const pointers = Array.isArray(data.labels) ? data.labels : [];
+    const datasetMap = data.datasetMap && typeof data.datasetMap === 'object' && !Array.isArray(data.datasetMap)
+        ? data.datasetMap : {};
+    let labels = Object.keys(datasetMap);
+    let values = Object.values(datasetMap);
     var dataset = [];
     for(let i=0; i < values.length; i++){
         dataset.push({
             "label": labels[i],
-            "data":  checkListForParseFloatOrInt(values[i]),
+            "data": Array.isArray(values[i]) ? checkListForParseFloatOrInt(values[i]) : [],
             "borderColor": getColorforTransactionType(labels[i]),
             "backgroundColor": getColorforTransactionType(labels[i]),
             "fill": false
