@@ -15,7 +15,15 @@ const inventoryFile = path.join(out, 'inventory.json');
 // artifacts. The dedicated chart-contract command separately checks that the
 // inventory and cases exist before running this suite.
 if (!fs.existsSync(inventoryFile)) {
-  test.skip('Chart contract fixtures not generated; run npm run test:charts to validate chart responses', () => {});
+  const guidance = 'Chart contract inventory missing. Run python scripts/run_chart_contracts.py before testing.';
+  if (process.env.CHART_CONTRACTS_REQUIRED === '1') {
+    // Production build validation must fail loudly rather than report skipped tests.
+    test('generated chart response contracts are mandatory', () => {
+      throw new Error(guidance);
+    });
+  } else {
+    test.skip('Chart contract fixtures not generated; run npm run test:charts to validate chart responses', () => {});
+  }
 } else {
 const manifest = JSON.parse(fs.readFileSync(inventoryFile));
 const allowancePath = path.join(root, 'tests/contracts/frontend-known-issues.json');
