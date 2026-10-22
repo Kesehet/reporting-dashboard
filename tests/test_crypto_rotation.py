@@ -153,6 +153,40 @@ class CryptoRotationTests(unittest.TestCase):
                     crypto._atomic_write(output, '{"state": "new"}')
         self.assertEqual(output.read_text(), '{"state": "stable"}')
 
+    def test_status_reader_retries_transient_windows_sharing_violation(self):
+        class FlakyState:
+            def __init__(self):
+                self.attempts = 0
+
+            def is_file(self):
+                return True
+
+            def read_text(self, encoding):
+                self.attempts += 1
+                if self.attempts <= 2:
+                    raise PermissionError(13, "synthetic transient Windows sharing")
+                return '{"state": "completed"}'
+
+        state = FlakyState()
+        with mock.patch.object(rot, "_state_file", return_value=state):
+            with mock.patch.object(rot.time, "sleep") as sleep:
+                self.assertEqual(rot._status()["state"], "completed")
+        self.assertEqual(state.attempts, 3)
+        self.assertEqual(sleep.call_count, 2)
+
+    def test_status_reader_does_not_hide_permanent_permission_errors(self):
+        class LockedState:
+            def is_file(self):
+                return True
+
+            def read_text(self, encoding):
+                raise PermissionError(13, "persistent Windows sharing")
+
+        with mock.patch.object(rot, "_state_file", return_value=LockedState()):
+            with mock.patch.object(rot.time, "sleep"):
+                with self.assertRaises(PermissionError):
+                    rot._status()
+
     def test_gcm_roundtrip_unicode_empty_and_nonce_uniqueness(self):
         crypto.key_rotation()
         for text in ("", "hello", "عربي اردو", "José \U0001f680", "x" * 750):
