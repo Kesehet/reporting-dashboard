@@ -70,7 +70,7 @@ def verify_python_sources():
         try:
             tree = ast.parse(path.read_text(encoding="utf-8-sig"), filename=str(path))
         except (SyntaxError, UnicodeError) as exc:
-            errors.append(f"{path.relative_to(ROOT)}: {exc}")
+            errors.append(f"{path}: {exc}")
             continue
         for node in ast.walk(tree):
             if isinstance(node, ast.Import):
