@@ -83,8 +83,8 @@ jobs:
         run: CI=false npm run build
       - name: Install browser test runner
         run: npm install --no-save --package-lock=false @playwright/test@1.56.1 --no-audit --no-fund
-      - name: Install Chromium and Linux browser dependencies
-        run: npx playwright install --with-deps chromium
+      - name: Install Chromium browser on the preconfigured Actions runner
+        run: npx playwright install chromium
       - name: Verify rendered card geometry, mobile/desktop layout and interactive tabs
         run: npx playwright test -c browser-tests/playwright.config.cjs --reporter=line,html
       - name: Upload synthetic screenshots and traces even when checks fail
