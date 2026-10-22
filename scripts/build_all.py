@@ -1,6 +1,7 @@
 """One-command release builder: fail on regressions before generating binaries."""
 import argparse
 import os
+import shutil
 from pathlib import Path
 import subprocess
 import sys
@@ -11,7 +12,8 @@ FREEZER = ROOT / "api-server" / "build" / "generate_build.py"
 
 def run(*command, env=None):
     print("+", " ".join(map(str, command)), flush=True)
-    subprocess.run([str(arg) for arg in command], cwd=ROOT, env=env, check=True)
+    executable = shutil.which(str(command[0])) or str(command[0])
+    subprocess.run([executable, *(str(arg) for arg in command[1:])], cwd=ROOT, env=env, check=True)
 
 
 def main():
