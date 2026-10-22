@@ -473,7 +473,7 @@ def update_JMExtracts(sql,txn):
         if not sql.connection:
             raise RuntimeError("No SQL connection available for JM extraction")
 
-        startDate = datetime.now() - timedelta(days=15)
+        startDate = datetime.now() - timedelta(days=30)
         endDate = datetime.now()
         date_filter = get_date_filter(
             startDate.isoformat().split(".")[0], endDate.isoformat().split(".")[0]
