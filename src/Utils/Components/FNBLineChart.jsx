@@ -5,7 +5,9 @@ import { Chart } from 'primereact/chart';
 import { Card } from 'primereact/card';
 import { ProgressSpinner } from 'primereact/progressspinner';
 
-const FNBLineChart = ({data, showPointValues = false, chartAPIParams={}}) => {
+const DEFAULT_CHART_PARAMS = {};
+
+const FNBLineChart = ({data, showPointValues = false, chartAPIParams=DEFAULT_CHART_PARAMS}) => {
     data = data && typeof data === 'object' ? dataParser(data) : data;
 
     const [chartData, setChartData] = useState({ labels: [], datasets: [] });
