@@ -18,7 +18,7 @@ afterEach(() => {
   jest.restoreAllMocks();
 });
 
-test('gets today's key using the normal login header and copies it', async () => {
+test("gets today's key using the normal login header and copies it", async () => {
   localStorage.setItem('token', 'ldap-signed-token');
   localStorage.setItem('login_method', 'ldap');
   fetch.mockResolvedValue({
