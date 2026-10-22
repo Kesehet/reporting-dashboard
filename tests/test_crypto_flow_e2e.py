@@ -41,9 +41,23 @@ class EncryptionHttpFlow(unittest.TestCase):
             "ENCRYPTION_KEY": "",
             "CRYPTO_LEGACY_SAMPLE_CIPHERTEXT": "",
             "CRYPTO_LEGACY_SAMPLE_SHA256": "",
+            "CRYPTO_LEGACY_ENV_FILE": "",
+            "CRYPTO_LEGACY_KEY_DIR": "",
         })
         self.patcher.start()
         self.addCleanup(self.patcher.stop)
+        # Prevent real deployment key files leaking into synthetic tests.
+        for name, source in (
+            ("_legacy_env_files", lambda: [
+                Path(os.environ.get("CRYPTO_LEGACY_ENV_FILE") or Path(self.temp.name) / ".env")
+            ]),
+            ("_legacy_key_dirs", lambda: [
+                Path(os.environ.get("CRYPTO_LEGACY_KEY_DIR") or self.temp.name)
+            ]),
+        ):
+            isolation = mock.patch.object(crypto, name, side_effect=source)
+            isolation.start()
+            self.addCleanup(isolation.stop)
         self.cwd = os.getcwd()
         os.chdir(self.temp.name)
         self.addCleanup(os.chdir, self.cwd)
