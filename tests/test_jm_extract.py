@@ -306,8 +306,8 @@ class BatchExtractorTests(unittest.TestCase):
             "update_metrics": lambda k, v: markers.__setitem__(k, v),
         })
         cwd = os.getcwd()
-        try:
-            with tempfile.TemporaryDirectory() as temp:
+        with tempfile.TemporaryDirectory() as temp:
+            try:
                 os.chdir(temp)
                 self.assertEqual(scheduled(), 1)
                 self.assertEqual(list(Path(".cache_requests").glob("*.tmp")), [])
@@ -315,8 +315,9 @@ class BatchExtractorTests(unittest.TestCase):
                 self.assertEqual(scheduled(), 0)
                 self.assertEqual(len(list(Path(".cache_requests").glob("*.tmp"))), 1)
                 self.assertEqual(scheduled(), 0)
-        finally:
-            os.chdir(cwd)
+            finally:
+                # On Windows CWD must be restored before TemporaryDirectory exits.
+                os.chdir(cwd)
 
 
 if __name__ == "__main__":
