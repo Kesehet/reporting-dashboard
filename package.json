@@ -38,7 +38,8 @@
     "test:memory": "react-scripts test --watchAll=false --detectOpenHandles --env=@happy-dom/jest-environment",
     "pretest:chart-frontend": "node scripts/ensure_chart_contracts.cjs",
     "test:chart-frontend": "react-scripts test --watchAll=false --env=@happy-dom/jest-environment --runInBand --testPathPattern=contracts/chartResponses.contract.test.js",
-    "test:charts": "python scripts/run_chart_contracts.py && python -m unittest discover -s tests/contracts -p \"test_*.py\" -v && npm run test:chart-frontend"
+    "test:charts": "python scripts/run_chart_contracts.py && python -m unittest discover -s tests/contracts -p \"test_*.py\" -v && npm run test:chart-frontend",
+    "test:frontend:full": "python scripts/run_chart_contracts.py && npm run test:nocov -- --runInBand"
   },
   "eslintConfig": {
     "extends": [
