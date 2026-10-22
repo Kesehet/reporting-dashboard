@@ -7,6 +7,7 @@ import hashlib
 import json
 import os
 import threading
+import time
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -42,9 +43,18 @@ def _write_status(value):
 
 def _status():
     path = _state_file()
-    if not path.is_file():
-        return {"state": "idle", "processed": 0, "updated": 0}
-    return json.loads(path.read_text(encoding="utf-8"))
+    # Windows can momentarily deny opens of an atomically replaced file when
+    # status polling races the migration worker. Retry the read, never
+    # fabricate a recovery state from a transient sharing violation.
+    for attempt in range(8):
+        try:
+            if not path.is_file():
+                return {"state": "idle", "processed": 0, "updated": 0}
+            return json.loads(path.read_text(encoding="utf-8"))
+        except PermissionError:
+            if attempt == 7:
+                raise
+            time.sleep(0.03 * (attempt + 1))
 
 
 @crypto_api.after_request
