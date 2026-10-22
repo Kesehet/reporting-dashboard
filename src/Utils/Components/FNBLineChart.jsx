@@ -4,7 +4,6 @@ import ChartDataService from '../../Services/ChartDataService';
 import { Chart } from 'primereact/chart';
 import { Card } from 'primereact/card';
 import { ProgressSpinner } from 'primereact/progressspinner';
-import { toIncludeRepeated } from 'jest-extended';
 
 const FNBLineChart = ({data, showPointValues = false, chartAPIParams={}}) => {
     data = data && typeof data === 'object' ? dataParser(data) : data;
@@ -26,8 +25,6 @@ const FNBLineChart = ({data, showPointValues = false, chartAPIParams={}}) => {
         const fetchData = () => {
             if (typeof data === 'string') {
                 getChartData();
-                setChartData(data);
-                setChartData(data);
             }
         };
 
