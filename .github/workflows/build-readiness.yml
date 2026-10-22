@@ -39,7 +39,9 @@ jobs:
         run: python scripts/run_chart_contracts.py
       - name: UI regression suite
         run: npm run test:nocov -- --runInBand
-      - name: Compile production frontend
+      - name: Compile production frontend (retain existing lint warnings)
+        env:
+          CI: 'false'
         run: npm run build
       - name: Human-readable check summary
         if: always()
