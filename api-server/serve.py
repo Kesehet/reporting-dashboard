@@ -117,8 +117,8 @@ def all_transactions():
         if isinstance(values, str):
             values = _pyjson.loads(values)
         role = identity.get('role')
-        if role in ('grp_SSO_DIS_ITBSReportAdmin', 'grp_SSO_DIS_ITBSReportUser'):
-            from role_filter import role_filter
+        from role_filter import all_groups, role_filter
+        if role in all_groups:
             values = role_filter(_pyjson.dumps(values), role)
         return jsonify(values)
     finally:
