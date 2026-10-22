@@ -1,5 +1,10 @@
 """Offline regression tests: no Journey Manager traffic or SQL Server required."""
+import ast
 import json
+import random
+import tempfile
+from pathlib import Path
+from datetime import datetime, timedelta
 import os
 import sys
 import unittest
@@ -170,6 +175,99 @@ class ExtractTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(post.call_count, 2)
         self.assertEqual(post.call_args.kwargs["timeout"], (10, 60))
+
+
+def csv_loader_function(name, symbols):
+    """Compile the unmodified production function without loading native SQL drivers."""
+    source = Path(__file__).resolve().parent.parent / "api-server" / "csvLoader.py"
+    module = ast.parse(source.read_text(encoding="utf-8-sig"))
+    node = next(n for n in module.body if isinstance(n, ast.FunctionDef) and n.name == name)
+    isolated = ast.Module(body=[node], type_ignores=[])
+    scope = dict(symbols)
+    exec(compile(isolated, str(source), "exec"), scope)
+    return scope[name]
+
+
+class BatchExtractorTests(unittest.TestCase):
+    def test_existing_empty_rawdata_is_not_considered_processed(self):
+        responses = [
+            [{"eCATrackingCode": "A"}, {"eCATrackingCode": "B"}],
+            [{"code": "A"}],
+        ]
+        query_log = []
+        class FakeTxn:
+            def get_transactions_by_sql_query(self, query):
+                query_log.append(query)
+                return responses.pop(0)
+
+        metrics = {}
+        pulled = []
+        extract = csv_loader_function("update_JMExtracts", {
+            "datetime": datetime,
+            "timedelta": timedelta,
+            "random": random,
+            "sys": sys,
+            "get_date_filter": lambda *args: "1=1",
+            "update_metrics": lambda key, value: metrics.__setitem__(key, value),
+            "update_JMExtract": lambda sql, code: (pulled.append(code) or True),
+        })
+        sql = type("SQL", (), {"connection": object()})()
+        self.assertEqual(extract(sql, FakeTxn()), ["B"])
+        self.assertEqual(pulled, ["B"])
+        self.assertIn("RawData IS NOT NULL", query_log[1])
+        self.assertEqual(metrics["manual_xml_pull_summary"]["saved"], 1)
+        self.assertEqual(metrics["manual_xml_pull_summary"]["failed"], 0)
+
+    def test_failed_candidate_query_never_claims_success(self):
+        status = {}
+        extract = csv_loader_function("update_JMExtracts", {
+            "datetime": datetime,
+            "timedelta": timedelta,
+            "random": random,
+            "sys": sys,
+            "get_date_filter": lambda *args: "1=1",
+            "update_metrics": lambda key, value: status.__setitem__(key, value),
+            "update_JMExtract": lambda *args: self.fail("must not fetch on SQL failure"),
+        })
+        sql = type("SQL", (), {"connection": object()})()
+        txn = type("Txn", (), {"get_transactions_by_sql_query": lambda self, query: 0})()
+        with self.assertRaises(RuntimeError):
+            extract(sql, txn)
+        self.assertTrue(status["manual_xml_pull"].startswith("failed"))
+        self.assertEqual(status["manual_xml_pull_summary"]["saved"], 0)
+
+    def test_scheduled_marker_written_only_after_xml_success(self):
+        status = {"failed": 1}
+        class FakeConnection:
+            def connect(self):
+                pass
+            def disconnect(self):
+                pass
+
+        markers = {}
+        scheduled = csv_loader_function("run_scheduled_job", {
+            "os": os,
+            "datetime": datetime,
+            "timedelta": timedelta,
+            "get_csv": lambda **kwargs: "ok",
+            "SQLConn": FakeConnection,
+            "Transaction": lambda sql: object(),
+            "update_JMExtracts": lambda sql, txn: ["B"],
+            "get_metrics": lambda: {"manual_xml_pull_summary": status},
+            "update_metrics": lambda k, v: markers.__setitem__(k, v),
+        })
+        cwd = os.getcwd()
+        try:
+            with tempfile.TemporaryDirectory() as temp:
+                os.chdir(temp)
+                self.assertEqual(scheduled(), 1)
+                self.assertEqual(list(Path(".cache_requests").glob("*.tmp")), [])
+                status["failed"] = 0
+                self.assertEqual(scheduled(), 0)
+                self.assertEqual(len(list(Path(".cache_requests").glob("*.tmp"))), 1)
+                self.assertEqual(scheduled(), 0)
+        finally:
+            os.chdir(cwd)
 
 
 if __name__ == "__main__":
