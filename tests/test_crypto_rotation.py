@@ -127,6 +127,32 @@ class CryptoRotationTests(unittest.TestCase):
         self.assertEqual(crypto.key_metadata()["keys"], [])
         self.assertFalse((Path(self.tmp.name) / "enc.key").exists())
 
+    def test_atomic_write_retries_transient_windows_sharing_violations(self):
+        output = Path(self.tmp.name) / "migration-status.json"
+        real_replace = os.replace
+        calls = []
+        def sharing_violation(src, dst):
+            calls.append(dst)
+            if len(calls) <= 2:
+                raise PermissionError(13, "synthetic transient sharing violation")
+            return real_replace(src, dst)
+        with mock.patch.object(crypto.os, "replace", side_effect=sharing_violation):
+            with mock.patch.object(crypto.time, "sleep") as sleep:
+                crypto._atomic_write(output, '{"state": "completed"}')
+        self.assertEqual(len(calls), 3)
+        self.assertEqual(sleep.call_count, 2)
+        self.assertEqual(output.read_text(), '{"state": "completed"}')
+
+    def test_atomic_write_keeps_existing_state_on_persistent_sharing_violation(self):
+        output = Path(self.tmp.name) / "migration-status.json"
+        output.write_text('{"state": "stable"}')
+        with mock.patch.object(crypto.os, "replace",
+                               side_effect=PermissionError(13, "persistent sharing violation")):
+            with mock.patch.object(crypto.time, "sleep"):
+                with self.assertRaises(PermissionError):
+                    crypto._atomic_write(output, '{"state": "new"}')
+        self.assertEqual(output.read_text(), '{"state": "stable"}')
+
     def test_gcm_roundtrip_unicode_empty_and_nonce_uniqueness(self):
         crypto.key_rotation()
         for text in ("", "hello", "عربي اردو", "José \U0001f680", "x" * 750):
