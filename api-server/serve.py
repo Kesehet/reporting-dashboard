@@ -504,7 +504,7 @@ def xml_pull():
     try:
         from csvLoader import update_JMExtracts
         updates = update_JMExtracts(sql, Transaction(sql))
-        return jsonify({"attempted_codes": updates}), 200
+        return jsonify(updates), 200
     except Exception as exc:
         print(f"Journey Manager extraction failed: {type(exc).__name__}: {exc}")
         return jsonify({"error": "Journey Manager extraction failed"}), 500
