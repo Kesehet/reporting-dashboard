@@ -5,12 +5,13 @@ import requests
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
 from metrics import update_metrics
+from daily_api_key import make_daily_api_key
 
 update_metrics("cache_gen", f"started {datetime.now().isoformat()}")
 # Load environment variables from .env file
 load_dotenv()
 BASE_URL = os.getenv("REACT_APP_API_SERVER_BASE_URL")
-API_KEY= os.getenv("ALL_FILTERS_CHART_API_KEY")
+API_KEY_SECRET = os.getenv("ALL_FILTERS_CHART_API_KEY")
 
 # Function to resolve __OFFSET_N__ placeholders in URLs
 def resolve_url_placeholders(url):
@@ -56,7 +57,7 @@ for url_path in urls:
     resolved_path = resolve_url_placeholders(url_path)
     full_url = BASE_URL.rstrip("/") + resolved_path
     try:
-        response = requests.get(full_url, headers={'X-API-KEY': API_KEY}, timeout=60)
+        response = requests.get(full_url, headers={'X-API-KEY': make_daily_api_key(API_KEY_SECRET)}, timeout=60)
         response.raise_for_status()
         update_metrics("cache_gen_error", f"Generated cache for {ctr}/{len(urls)}.")
     except Exception as e:

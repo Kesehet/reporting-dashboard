@@ -221,6 +221,12 @@ const ReportHeaderComponent = ( dates, setDates, CorBFilter, setCorBFilter, setP
                 },
         
                 {
+                    label: 'API Key',
+                    icon: 'pi pi-key',
+                    command: () => setPage('API Key'),
+                    section: 'Administration',
+                },
+                {
                     label: 'Key Rotation',
                     icon: 'pi pi-lock',
                     command: () => setPage('Key Rotation'),

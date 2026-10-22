@@ -1,10 +1,10 @@
 """Legacy LDAP, Azure MSAL and chart API-key authentication."""
-import hmac
 from functools import lru_cache
 import os
 from datetime import datetime, timedelta, timezone
 from flask import Blueprint, current_app, jsonify, request
 from config import get_env_value
+from daily_api_key import make_daily_api_key, valid_daily_api_key, utc_today
 
 authentication = Blueprint('authentication', __name__)
 
@@ -94,13 +94,39 @@ def request_identity():
         return verify_token(token)
     # URL and JSON body API keys are never credentials.
     provided = request.headers.get('X-API-KEY', '')
-    expected = setting('ALL_FILTERS_CHART_API_KEY', '')
-    if expected and isinstance(provided, str) and hmac.compare_digest(expected, provided):
+    if valid_daily_api_key(provided, setting('ALL_FILTERS_CHART_API_KEY', '')):
         return {'role': 'api_key'}
     return None
 
 def unauthorized():
     return jsonify({'error': 'Invalid or missing login token / API key.'}), 401
+
+
+@authentication.route('/api-key/current', methods=['GET'])
+def current_daily_api_key():
+    """Return today's stateless key only to a verified dashboard login."""
+    msal_token = request.headers.get('X-MSAL-ID-Token', '').strip()
+    login_token = request.headers.get('Authorization', '').strip()
+    if msal_token:
+        # Unlike existing chart routes, revealing the API key requires
+        # cryptographic verification of the Microsoft identity token.
+        identity = verify_microsoft_token(msal_token)
+    elif login_token:
+        identity = verify_token(login_token)
+    else:
+        identity = None
+    if not identity:
+        return unauthorized()
+
+    day = utc_today()
+    key = make_daily_api_key(setting('ALL_FILTERS_CHART_API_KEY', ''), day)
+    if key:
+        response = jsonify({'api_key': key, 'date': day.isoformat(), 'timezone': 'UTC'})
+    else:
+        response = jsonify({'error': 'Daily API key is not configured on the server.'})
+        response.status_code = 503
+    response.headers['Cache-Control'] = 'private, no-store'
+    return response
 
 @authentication.route('/msalConfig', methods=['GET'])
 def msal_config():

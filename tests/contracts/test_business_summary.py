@@ -6,6 +6,7 @@ import unittest
 from unittest.mock import patch
 
 from runtime import BASE_PARAMS, SqlFixture, runtime
+from daily_api_key import make_daily_api_key
 
 APPS = 'Business Account Summary Number Of Apps Table'
 PRODUCTS = 'Business Account Summary Top 10 Products Table'
@@ -51,9 +52,9 @@ class BusinessSummaryTests(unittest.TestCase):
     def request(self, name, method='POST', **params):
         args = {**BASE_PARAMS, 'start_date': '2026-01-01', 'end_date': '2026-03-31', **params}
         if method == 'GET':
-            response = self.client.get('/charts/' + name, query_string=args, headers={'X-API-Key': 'fixture-chart-api-key'})
+            response = self.client.get('/charts/' + name, query_string=args, headers={'X-API-KEY': make_daily_api_key('fixture-chart-api-key')})
         else:
-            response = self.client.post('/charts/' + name, json=args, headers={'X-API-Key': 'fixture-chart-api-key'})
+            response = self.client.post('/charts/' + name, json=args, headers={'X-API-KEY': make_daily_api_key('fixture-chart-api-key')})
         self.assertEqual(response.status_code, 200, response.json)
         return response.json
 
