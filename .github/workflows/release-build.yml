@@ -32,13 +32,14 @@ jobs:
       - name: Install full production Python requirements and freezer
         run: |
           python -m pip install -r requirements.txt
+          python -m pip install -r tests/contracts/requirements.txt
           python -m pip install 'pyinstaller>=6.10,<7'
       - name: Verify pinned distributions, syntax and every backend import
         run: python api-server/build/generate_build.py --check-only --skip-install
+      - name: Generate complete synthetic chart inventory and compare baselines
+        run: python scripts/run_chart_contracts.py
       - name: Run full backend regression suite
         run: python -m pytest -q tests
-      - name: Compare generated backend charts against baselines
-        run: python scripts/run_chart_contracts.py
       - name: Upload chart contract diagnostics on failure
         if: always()
         uses: actions/upload-artifact@v4
@@ -66,6 +67,10 @@ jobs:
           python-version: '3.12'
       - name: Restore lockfile-pinned frontend dependencies
         run: npm ci --no-audit --no-fund
+      - name: Install synthetic chart-contract generator dependencies
+        run: python -m pip install -r tests/contracts/requirements.txt
+      - name: Generate chart response fixtures consumed by React tests
+        run: python scripts/run_chart_contracts.py
       - name: Run full React component and service tests
         run: npm run test:nocov -- --runInBand
       - name: Build production React assets
