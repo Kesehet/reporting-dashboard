@@ -61,16 +61,21 @@ jobs:
           python-version: '3.12'
           cache: pip
           cache-dependency-path: requirements.txt
+      - name: Create isolated packaging environment
+        shell: pwsh
+        run: python -m venv .build-venv
       - name: Install exactly declared requirements
         shell: pwsh
         run: |
-          python -m pip install -r requirements.txt
-          python -m pip install pyinstaller
-          python -m pip check
+          .\\.build-venv\\Scripts\\python.exe -m pip install -r requirements.txt
+          .\\.build-venv\\Scripts\\python.exe -m pip install pyinstaller
+          .\\.build-venv\\Scripts\\python.exe -m pip check
       - name: Validate Python source and dependencies
-        run: python api-server/build/generate_build.py --check
+        shell: pwsh
+        run: .\\.build-venv\\Scripts\\python.exe api-server/build/generate_build.py --check
       - name: Build every Windows executable
-        run: python api-server/build/generate_build.py
+        shell: pwsh
+        run: .\\.build-venv\\Scripts\\python.exe api-server/build/generate_build.py
       - name: Verify all nine deliverables are nonempty
         shell: pwsh
         run: |
