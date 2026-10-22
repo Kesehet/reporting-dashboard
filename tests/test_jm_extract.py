@@ -13,7 +13,7 @@ from unittest.mock import patch, Mock
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "api-server"))
 
 import application
-from jm_endpoints import jm_fluent_base_url, jm_workspaces_url
+from jm_endpoints import jm_fluent_base_url, jm_workspaces_url, JM_RETENTION_DAYS
 
 
 class FakeCursor:
@@ -106,6 +106,18 @@ class ExtractTests(unittest.TestCase):
         self.addCleanup(self.jm_config.stop)
 
     xml = "<Root><AvokaSmartForm><Application><Id>42</Id></Application></AvokaSmartForm></Root>"
+
+    @patch.object(application, "make_request")
+    def test_api_request_uses_jm_retention_window(self, request):
+        fixed_now = datetime(2026, 10, 23, 12, 0, 0)
+        request.return_value = jm_response(self.xml)
+        with patch.object(application, "datetime") as frozen_datetime:
+            frozen_datetime.now.return_value = fixed_now
+            self.assertTrue(application.update_JMExtract(FakeSql(), "B-42"))
+        payload = request.call_args.kwargs["data"]
+        self.assertEqual(JM_RETENTION_DAYS, 15)
+        self.assertEqual(payload["setStartDate"], "2026-10-08T12:00:00 MDT")
+        self.assertEqual(payload["setEndDate"], "2026-10-23T12:00:00 MDT")
 
     @patch.object(application, "get_env_value")
     @patch.object(application, "make_request")
@@ -206,6 +218,7 @@ class BatchExtractorTests(unittest.TestCase):
             "datetime": datetime,
             "timedelta": timedelta,
             "random": random,
+            "JM_RETENTION_DAYS": JM_RETENTION_DAYS,
             "sys": sys,
             "get_date_filter": lambda *args: "1=1",
             "update_metrics": lambda key, value: metrics.__setitem__(key, value),
@@ -218,12 +231,48 @@ class BatchExtractorTests(unittest.TestCase):
         self.assertEqual(metrics["manual_xml_pull_summary"]["saved"], 1)
         self.assertEqual(metrics["manual_xml_pull_summary"]["failed"], 0)
 
+    def test_15_day_candidate_window_prioritizes_oldest_unfetched_codes(self):
+        class FixedClock:
+            @staticmethod
+            def now():
+                return datetime(2026, 10, 23, 12, 0, 0)
+        queries = []
+        window = []
+        attempted = []
+        responses = [
+            [{"eCATrackingCode": "old"}, {"eCATrackingCode": "new"},
+             {"eCATrackingCode": "old"}, {"eCATrackingCode": "already"}],
+            [{"code": "already"}],
+        ]
+        class FakeTxn:
+            def get_transactions_by_sql_query(self, query):
+                queries.append(query)
+                return responses.pop(0)
+        def filter_for_window(start, end):
+            window.append((start, end))
+            return "1=1"
+        extract = csv_loader_function("update_JMExtracts", {
+            "datetime": FixedClock,
+            "timedelta": timedelta,
+            "JM_RETENTION_DAYS": JM_RETENTION_DAYS,
+            "sys": sys,
+            "get_date_filter": filter_for_window,
+            "update_metrics": lambda key, value: None,
+            "update_JMExtract": lambda sql, code: (attempted.append(code) or True),
+        })
+        sql = type("SQL", (), {"connection": object()})()
+        self.assertEqual(extract(sql, FakeTxn()), ["old", "new"])
+        self.assertEqual(attempted, ["old", "new"])
+        self.assertEqual(window, [("2026-10-08T12:00:00", "2026-10-23T12:00:00")])
+        self.assertIn("ORDER BY AppStartDate ASC", queries[0])
+
     def test_failed_candidate_query_never_claims_success(self):
         status = {}
         extract = csv_loader_function("update_JMExtracts", {
             "datetime": datetime,
             "timedelta": timedelta,
             "random": random,
+            "JM_RETENTION_DAYS": JM_RETENTION_DAYS,
             "sys": sys,
             "get_date_filter": lambda *args: "1=1",
             "update_metrics": lambda key, value: status.__setitem__(key, value),

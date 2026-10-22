@@ -9,7 +9,7 @@ from lxml import etree
 from requests.auth import HTTPBasicAuth
 
 from config import get_env_value
-from jm_endpoints import jm_fluent_base_url
+from jm_endpoints import jm_fluent_base_url, JM_RETENTION_DAYS
 
 
 def make_request(url, data, retries=2, delay=2, debug=False):
@@ -113,7 +113,7 @@ def update_JMExtract(sql, trackingCode):
         print("Journey Manager extraction failed: SQL connection unavailable")
         return False
 
-    start_date = datetime.now() - timedelta(days=30)
+    start_date = datetime.now() - timedelta(days=JM_RETENTION_DAYS)
     end_date = datetime.now()
     try:
         url = jm_fluent_base_url() + "/txnquery/listValues"

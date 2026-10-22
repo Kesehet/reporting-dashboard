@@ -2,6 +2,7 @@ import pandas as pd
 
 from DB import Transaction, SQLConn
 from application import update_JMExtract
+from jm_endpoints import JM_RETENTION_DAYS
 from config import get_env_value
 from datetime import datetime, timedelta
 from report_modules.condition_utils import get_date_filter
@@ -474,21 +475,25 @@ def update_JMExtracts(sql,txn):
         if not sql.connection:
             raise RuntimeError("No SQL connection available for JM extraction")
 
-        startDate = datetime.now() - timedelta(days=30)
+        startDate = datetime.now() - timedelta(days=JM_RETENTION_DAYS)
         endDate = datetime.now()
         date_filter = get_date_filter(
             startDate.isoformat().split(".")[0], endDate.isoformat().split(".")[0]
         )
         all_codes = txn.get_transactions_by_sql_query(
             f"SELECT eCATrackingCode FROM [DigitalReport].[dbo].[Transactions] "
-            f"WHERE {date_filter} ORDER BY AppStartDate DESC"
+            f"WHERE {date_filter} ORDER BY AppStartDate ASC"
         )
         if not isinstance(all_codes, list):
             raise RuntimeError("Failed to query transactions for JM extraction")
-        all_codes = {
-            row.get("eCATrackingCode") for row in all_codes
-            if isinstance(row, dict) and row.get("eCATrackingCode")
-        }
+        # Preserve SQL oldest-first order: these XML records expire soonest.
+        unique_codes = []
+        seen_codes = set()
+        for row in all_codes:
+            code = row.get("eCATrackingCode") if isinstance(row, dict) else None
+            if code and code not in seen_codes:
+                unique_codes.append(code)
+                seen_codes.add(code)
 
         valid_codes = txn.get_transactions_by_sql_query(
             "SELECT DISTINCT tID AS code FROM [DigitalReport].[dbo].[JMExtract] "
@@ -501,8 +506,7 @@ def update_JMExtracts(sql,txn):
             row.get("code") for row in valid_codes if isinstance(row, dict)
         }
 
-        missing_codes = list(all_codes - already_processed)
-        random.shuffle(missing_codes)
+        missing_codes = [code for code in unique_codes if code not in already_processed]
         stats["attempted"] = len(missing_codes)
         print(f"{len(missing_codes)} missing JM RawData codes to process")
 
