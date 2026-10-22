@@ -371,7 +371,8 @@ def get_csv(folder_path = "uploads/reports"):
 
         update_conf(csv_file, folder_path)
 
-    post_process_txns(sql,txn, tracking_codes_added_this_run=all_tracking_codes_updated_this_run)
+    if all_tracking_codes_updated_this_run:
+        post_process_txns(sql,txn, tracking_codes_added_this_run=all_tracking_codes_updated_this_run)
     log_file(ret,f"{datetime.now().isoformat()} run", folder_path)
     update_JMExtracts(sql,txn)
     return ret
@@ -463,35 +464,71 @@ def update_conf(file_name, folder_path="uploads/reports"):
 
 
 def update_JMExtracts(sql,txn):
+    """Pull missing JM data without treating empty RawData rows as completed."""
     import sys
-    update_metrics("manual_xml_pull", f"started {datetime.now().isoformat()}")
-    startDate = datetime.now() - timedelta(days=15)
-    endDate = datetime.now()
-    date_filter = get_date_filter(startDate.isoformat().split(".")[0], endDate.isoformat().split(".")[0] )
-    all_codes = txn.get_transactions_by_sql_query(f"SELECT eCATrackingCode FROM  [DigitalReport].[dbo].[Transactions] WHERE {date_filter} Order by AppStartDate Desc ")
-    if all_codes == 0:
-        all_codes = []
-    all_codes = list({code["eCATrackingCode"] for code in all_codes})
-    already_processed = set()
+    started_at = datetime.now().isoformat()
+    update_metrics("manual_xml_pull", f"started {started_at}")
+    stats = {"started_at": started_at, "attempted": 0, "saved": 0, "failed": 0}
+    try:
+        if not sql.connection:
+            raise RuntimeError("No SQL connection available for JM extraction")
 
-    unique_codes = txn.get_transactions_by_sql_query("Select Distinct(tID) as code from [DigitalReport].[dbo].[JMExtract] WHERE tID IS NOT NULL AND tID != ''")
-    if unique_codes == 0:
-        unique_codes = []
-    for code in unique_codes:
-        already_processed.add(code.get("code"))
-    all_codes = list(set(all_codes) - already_processed)
-    import random
-    random.shuffle(all_codes)
+        startDate = datetime.now() - timedelta(days=15)
+        endDate = datetime.now()
+        date_filter = get_date_filter(
+            startDate.isoformat().split(".")[0], endDate.isoformat().split(".")[0]
+        )
+        all_codes = txn.get_transactions_by_sql_query(
+            f"SELECT eCATrackingCode FROM [DigitalReport].[dbo].[Transactions] "
+            f"WHERE {date_filter} ORDER BY AppStartDate DESC"
+        )
+        if not isinstance(all_codes, list):
+            raise RuntimeError("Failed to query transactions for JM extraction")
+        all_codes = {
+            row.get("eCATrackingCode") for row in all_codes
+            if isinstance(row, dict) and row.get("eCATrackingCode")
+        }
 
-    print(f"{len(all_codes)} codes to process JM Extracts")
-    for code in all_codes:
-        if code is not None and code != "":
-            sys.stdout.write(f"\rJM XML Extract pulled for:- {code}")
+        valid_codes = txn.get_transactions_by_sql_query(
+            "SELECT DISTINCT tID AS code FROM [DigitalReport].[dbo].[JMExtract] "
+            "WHERE tID IS NOT NULL AND tID != '' AND RawData IS NOT NULL "
+            "AND LTRIM(RTRIM(RawData)) NOT IN ('', 'null')"
+        )
+        if not isinstance(valid_codes, list):
+            raise RuntimeError("Failed to query existing JM RawData")
+        already_processed = {
+            row.get("code") for row in valid_codes if isinstance(row, dict)
+        }
+
+        missing_codes = list(all_codes - already_processed)
+        random.shuffle(missing_codes)
+        stats["attempted"] = len(missing_codes)
+        print(f"{len(missing_codes)} missing JM RawData codes to process")
+
+        for code in missing_codes:
+            sys.stdout.write(f"\rJM XML extraction for: {code}")
             sys.stdout.flush()
-            update_JMExtract(sql, code)
-    print("All JM Extracts updated.")
-    update_metrics("manual_xml_pull", f"ended {datetime.now().isoformat()}")
-    return all_codes
+            try:
+                if update_JMExtract(sql, code):
+                    stats["saved"] += 1
+                else:
+                    stats["failed"] += 1
+            except Exception as exc:
+                stats["failed"] += 1
+                print(f"JM XML extraction error for {code}: {type(exc).__name__}: {exc}")
+
+        state = "ended" if not stats["failed"] else "partial_failure"
+        update_metrics("manual_xml_pull", f"{state} {datetime.now().isoformat()} "
+                       f"saved={stats['saved']} failed={stats['failed']}")
+        print(f"JM XML run: {stats['saved']} saved, {stats['failed']} failed")
+        return missing_codes
+    except Exception as exc:
+        update_metrics("manual_xml_pull", f"failed {datetime.now().isoformat()} "
+                       f"{type(exc).__name__}")
+        raise
+    finally:
+        stats["finished_at"] = datetime.now().isoformat()
+        update_metrics("manual_xml_pull_summary", stats)
 
 import math
 def merge_by_eca_tracking_id(data):

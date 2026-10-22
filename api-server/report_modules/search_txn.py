@@ -11,6 +11,8 @@ from typing import Any, Dict, Optional
 import hashlib
 import requests
 from requests.auth import HTTPBasicAuth
+from config import get_env_value
+from jm_endpoints import jm_fluent_base_url
 
 
 class FluentAPIBase:
@@ -23,7 +25,7 @@ class FluentAPIBase:
         password: Optional[str] = None,
         timeout: int = 600,
     ) -> None:
-        self.base_url = base_url.rstrip("/")
+        self.base_url = jm_fluent_base_url(base_url)
         self.username = username or os.getenv("TJM_USERNAME") or os.getenv("FLUENT_API_USERNAME")
         self.password = password or os.getenv("TJM_PASSWORD") or os.getenv("FLUENT_API_PASSWORD")
         
@@ -94,9 +96,9 @@ class TransactionSearchError(RuntimeError):
 class FluentAPITransactionSearch:
     def __init__(self, client: Optional[FluentAPIBase] = None) -> None:
         self.client = client or FluentAPIBase(
-            base_url=os.getenv("JM_BASE_URL") + "/manager/secure/rest/fluentapi",
-            username=os.getenv("REACT_APP_JOURNEY_MANAGER_USER"),
-            password=os.getenv("REACT_APP_JOURNEY_MANAGER_PASSWORD"),
+            base_url=jm_fluent_base_url(),
+            username=get_env_value("REACT_APP_JOURNEY_MANAGER_USER") or os.getenv("REACT_APP_JOURNEY_MANAGER_USER"),
+            password=get_env_value("REACT_APP_JOURNEY_MANAGER_PASSWORD") or os.getenv("REACT_APP_JOURNEY_MANAGER_PASSWORD"),
         )
 
     def search_txn(self, 

@@ -10,6 +10,7 @@ from decimal import Decimal
 import sys
 from dotenv import load_dotenv
 from config import get_env_value
+from jm_endpoints import jm_workspaces_url
 from metrics import update_metrics
 import pandas as pd
 import time
@@ -794,7 +795,7 @@ class Properties:
 
 class WorkspaceExtract:
     def __init__(self):
-        self.base_url = get_env_value("JM_BASE_URL")+"/workspaces"
+        self.base_url = jm_workspaces_url()
         self.username = get_env_value("REACT_APP_JOURNEY_MANAGER_USER")
         self.password = get_env_value("REACT_APP_JOURNEY_MANAGER_PASSWORD")
         self.session = None

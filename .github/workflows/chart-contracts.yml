@@ -41,6 +41,8 @@ jobs:
       - name: HTTP, date boundaries, and existing Python regressions
         if: ${{ !cancelled() && steps.backend.outcome != 'skipped' }}
         run: python -m unittest discover -s tests/contracts -p 'test_*.py' -v
+      - name: JM endpoint and RawData protection regressions
+        run: python -m unittest discover -s tests -p 'test_jm_extract.py' -v
       - name: Compare backend responses with real frontend adapters
         if: ${{ !cancelled() && steps.backend.outcome != 'skipped' }}
         run: npm run test:chart-frontend

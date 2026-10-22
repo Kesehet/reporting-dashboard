@@ -499,14 +499,17 @@ def csv_report_load_file():
 def xml_pull():
     sql = SQLConn()
     sql.connect()
-    txn = Transaction(sql)
-    from csvLoader import update_JMExtracts
-    updates = update_JMExtracts(sql, txn)
-
-
-    sql.disconnect()
-    
-    return updates
+    if not sql.connection:
+        return jsonify({"error": "Database connection unavailable for JM extraction"}), 503
+    try:
+        from csvLoader import update_JMExtracts
+        updates = update_JMExtracts(sql, Transaction(sql))
+        return jsonify({"attempted_codes": updates}), 200
+    except Exception as exc:
+        print(f"Journey Manager extraction failed: {type(exc).__name__}: {exc}")
+        return jsonify({"error": "Journey Manager extraction failed"}), 500
+    finally:
+        sql.disconnect()
 
 
 @app.route('/query', methods=['POST'])
