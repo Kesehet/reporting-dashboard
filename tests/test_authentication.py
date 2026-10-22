@@ -23,6 +23,10 @@ class AuthenticationTests(unittest.TestCase):
         })
         env.start()
         self.addCleanup(env.stop)
+        # Synthetic missing-setting assertions must ignore deployment .env.
+        config = mock.patch('authentication.get_env_value', return_value=None)
+        config.start()
+        self.addCleanup(config.stop)
         app = Flask(__name__)
         app.register_blueprint(authentication)
         @app.route('/protected', methods=['GET', 'POST'])
