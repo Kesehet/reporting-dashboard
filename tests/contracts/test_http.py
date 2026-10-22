@@ -7,8 +7,8 @@ import unittest
 from unittest.mock import patch
 from urllib.parse import quote
 
-from daily_api_key import make_daily_api_key
 from runtime import BASE_PARAMS, ROOT, SqlFixture, runtime
+from daily_api_key import make_daily_api_key
 
 PIE = 'Application Volume By Product (All Started Apps) Pie - Year to Date'
 TABLE = 'Common App In Branch and Consumer Facing Report'

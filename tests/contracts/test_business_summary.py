@@ -5,8 +5,8 @@ import re
 import unittest
 from unittest.mock import patch
 
-from daily_api_key import make_daily_api_key
 from runtime import BASE_PARAMS, SqlFixture, runtime
+from daily_api_key import make_daily_api_key
 
 APPS = 'Business Account Summary Number Of Apps Table'
 PRODUCTS = 'Business Account Summary Top 10 Products Table'
