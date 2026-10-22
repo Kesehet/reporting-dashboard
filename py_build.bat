@@ -41,7 +41,7 @@ echo === Packaging standalone Python executables ===
 if errorlevel 1 set "BUILD_FAILED=1"
 if not exist dist mkdir dist
 if exist "exe_dist\*.exe" (
-    copy /Y "exe_dist\*.exe" "dist\" >nul
+    copy /Y "exe_dist\*.exe" "dist" >nul
     if errorlevel 1 set "BUILD_FAILED=1"
 ) else (
     echo WARNING: No executable was produced in exe_dist.
