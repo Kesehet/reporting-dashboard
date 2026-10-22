@@ -17,7 +17,6 @@ echo "Preflight: dependency health and Python syntax"
 echo "Preflight: backend regressions"
 "$PYTHON_EXEC" -m unittest discover -s tests -p 'test_*.py'
 echo "Preflight: frontend regressions"
-npm install --package-lock-only --ignore-scripts --no-audit --no-fund
 npm ci --no-audit --no-fund
 CI=true npm run test:nocov -- --runInBand
 CI=true npm run build
