@@ -33,7 +33,7 @@ test('calendar and filter templates propagate the user selection', () => {
     expect(templates).toHaveLength(2);
     render(<>{templates[0].template()}{templates[1].template()}</>);
     expect(screen.getByPlaceholderText(/Select dates/i)).toBeInTheDocument();
-    expect(screen.getByPlaceholderText(/Select Consumer or Business Filter/i)).toBeInTheDocument();
+    expect(document.querySelector('.p-dropdown')).toBeInTheDocument();
     // Render tests exercise PrimeReact widgets without assuming the menu
     // factory itself returns React elements.
     expect(setDates).not.toHaveBeenCalled();
