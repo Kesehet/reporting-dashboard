@@ -36,6 +36,12 @@ jobs:
           python -m pip install 'pyinstaller>=6.10,<7'
       - name: Verify pinned distributions, syntax and every backend import
         run: python api-server/build/generate_build.py --check-only --skip-install
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Install frontend parser used by the chart-contract auditor
+        run: npm ci --no-audit --no-fund
       - name: Generate complete synthetic chart inventory and compare baselines
         run: python scripts/run_chart_contracts.py
       - name: Run full backend regression suite
