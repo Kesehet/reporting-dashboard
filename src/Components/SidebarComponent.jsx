@@ -27,8 +27,8 @@ const SidebarLayout = ({ items, mainContent, pageToShow }) => {
     return { ...item, render: null };
   });
 
-  const topBarItems = normalizedItems.slice(-2);
-  const sideBarItems = normalizedItems.slice(0, normalizedItems.length-2);
+  const topBarItems = normalizedItems.slice(-4);
+  const sideBarItems = normalizedItems.slice(0, normalizedItems.length-4);
 
   // Group sidebar items by section
   const groupedItems = sideBarItems.reduce((acc, item) => {
