@@ -7,7 +7,7 @@ from datetime import datetime, timedelta
 from report_modules.condition_utils import get_date_filter
 from collections import defaultdict
 from post_process import post_process_txns
-from metrics import update_metrics
+from metrics import update_metrics, get_metrics
 from utils import process_account_number
 import random
 import os
@@ -306,7 +306,7 @@ def load_single_csv_file(file_name, folder_path="uploads/reports"):
         sql.disconnect()
 
 
-def get_csv(folder_path = "uploads/reports"):
+def get_csv(folder_path = "uploads/reports", run_jm=True):
 
     sql = SQLConn()
     sql.connect()
@@ -374,7 +374,8 @@ def get_csv(folder_path = "uploads/reports"):
     if all_tracking_codes_updated_this_run:
         post_process_txns(sql,txn, tracking_codes_added_this_run=all_tracking_codes_updated_this_run)
     log_file(ret,f"{datetime.now().isoformat()} run", folder_path)
-    update_JMExtracts(sql,txn)
+    if run_jm:
+        update_JMExtracts(sql,txn)
     return ret
 
 
@@ -577,36 +578,59 @@ def merge_by_eca_tracking_id(data):
 
 
 
-if __name__ == "__main__":
-    time.sleep(random.randint(10,30))
-
-    # Directory for temp files (you can change this)
+def run_scheduled_job():
+    """Run the daily CSV and JM tasks independently; mark complete only on success."""
     temp_dir = ".cache_requests"
     os.makedirs(temp_dir, exist_ok=True)
-
-    # Get today's and yesterday's dates
-    today = datetime.today().date()       # Use .date() for cleaner filenames
+    today = datetime.today().date()
     yesterday = today - timedelta(days=1)
-
     today_file = os.path.join(temp_dir, f"{today}.tmp")
     yesterday_file = os.path.join(temp_dir, f"{yesterday}.tmp")
 
-    # Check if today's file exists
     if os.path.exists(today_file):
-        print(f"Today's file already exists: {today_file}")
-        sys.exit(0)
-
-    # Delete yesterday's file if it exists
+        print(f"Daily extract already completed: {today_file}")
+        return 0
     if os.path.exists(yesterday_file):
         os.remove(yesterday_file)
-        print(f"Deleted yesterday's file: {yesterday_file}")
 
-    # Create today's file
-    with open(today_file, "w", encoding="utf-8", errors="replace") as f:
-        f.write("Temporary file for today\n")
-
-    print(f"Created today's file: {today_file}")
     update_metrics("scheduled_csv_push", f"started {datetime.now().isoformat()}")
-    get_csv()
-    update_metrics("scheduled_csv_push", f"ended {datetime.now().isoformat()}")
+    csv_error = None
+    jm_error = None
+    try:
+        # JM must still run if CSV loading or post-processing fails.
+        get_csv(run_jm=False)
+    except Exception as exc:
+        csv_error = exc
+        print(f"Scheduled CSV load failed: {type(exc).__name__}: {exc}")
 
+    sql = SQLConn()
+    try:
+        sql.connect()
+        update_JMExtracts(sql, Transaction(sql))
+        summary = get_metrics().get("manual_xml_pull_summary", {})
+        if not isinstance(summary, dict) or summary.get("failed") is None:
+            raise RuntimeError("JM extraction did not publish a completion summary")
+        if summary["failed"]:
+            raise RuntimeError(f"JM extraction failed for {summary['failed']} tracking codes")
+    except Exception as exc:
+        jm_error = exc
+        print(f"Scheduled JM XML extraction failed: {type(exc).__name__}: {exc}")
+    finally:
+        sql.disconnect()
+
+    if csv_error or jm_error:
+        update_metrics("scheduled_csv_push", f"failed {datetime.now().isoformat()}")
+        print("Daily run incomplete; no completion marker written. Next invocation may retry.")
+        return 1
+
+    # This marker must never be written before RawData extraction completes.
+    with open(today_file, "w", encoding="utf-8") as marker:
+        marker.write(f"CSV and JM extraction completed at {datetime.now().isoformat()}\n")
+    update_metrics("scheduled_csv_push", f"ended {datetime.now().isoformat()}")
+    print(f"Daily CSV and JM extract completed: {today_file}")
+    return 0
+
+
+if __name__ == "__main__":
+    time.sleep(random.randint(10, 30))
+    sys.exit(run_scheduled_job())
