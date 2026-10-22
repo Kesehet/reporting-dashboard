@@ -1,12 +1,12 @@
 import json
 
-all_groups = ['grp_SSO_DIS_ITBSReportAdmin','grp_SSO_DIS_ITBSReportUser'] # Added folks from grp_DIS_ITBSReportUser and grp_DIS_ITBSReportAdmin to grp_DIS_ITBSReposrtUser and grp_SSO_DIS_ITBSReportAdmin 
+all_groups = ['grp_SSO_DIS_ITBSReportAdmin','grp_SSO_DIS_ITBSReportUser','SSO_DIS_ITBSReport_DEV_User'] # Added folks from grp_DIS_ITBSReportUser and grp_DIS_ITBSReportAdmin to grp_DIS_ITBSReposrtUser and grp_SSO_DIS_ITBSReportAdmin 
 
 def role_filter(response,role):
     
     if role == "grp_SSO_DIS_ITBSReportAdmin":
         blocked_columns = ["eCAID", "tId" ]
-    elif role == "grp_SSO_DIS_ITBSReportUser":
+    elif role in ("grp_SSO_DIS_ITBSReportUser", "SSO_DIS_ITBSReport_DEV_User"):
         blocked_columns = ["eCAID", "tId" ]
     else:
         return []
