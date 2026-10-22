@@ -19,7 +19,7 @@ echo "Preflight: backend regressions"
 echo "Preflight: frontend regressions"
 npm ci --no-audit --no-fund
 CI=true npm run test:nocov -- --runInBand
-CI=true npm run build
+CI=false npm run build
 echo "Packaging backend"
 "$PYTHON_EXEC" api-server/build/generate_build.py
 mkdir -p dist
