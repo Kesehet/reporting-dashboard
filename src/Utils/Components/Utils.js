@@ -204,28 +204,24 @@ export function generatePieChartData(chartData, name = "", pieColors = false) {
     };
 }
 
-export function generateLineChartData (data) {
-    data = dataParser(data);
-    let pointers = data.labels;
-
-    let labels = Object.keys(data.datasetMap);
-    let values = Object.values(data.datasetMap);
-    var dataset = [];
-    for(let i=0; i < values.length; i++){
-        dataset.push({
-            "label": labels[i],
-            "data":  checkListForParseFloatOrInt(values[i]),
-            "borderColor": getColorforTransactionType(labels[i]),
-            "backgroundColor": getColorforTransactionType(labels[i]),
-            "fill": false
-        });
+export function generateLineChartData(data) {
+    const parsed = data && typeof data === 'object' ? dataParser(data) : null;
+    if (!parsed || !Array.isArray(parsed.labels) ||
+        !parsed.datasetMap || typeof parsed.datasetMap !== 'object' ||
+        Array.isArray(parsed.datasetMap)) {
+        return { labels: [], datasets: [] };
     }
     return {
-        "labels": pointers,
-        "datasets": dataset
-    }
-};
-
+        labels: parsed.labels,
+        datasets: Object.entries(parsed.datasetMap).map(([label, values]) => ({
+            label,
+            data: Array.isArray(values) ? checkListForParseFloatOrInt(values) : [],
+            borderColor: getColorforTransactionType(label),
+            backgroundColor: getColorforTransactionType(label),
+            fill: false
+        }))
+    };
+}
 
 // Function to return float from string or int with or without commas, and keep it as int if it has no decimal part
 export function parseFloatOrInt(value) {

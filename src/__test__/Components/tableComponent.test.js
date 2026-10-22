@@ -3,8 +3,6 @@ import { render, screen, fireEvent, waitFor, within } from '@testing-library/rea
 import '@testing-library/jest-dom';
 import TableComponent from '../../Components/tableComponent';
 import { write, utils } from "xlsx"
-import fetchMock from 'jest-fetch-mock';
-import { __esModule } from 'quill';
 import FileSaver from 'file-saver';
 
 
@@ -15,9 +13,7 @@ jest.mock('xlsx', () => ({
           json_to_sheet: jest.fn(),
         },
         write: jest.fn(),
-    }
-
-))
+}), { virtual: true });
 
 
 

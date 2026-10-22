@@ -1,127 +1,129 @@
-﻿import importlib.metadata as metadata
+"""Build and validate the dashboard's standalone Python entry points.
+
+Run from any working directory. Package installation is owned by py_build scripts
+and CI; this command refuses to package an incomplete environment.
+"""
+import argparse
+import ast
+import importlib.metadata
+import importlib.util
 import os
+import re
 import shutil
 import subprocess
 import sys
 from pathlib import Path
 
-requirements_path = Path("requirements.txt")
-if requirements_path.exists():
-    raw_bytes = requirements_path.read_bytes()
-    encoding = "utf-16-le" if raw_bytes.startswith(b"\xff\xfe") else "utf-16-be" if raw_bytes.startswith(b"\xfe\xff") else "utf-8"
-    with requirements_path.open("r", encoding=encoding) as f:
-        required = {line.strip().split('==')[0] for line in f if line.strip() and not line.startswith('#')}
-else:
-    required = set()
-
-installed = {dist.metadata['Name'] if 'Name' in dist.metadata else dist.name for dist in metadata.distributions()}
-packages = sorted(required & installed)
-
-exe_dist = Path("exe_dist")
-exe_build = Path("exe_build")
-exe_dist.mkdir(exist_ok=True)
-exe_build.mkdir(exist_ok=True)
-
-pyi_cmd = [
-    sys.executable,
-    "-m",
-    "PyInstaller",
-    "--clean",
-    "--onefile",
-    "--console",
-    "--distpath",
-    str(exe_dist.resolve()),
-    "--workpath",
-    str(exe_build.resolve()),
-    "--hidden-import",
-    "chardet.pipeline.orchestrator__mypyc",
-    "--collect-all",
-    "chardet",
-    "--collect-all",
-    "charset_normalizer",
-    # pkg_resources loads jaraco through dynamic extern/vendor aliases that
-    # PyInstaller may not discover automatically.
-    "--collect-submodules",
-    "jaraco",
-    "--collect-submodules",
-    "pkg_resources._vendor",
-    "--collect-submodules",
-    "setuptools._vendor",
-]
-
-# Define environments
-environments = ["qa", "prod", "dev"]
-ALL_FILES = ["serve", "cache_gen", "csvLoader"]
-
-# Function to build the executable
-from concurrent.futures import ThreadPoolExecutor, as_completed
-from pathlib import Path
-import shutil
-import subprocess
- 
- 
-def build_single_executable(py_file):
-    source = Path("api-server") / f"{py_file}.py"
-    cmd = pyi_cmd + ["--name", py_file, str(source)]
- 
-    try:
-        subprocess.run(cmd, check=True)
-    except subprocess.CalledProcessError as e:
-        print(f"PyInstaller failed for {py_file} with exit code {e.returncode}")
-        return False
-    except FileNotFoundError as e:
-        print(f"Error: {e}. Ensure PyInstaller is installed in the virtualenv.")
-        return False
- 
-    built_exe = exe_dist / f"{py_file}.exe"
-    if not built_exe.exists():
-        print(f"Error: Executable {built_exe} not found after build.")
-        return False
- 
-    for env in environments:
-        env_exe = exe_dist / f"{env}_{py_file}.exe"
-        shutil.copy2(built_exe, env_exe)
- 
-    built_exe.unlink()
- 
-    return True
- 
- 
-def build_executable():
-    build_succeeded = True
-    with ThreadPoolExecutor(max_workers=1) as executor:
-        futures = {
-            executor.submit(build_single_executable, py_file): py_file
-            for py_file in ALL_FILES
-        }
- 
-        for future in as_completed(futures):
-            py_file = futures[future]
-            try:
-                if not future.result():
-                    print(f"Build failed for {py_file}")
-                    build_succeeded = False
-            except Exception as e:
-                print(f"Unexpected error building {py_file}: {e}")
-                build_succeeded = False
-    return build_succeeded
+ROOT = Path(__file__).resolve().parents[2]
+API = ROOT / "api-server"
+ENTRIES = ("serve", "cache_gen", "csvLoader")
+ENVIRONMENTS = ("qa", "prod", "dev")
+# Packages with runtime imports/plugins/resources that static PyInstaller analysis
+# may not detect reliably. Keep this list small and expand on measured failures.
+DYNAMIC_PACKAGES = (
+    "Crypto", "cryptography", "flask", "flask_cors", "flask_login",
+    "jwt", "ldap3", "mysql", "pandas", "openpyxl", "charset_normalizer",
+    "chardet", "pkg_resources", "jaraco",
+)
 
 
-def cleanup_spec_files():
-    dist_dir = Path("dist")
-    if dist_dir.exists():
-        for spec_file in dist_dir.glob("*.spec"):
-            try:
-                spec_file.unlink()
-            except OSError:
-                pass
+def requirements():
+    path = ROOT / "requirements.txt"
+    if not path.is_file():
+        raise RuntimeError(f"Missing dependency manifest: {path}")
+    from packaging.requirements import Requirement
+    required = []
+    for line in path.read_text(encoding="utf-8-sig").splitlines():
+        line = line.strip()
+        if line and not line.startswith("#"):
+            required.append(Requirement(line))
+    return required
 
 
-# Main function to run tasks sequentially
+def validate_dependencies():
+    from packaging.utils import canonicalize_name
+    installed = {canonicalize_name(d.metadata["Name"]): d.version
+                 for d in importlib.metadata.distributions() if d.metadata.get("Name")}
+    missing = []
+    invalid = []
+    for req in requirements():
+        if req.marker and not req.marker.evaluate():
+            continue
+        key = canonicalize_name(req.name)
+        if key not in installed:
+            missing.append(req.name)
+        elif req.specifier and not req.specifier.contains(installed[key], prereleases=True):
+            invalid.append(f"{req.name}: installed {installed[key]}, required {req.specifier}")
+    if missing or invalid:
+        raise RuntimeError("Dependency check failed. Missing: "
+                           + (", ".join(missing) or "none")
+                           + "; version conflicts: " + ("; ".join(invalid) or "none")
+                           + ". Install with: python -m pip install -r requirements.txt")
+    subprocess.run([sys.executable, "-m", "pip", "check"], check=True)
+    print(f"Dependency validation passed ({len(installed)} installed distributions).", flush=True)
+
+
+def validate_sources():
+    for entry in ENTRIES:
+        if not (API / f"{entry}.py").is_file():
+            raise RuntimeError(f"Missing application entry point: {entry}.py")
+    sources = list(API.rglob("*.py"))
+    for file in sources:
+        try:
+            ast.parse(file.read_text(encoding="utf-8-sig"), filename=str(file))
+        except (SyntaxError, UnicodeError) as exc:
+            raise RuntimeError(f"Invalid Python source: {file}: {exc}") from exc
+    print(f"Parsed {len(sources)} Python source files.", flush=True)
+
+
+def pyinstaller_command(entry, dest, work, specs):
+    command = [
+        sys.executable, "-m", "PyInstaller", "--noconfirm", "--clean",
+        "--onefile", "--console", "--name", entry,
+        "--distpath", str(dest), "--workpath", str(work),
+        "--specpath", str(specs),
+    ]
+    for package in DYNAMIC_PACKAGES:
+        if importlib.util.find_spec(package) is not None:
+            command.extend(["--collect-all", package])
+    command.append(str(API / f"{entry}.py"))
+    return command
+
+
+def build():
+    validate_dependencies()
+    validate_sources()
+    import PyInstaller  # noqa: F401 - a missing packager must be fatal
+    dest, work, specs = (ROOT / name for name in ("exe_dist", "exe_build", "exe_specs"))
+    dest.mkdir(exist_ok=True)
+    work.mkdir(exist_ok=True)
+    specs.mkdir(exist_ok=True)
+    suffix = ".exe" if os.name == "nt" else ""
+    for entry in ENTRIES:
+        print(f"Packaging {entry}...", flush=True)
+        subprocess.run(pyinstaller_command(entry, dest, work, specs), cwd=ROOT, check=True)
+        binary = dest / (entry + suffix)
+        if not binary.is_file() or binary.stat().st_size == 0:
+            raise RuntimeError(f"PyInstaller did not produce {binary}")
+        for env in ENVIRONMENTS:
+            shutil.copy2(binary, dest / f"{env}_{entry}{suffix}")
+        binary.unlink()
+    print(f"Validated and packaged {len(ENTRIES)} entry points.", flush=True)
+
+
 def main():
-    if not build_executable():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--check", action="store_true", help="Validate without building")
+    args = parser.parse_args()
+    try:
+        if args.check:
+            validate_dependencies()
+            validate_sources()
+        else:
+            build()
+    except (RuntimeError, subprocess.CalledProcessError, ModuleNotFoundError) as exc:
+        print(f"BUILD FAILED: {exc}", file=sys.stderr)
         return 1
-    cleanup_spec_files()
     return 0
 
 
