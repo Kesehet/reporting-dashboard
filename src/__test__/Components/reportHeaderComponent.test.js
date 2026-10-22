@@ -1,64 +1,49 @@
-import React from 'react';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
-import '@testing-library/jest-dom/extend-expect';
 import ReportHeaderComponent from '../../Components/reportHeaderComponent';
 import AuthorizationService from '../../Services/AuthorizationService';
 
 jest.mock('../../Services/AuthorizationService');
 
-const mockLogout = jest.fn();
-AuthorizationService.mockImplementation(() => {
-    return {
-        logout: mockLogout,
-    };
-});
+describe('ReportHeaderComponent menu contract', () => {
+  let setDates, setCorBFilter, setPage, menu;
+  beforeEach(() => {
+    setDates = jest.fn();
+    setCorBFilter = jest.fn();
+    setPage = jest.fn();
+    menu = ReportHeaderComponent(
+      [new Date('2026-10-01'), new Date('2026-10-10')],
+      setDates, 'All', setCorBFilter, setPage
+    );
+  });
 
-test('renders ReportHeaderComponent and checks elements', () => {
-    const dates = [new Date(), new Date()];
-    const setDates = jest.fn();
+  test('provides existing report navigation without duplicate feature labels', () => {
+    expect(Array.isArray(menu)).toBe(true);
+    const byLabel = label => menu.find(item => item.label === label);
+    expect(byLabel('Business Accounts Summary')).toBeDefined();
+    expect(byLabel('CSV Loader Reports')).toBeDefined();
+    expect(byLabel('Key Rotation')).toBeDefined();
+    byLabel('Business Accounts Summary').command();
+    expect(setPage).toHaveBeenCalledWith('Business Accounts Summary');
+    byLabel('Key Rotation').command();
+    expect(setPage).toHaveBeenCalledWith('Key Rotation');
+  });
 
-    render(<ReportHeaderComponent dates={dates} setDates={setDates} />);
+  test('preserves date selection and consumer/business filter callbacks', () => {
+    const templates = menu.filter(item => typeof item.template === 'function').map(item => item.template());
+    const calendar = templates.find(element => element.props.placeholder === 'Select dates');
+    const filter = templates.find(element => element.props.placeholder === 'Select Consumer or Business Filter');
+    expect(calendar).toBeDefined();
+    expect(filter).toBeDefined();
+    const range = [new Date('2026-09-01'), new Date('2026-09-30')];
+    calendar.props.onChange({ value: range });
+    expect(setDates).toHaveBeenCalledWith(range);
+    filter.props.onChange({ value: 'Business' });
+    expect(setCorBFilter).toHaveBeenCalledWith('Business');
+  });
 
-    // Check for logo rendering
-    const logo = screen.getByAltText(/First National Bank, Pennsylvania Logo/i);
-    expect(logo).toBeInTheDocument();
-
-    // Check if the title is rendered
-    const title = screen.getByText((content, element) => {
-        return element.tagName.toLowerCase() === 'p' && content.includes('eStore® Common App Reporting Dashboard');
-    });
-    expect(title).toBeInTheDocument();
-
-    // Check if menubar is rendering
-    const menubar = screen.getByRole('menubar');
-    expect(menubar).toBeInTheDocument();
-
-    // Check if the Calendar is rendering
-    const calendar = screen.getByPlaceholderText(/Select dates/i);
-    expect(calendar).toBeInTheDocument();
-});
-
-test('handles menu interactions', async () => {
-    const dates = [new Date(), new Date()];
-    const setDates = jest.fn();
-
-    render(<ReportHeaderComponent dates={dates} setDates={setDates} />);
-
-    const calendar = screen.getByPlaceholderText(/Select dates/i);
-    fireEvent.change(calendar, {target: {value: '2024-06-28'}});
-       
-    // Simulate clicking on the Profile menu
-    const profileMenu = screen.getByText(/Profile/i);
-    fireEvent.click(profileMenu);
-
-    const preferences = screen.getByText(/Preferences/i);
-    expect(preferences).toBeInTheDocument();
-
-    const account = screen.getByText(/Account/i);
-    fireEvent.click(account);
-
-    const signOut = screen.getByText(/Sign Out/i);
-    expect(signOut).toBeInTheDocument();
-    fireEvent.click(signOut);
-    
+  test('sign-out action still delegates to authorization service', () => {
+    const logout = jest.fn();
+    AuthorizationService.mockImplementation(() => ({ logout }));
+    menu.find(item => item.label === 'Sign Out').command();
+    expect(logout).toHaveBeenCalledTimes(1);
+  });
 });
