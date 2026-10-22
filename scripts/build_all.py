@@ -24,9 +24,10 @@ def main():
     # This installs/verifies ALL production requirements, not only ones currently
     # imported at startup, and validates Python syntax and import resolution.
     run(sys.executable, FREEZER, "--check-only")
+    run(sys.executable, "-m", "pip", "install", "-r", "tests/contracts/requirements.txt")
     run("npm", "ci", "--no-audit", "--no-fund")
-    run(sys.executable, "-m", "pytest", "-q", "tests")
     run(sys.executable, "scripts/run_chart_contracts.py")
+    run(sys.executable, "-m", "pytest", "-q", "tests")
     run("npm", "run", "test:nocov", "--", "--runInBand", env=ci_env)
     # Existing CRA lint warnings are not introduced by packaging changes.
     run("npm", "run", "build", env={**ci_env, "CI": "false"})
