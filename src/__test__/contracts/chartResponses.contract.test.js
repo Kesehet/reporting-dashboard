@@ -9,7 +9,15 @@ import { responseProblems } from './responseChecks';
 
 const root = path.resolve(__dirname, '../../..');
 const out = path.join(root, 'contract-results');
-const manifest = JSON.parse(fs.readFileSync(path.join(out, 'inventory.json')));
+const inventoryFile = path.join(out, 'inventory.json');
+
+// The ordinary UI suite must run on a clean checkout without generated Python
+// artifacts. The dedicated chart-contract command separately checks that the
+// inventory and cases exist before running this suite.
+if (!fs.existsSync(inventoryFile)) {
+  test.skip('Chart contract fixtures not generated; run npm run test:charts to validate chart responses', () => {});
+} else {
+const manifest = JSON.parse(fs.readFileSync(inventoryFile));
 const allowancePath = path.join(root, 'tests/contracts/frontend-known-issues.json');
 const known = process.env.ACCEPT_CHART_BASELINE === '1' ? {} : JSON.parse(fs.readFileSync(allowancePath));
 const observed = {};
@@ -104,3 +112,4 @@ afterAll(() => {
   if (process.env.ACCEPT_CHART_BASELINE === '1') fs.writeFileSync(allowancePath, JSON.stringify(mismatches, null, 2) + '\n');
   else expect(Object.keys(known).sort()).toEqual(Object.keys(mismatches).sort());
 });
+}
