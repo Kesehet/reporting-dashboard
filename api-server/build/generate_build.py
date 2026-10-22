@@ -81,7 +81,14 @@ def verify_python_sources():
     for name in sorted(required_roots - local_roots - PLATFORM_IMPORTS):
         if name in sys.stdlib_module_names or name in sys.builtin_module_names:
             continue
-        if importlib.util.find_spec(name) is None:
+        try:
+            resolved = importlib.util.find_spec(name) is not None
+        except ValueError:
+            # Contract tests replace pyodbc with a synthetic sys.modules stub
+            # whose __spec__ is None. The real dependency is checked separately
+            # by verify_requirements() outside those test fixtures.
+            resolved = name in sys.modules and sys.modules[name] is not None
+        if not resolved:
             errors.append(f"Unresolved import: {name} (add its distribution to requirements.txt)")
     if errors:
         raise RuntimeError("Python preflight failed:\n" + "\n".join(errors))
