@@ -92,10 +92,8 @@ def request_identity():
     token = request.headers.get('Authorization', '').strip()
     if token:
         return verify_token(token)
-    provided = request.headers.get('X-API-Key', '') or request.args.get('api_key', '')
-    if not provided and request.is_json:
-        body = request.get_json(silent=True) or {}
-        provided = body.get('api_key', '') if isinstance(body, dict) else ''
+    # URL and JSON body API keys are never credentials.
+    provided = request.headers.get('X-API-KEY', '')
     expected = setting('ALL_FILTERS_CHART_API_KEY', '')
     if expected and isinstance(provided, str) and hmac.compare_digest(expected, provided):
         return {'role': 'api_key'}

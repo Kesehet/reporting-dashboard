@@ -31,10 +31,17 @@ class AuthenticationTests(unittest.TestCase):
             return {'role': identity.get('role', 'msal')}
         self.client = app.test_client()
 
-    def test_api_key_header_and_legacy_query_and_json(self):
-        self.assertEqual(self.client.get('/protected', headers={'X-API-Key': 'synthetic-key'}).status_code, 200)
-        self.assertEqual(self.client.get('/protected?api_key=synthetic-key').status_code, 200)
-        self.assertEqual(self.client.post('/protected', json={'api_key': 'synthetic-key'}).status_code, 200)
+    def test_api_key_header_only_for_get_and_post(self):
+        for method in (self.client.get, self.client.post):
+            with self.subTest(method=method.__name__):
+                self.assertEqual(method('/protected', headers={'X-API-KEY': 'synthetic-key'}).status_code, 200)
+                self.assertEqual(method('/protected', headers={'x-api-key': 'synthetic-key'}).status_code, 200)
+                self.assertEqual(method('/protected?api_key=synthetic-key').status_code, 401)
+                self.assertEqual(method('/protected', json={'api_key': 'synthetic-key'}).status_code, 401)
+                self.assertEqual(method('/protected?api_key=synthetic-key',
+                                        headers={'X-API-KEY': 'wrong'}).status_code, 401)
+                self.assertEqual(method('/protected?api_key=wrong',
+                                        headers={'X-API-KEY': 'synthetic-key'}).status_code, 200)
 
     def test_wrong_or_missing_credentials(self):
         self.assertEqual(self.client.get('/protected').status_code, 401)

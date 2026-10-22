@@ -26,6 +26,22 @@ test('MSAL token is included in GET and POST report request headers', async () =
   expect(fetchMock.mock.calls.every(([url]) => !url.includes('/sso/session'))).toBe(true);
 });
 
+test('chart requests do not serialize api_key into GET URLs or POST JSON', async () => {
+  for (const requestMethod of ['GET', 'POST']) {
+    fetchMock.mockResponseOnce(JSON.stringify({ rows: [1] }));
+    await new ChartDataService('Test', { requestMethod, api_key: 'must-not-travel', BranchID: '1000' }).getChart();
+    const [url, options] = fetchMock.mock.calls[fetchMock.mock.calls.length - 1];
+    expect(url).not.toContain('api_key');
+    if (requestMethod === 'POST') {
+      expect(JSON.parse(options.body)).not.toHaveProperty('api_key');
+      expect(JSON.parse(options.body).BranchID).toBe('1000');
+    } else {
+      expect(url).toContain('BranchID=1000');
+    }
+    expect(options.headers).not.toHaveProperty('X-API-KEY');
+  }
+});
+
 test('LDAP Authorization header unchanged and no token sends no authentication', () => {
   localStorage.setItem('login_method', 'ldap');
   localStorage.setItem('token', 'synthetic-ldap-jwt');
