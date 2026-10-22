@@ -35,6 +35,12 @@ jobs:
         run: python api-server/build/generate_build.py --check
       - name: Full backend regression suite
         run: python -m unittest discover -s tests -p 'test_*.py' -v
+      - name: Clean-checkout frontend tests without generated chart artifacts
+        env:
+          REACT_APP_API_SERVER_BASE_URL: /api
+        run: |
+          test ! -e contract-results/inventory.json
+          npm run test:nocov -- --runInBand --testPathPattern='TransactionService.test.js|chartResponses.contract.test.js'
       - name: Generate verified chart response fixtures
         run: python scripts/run_chart_contracts.py
       - name: UI regression suite
