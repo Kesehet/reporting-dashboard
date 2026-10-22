@@ -98,12 +98,26 @@ class CryptoRotationTests(unittest.TestCase):
             "CRYPTO_LEGACY_SAMPLE_CIPHERTEXT": "",
             "CRYPTO_LEGACY_SAMPLE_SHA256": "",
             "ENCRYPTION_KEY": "",
+            "CRYPTO_LEGACY_ENV_FILE": "",
+            "CRYPTO_LEGACY_KEY_DIR": "",
         })
         self.env.start()
         self.addCleanup(self.env.stop)
         self.legacy = mock.patch.object(crypto, "_legacy_env", return_value=None)
         self.legacy.start()
         self.addCleanup(self.legacy.stop)
+        # Synthetic fixtures must never import host or checkout secrets.
+        for name, source in (
+            ("_legacy_env_files", lambda: [
+                Path(os.environ.get("CRYPTO_LEGACY_ENV_FILE") or Path(self.tmp.name) / ".env")
+            ]),
+            ("_legacy_key_dirs", lambda: [
+                Path(os.environ.get("CRYPTO_LEGACY_KEY_DIR") or self.tmp.name)
+            ]),
+        ):
+            isolation = mock.patch.object(crypto, name, side_effect=source)
+            isolation.start()
+            self.addCleanup(isolation.stop)
         self.cwd = os.getcwd()
         os.chdir(self.tmp.name)
         self.addCleanup(os.chdir, self.cwd)
@@ -112,6 +126,66 @@ class CryptoRotationTests(unittest.TestCase):
         self.assertIsNone(crypto.get_keyring()["current_id"])
         self.assertEqual(crypto.key_metadata()["keys"], [])
         self.assertFalse((Path(self.tmp.name) / "enc.key").exists())
+
+    def test_atomic_write_retries_transient_windows_sharing_violations(self):
+        output = Path(self.tmp.name) / "migration-status.json"
+        real_replace = os.replace
+        calls = []
+        def sharing_violation(src, dst):
+            calls.append(dst)
+            if len(calls) <= 2:
+                raise PermissionError(13, "synthetic transient sharing violation")
+            return real_replace(src, dst)
+        with mock.patch.object(crypto.os, "replace", side_effect=sharing_violation):
+            with mock.patch.object(crypto.time, "sleep") as sleep:
+                crypto._atomic_write(output, '{"state": "completed"}')
+        self.assertEqual(len(calls), 3)
+        self.assertEqual(sleep.call_count, 2)
+        self.assertEqual(output.read_text(), '{"state": "completed"}')
+
+    def test_atomic_write_keeps_existing_state_on_persistent_sharing_violation(self):
+        output = Path(self.tmp.name) / "migration-status.json"
+        output.write_text('{"state": "stable"}')
+        with mock.patch.object(crypto.os, "replace",
+                               side_effect=PermissionError(13, "persistent sharing violation")):
+            with mock.patch.object(crypto.time, "sleep"):
+                with self.assertRaises(PermissionError):
+                    crypto._atomic_write(output, '{"state": "new"}')
+        self.assertEqual(output.read_text(), '{"state": "stable"}')
+
+    def test_status_reader_retries_transient_windows_sharing_violation(self):
+        class FlakyState:
+            def __init__(self):
+                self.attempts = 0
+
+            def is_file(self):
+                return True
+
+            def read_text(self, encoding):
+                self.attempts += 1
+                if self.attempts <= 2:
+                    raise PermissionError(13, "synthetic transient Windows sharing")
+                return '{"state": "completed"}'
+
+        state = FlakyState()
+        with mock.patch.object(rot, "_state_file", return_value=state):
+            with mock.patch.object(rot.time, "sleep") as sleep:
+                self.assertEqual(rot._status()["state"], "completed")
+        self.assertEqual(state.attempts, 3)
+        self.assertEqual(sleep.call_count, 2)
+
+    def test_status_reader_does_not_hide_permanent_permission_errors(self):
+        class LockedState:
+            def is_file(self):
+                return True
+
+            def read_text(self, encoding):
+                raise PermissionError(13, "persistent Windows sharing")
+
+        with mock.patch.object(rot, "_state_file", return_value=LockedState()):
+            with mock.patch.object(rot.time, "sleep"):
+                with self.assertRaises(PermissionError):
+                    rot._status()
 
     def test_gcm_roundtrip_unicode_empty_and_nonce_uniqueness(self):
         crypto.key_rotation()
@@ -259,6 +333,34 @@ class CryptoRotationTests(unittest.TestCase):
         self.assertTrue((Path(self.tmp.name) / "backups" / ("a" * 32 + ".jsonl")).exists())
         self.assertTrue(all("DROP " not in q.upper() and "ALTER " not in q.upper()
                             for c in connections for q in c.connection.statements))
+
+    def test_snapshot_digest_matches_exact_disk_bytes(self):
+        crypto.key_rotation()
+        original = crypto.encrypt_string("before")
+        crypto.key_rotation()
+        db = {"Transactions": {1: [original, None]}, "Properties": {}}
+        with mock.patch.object(rot, "_connection", side_effect=lambda: FakeSQL(db)):
+            rot._migrate("f" * 32)
+        status = rot._status()
+        self.assertEqual(status["state"], "completed")
+        raw = (Path(self.tmp.name) / "backups" / ("f" * 32 + ".jsonl")).read_bytes()
+        self.assertNotIn(b"\r\n", raw)
+        self.assertEqual(hashlib.sha256(raw).hexdigest(), status["backup_sha256"])
+
+    def test_older_windows_crlf_snapshot_can_be_restored_safely(self):
+        crypto.key_rotation()
+        original = crypto.encrypt_string("before")
+        crypto.key_rotation()
+        db = {"Transactions": {1: [original, None]}, "Properties": {}}
+        with mock.patch.object(rot, "_connection", side_effect=lambda: FakeSQL(db)):
+            rot._migrate("9" * 32)
+            path = Path(self.tmp.name) / "backups" / ("9" * 32 + ".jsonl")
+            original_bytes = path.read_bytes()
+            self.assertNotIn(b"\r\n", original_bytes)
+            path.write_bytes(original_bytes.replace(b"\n", b"\r\n"))
+            rot._rollback("9" * 32)
+        self.assertEqual(db["Transactions"][1][0], original)
+        self.assertEqual(rot._status()["state"], "rolled_back")
 
     def test_sql_failure_rolls_back_all_prior_updates(self):
         crypto.key_rotation()

@@ -12,6 +12,7 @@ import os
 import secrets
 import sys
 import tempfile
+import time
 import uuid
 from contextlib import contextmanager
 from datetime import datetime, timezone
@@ -50,7 +51,18 @@ def _atomic_write(path, payload):
             output.write(payload)
             output.flush()
             os.fsync(output.fileno())
-        os.replace(temp, path)
+        # Windows readers (including the /crypto/status polling endpoint)
+        # can briefly prevent replacement of an open destination file. Retry
+        # only sharing/permission errors; the existing file stays untouched
+        # until the fully fsynced replacement can be installed atomically.
+        for attempt in range(8):
+            try:
+                os.replace(temp, path)
+                break
+            except PermissionError:
+                if attempt == 7:
+                    raise
+                time.sleep(0.03 * (attempt + 1))
         if os.name != "nt":
             os.chmod(path, 0o600)
         if hasattr(os, "O_DIRECTORY"):

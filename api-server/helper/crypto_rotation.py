@@ -7,6 +7,7 @@ import hashlib
 import json
 import os
 import threading
+import time
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -42,9 +43,18 @@ def _write_status(value):
 
 def _status():
     path = _state_file()
-    if not path.is_file():
-        return {"state": "idle", "processed": 0, "updated": 0}
-    return json.loads(path.read_text(encoding="utf-8"))
+    # Windows can momentarily deny opens of an atomically replaced file when
+    # status polling races the migration worker. Retry the read, never
+    # fabricate a recovery state from a transient sharing violation.
+    for attempt in range(8):
+        try:
+            if not path.is_file():
+                return {"state": "idle", "processed": 0, "updated": 0}
+            return json.loads(path.read_text(encoding="utf-8"))
+        except PermissionError:
+            if attempt == 7:
+                raise
+            time.sleep(0.03 * (attempt + 1))
 
 
 @crypto_api.after_request
@@ -225,7 +235,7 @@ def _migrate(run_id, previous_key_id=None, activated_key_id=None):
         backup_path = _root() / "backups" / (run_id + ".jsonl")
         backup_path.parent.mkdir(mode=0o700, exist_ok=True)
         digest = hashlib.sha256()
-        with open(backup_path, "x", encoding="utf-8") as backup:
+        with open(backup_path, "x", encoding="utf-8", newline="\n") as backup:
             if os.name != "nt":
                 os.chmod(backup_path, 0o600)
             for table, pk, initial in _TABLES:
@@ -291,8 +301,16 @@ def _rollback(run_id):
     if not backup_path.is_file():
         raise ValueError("Recovery snapshot missing; refusing to proceed")
     encoded_lines = backup_path.read_bytes()
-    if hashlib.sha256(encoded_lines).hexdigest() != status.get("backup_sha256"):
-        raise ValueError("Recovery snapshot checksum mismatch")
+    expected_checksum = status.get("backup_sha256")
+    if hashlib.sha256(encoded_lines).hexdigest() != expected_checksum:
+        # Old Windows text-mode snapshots were stored with CRLF even though
+        # the manifest hashed LF. Accept only a wholly CRLF-delimited snapshot
+        # whose canonical LF digest matches the original signed-by-key data.
+        entries = encoded_lines.splitlines(keepends=True)
+        if not (entries and all(entry.endswith(b"\r\n") for entry in entries)
+                and hashlib.sha256(encoded_lines.replace(b"\r\n", b"\n")).hexdigest()
+                == expected_checksum):
+            raise ValueError("Recovery snapshot checksum mismatch")
     lines = encoded_lines.decode("utf-8").splitlines()
     if len(lines) != status.get("backup_rows"):
         raise ValueError("Recovery snapshot is incomplete")

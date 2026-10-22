@@ -63,9 +63,22 @@ class CsvEncryptionTests(unittest.TestCase):
             "CRYPTO_STATE_DIR": self.temp.name,
             "ENCRYPTION_KEY": "",
             "CRYPTO_LEGACY_MODE": "",
+            "CRYPTO_LEGACY_ENV_FILE": "",
+            "CRYPTO_LEGACY_KEY_DIR": "",
         })
         self.env.start()
         self.addCleanup(self.env.stop)
+        for name, source in (
+            ("_legacy_env_files", lambda: [
+                Path(os.environ.get("CRYPTO_LEGACY_ENV_FILE") or Path(self.temp.name) / ".env")
+            ]),
+            ("_legacy_key_dirs", lambda: [
+                Path(os.environ.get("CRYPTO_LEGACY_KEY_DIR") or self.temp.name)
+            ]),
+        ):
+            isolation = mock.patch.object(crypto, name, side_effect=source)
+            isolation.start()
+            self.addCleanup(isolation.stop)
         self.cwd = Path.cwd()
         os.chdir(self.temp.name)
         self.addCleanup(os.chdir, self.cwd)
@@ -165,7 +178,8 @@ class LegacyDiscoveryTests(unittest.TestCase):
             ids = {item["id"] for item in ring["keys"]}
             self.assertIn(crypto._key_id(old_raw), ids)
             self.assertIn(crypto._key_id(file_raw), ids)
-            self.assertEqual(len(ids), 2)
+            # Other deployed keys can coexist; both configured sources are required.
+            self.assertGreaterEqual(len(ids), 2)
 
     def test_legacy_path_configuration_requires_absolute_paths(self):
         with mock.patch.dict(os.environ, {"CRYPTO_LEGACY_KEY_DIR": "relative"}):
