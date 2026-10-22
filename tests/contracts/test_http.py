@@ -7,6 +7,7 @@ import unittest
 from unittest.mock import patch
 from urllib.parse import quote
 
+from daily_api_key import make_daily_api_key
 from runtime import BASE_PARAMS, ROOT, SqlFixture, runtime
 
 PIE = 'Application Volume By Product (All Started Apps) Pie - Year to Date'
@@ -36,7 +37,7 @@ class ChartHttpTests(unittest.TestCase):
         self.addCleanup(self.stdout.__exit__, None, None, None)
 
     def request(self, name=PIE, **params):
-        return self.client.post('/charts/' + quote(name), headers={'X-API-Key': 'fixture-chart-api-key'}, json={
+        return self.client.post('/charts/' + quote(name), headers={'X-API-KEY': make_daily_api_key('fixture-chart-api-key')}, json={
             **BASE_PARAMS, 'start_date': '2026-01-01', 'end_date': '2026-03-31', **params,
         })
 
@@ -58,8 +59,8 @@ class ChartHttpTests(unittest.TestCase):
 
     def test_get_and_post_pass_the_same_chart_parameters(self):
         p = {**BASE_PARAMS, 'start_date':'2026-01-01', 'end_date':'2026-03-31', 'showComma':'false'}
-        post = self.client.post('/charts/' + quote(PIE), json=p, headers={'X-API-Key': 'fixture-chart-api-key'})
-        get = self.client.get('/charts/' + quote(PIE), query_string=p, headers={'X-API-Key': 'fixture-chart-api-key'})
+        post = self.client.post('/charts/' + quote(PIE), json=p, headers={'X-API-KEY': make_daily_api_key('fixture-chart-api-key')})
+        get = self.client.get('/charts/' + quote(PIE), query_string=p, headers={'X-API-KEY': make_daily_api_key('fixture-chart-api-key')})
         self.assertEqual(get.status_code, 200)
         self.assertEqual(get.json, post.json)
 
@@ -69,15 +70,15 @@ class ChartHttpTests(unittest.TestCase):
         self.assertEqual(self.client.get(path, query_string={**params, 'api_key': 'fixture-chart-api-key'}).status_code, 401)
         self.assertEqual(self.client.post(path, json={**params, 'api_key': 'fixture-chart-api-key'}).status_code, 401)
         self.assertEqual(self.client.get(path, query_string=params, headers={'X-API-KEY': 'incorrect'}).status_code, 401)
-        self.assertEqual(self.client.get(path, query_string=params, headers={'X-API-KEY': 'fixture-chart-api-key'}).status_code, 200)
-        self.assertEqual(self.client.post(path, json=params, headers={'X-API-KEY': 'fixture-chart-api-key'}).status_code, 200)
+        self.assertEqual(self.client.get(path, query_string=params, headers={'X-API-KEY': make_daily_api_key('fixture-chart-api-key')}).status_code, 200)
+        self.assertEqual(self.client.post(path, json=params, headers={'X-API-KEY': make_daily_api_key('fixture-chart-api-key')}).status_code, 200)
         self.assertEqual(self.client.get('/', query_string={'api_key': 'fixture-chart-api-key'}).status_code, 401)
 
     def test_missing_and_malformed_dates_are_400_before_queries(self):
         for params in [{'end_date': '2026-01-01'}, {'start_date': 'wrong', 'end_date':'2026-01-01'}]:
             for method in ['GET', 'POST']:
                 with self.subTest(params=params, method=method):
-                    r = self.client.get('/charts/'+quote(PIE), query_string=params, headers={'X-API-Key': 'fixture-chart-api-key'}) if method == 'GET' else self.client.post('/charts/'+quote(PIE), json=params, headers={'X-API-Key': 'fixture-chart-api-key'})
+                    r = self.client.get('/charts/'+quote(PIE), query_string=params, headers={'X-API-KEY': make_daily_api_key('fixture-chart-api-key')}) if method == 'GET' else self.client.post('/charts/'+quote(PIE), json=params, headers={'X-API-KEY': make_daily_api_key('fixture-chart-api-key')})
                     self.assertEqual(r.status_code, 400)
                     self.assertIn('error', r.json)
         self.assertEqual(self.fixture.queries, [])

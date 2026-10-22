@@ -21,6 +21,7 @@ from unittest.mock import patch
 ROOT = Path(__file__).resolve().parents[2]
 API = ROOT / 'api-server'
 sys.path.insert(0, str(API))
+from daily_api_key import make_daily_api_key
 
 
 def chart_names():
@@ -183,9 +184,9 @@ def collect(consumers):
                                 req = {**params, 'showComma': comma}
                                 if method == 'GET':
                                     req = {k: str(v).lower() if isinstance(v, bool) else v for k, v in req.items()}
-                                    response = client.get('/charts/' + name, query_string=req, headers={'X-API-Key': 'fixture-chart-api-key'})
+                                    response = client.get('/charts/' + name, query_string=req, headers={'X-API-KEY': make_daily_api_key('fixture-chart-api-key')})
                                 else:
-                                    response = client.post('/charts/' + name, json=req, headers={'X-API-Key': 'fixture-chart-api-key'})
+                                    response = client.post('/charts/' + name, json=req, headers={'X-API-KEY': make_daily_api_key('fixture-chart-api-key')})
                                 payload = response.get_json()
                                 if response.status_code != 200:
                                     payload = {'error': payload.get('error'), 'chartName': payload.get('chartName')}

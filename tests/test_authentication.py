@@ -2,13 +2,14 @@
 import os
 import sys
 import unittest
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from unittest import mock
 
 from flask import Flask
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'api-server'))
 from authentication import authentication, request_identity, unauthorized
+from daily_api_key import make_daily_api_key, valid_daily_api_key
 
 
 class AuthenticationTests(unittest.TestCase):
@@ -30,24 +31,66 @@ class AuthenticationTests(unittest.TestCase):
                 return unauthorized()
             return {'role': identity.get('role', 'msal')}
         self.client = app.test_client()
+        self.today_key = make_daily_api_key('synthetic-key')
 
     def test_api_key_header_only_for_get_and_post(self):
         for method in (self.client.get, self.client.post):
             with self.subTest(method=method.__name__):
-                self.assertEqual(method('/protected', headers={'X-API-KEY': 'synthetic-key'}).status_code, 200)
-                self.assertEqual(method('/protected', headers={'x-api-key': 'synthetic-key'}).status_code, 200)
+                self.assertEqual(method('/protected', headers={'X-API-KEY': self.today_key}).status_code, 200)
+                self.assertEqual(method('/protected', headers={'x-api-key': self.today_key}).status_code, 200)
                 self.assertEqual(method('/protected?api_key=synthetic-key').status_code, 401)
+                self.assertEqual(method('/protected', headers={'X-API-KEY': 'synthetic-key'}).status_code, 401)
                 self.assertEqual(method('/protected', json={'api_key': 'synthetic-key'}).status_code, 401)
                 self.assertEqual(method('/protected?api_key=synthetic-key',
                                         headers={'X-API-KEY': 'wrong'}).status_code, 401)
                 self.assertEqual(method('/protected?api_key=wrong',
-                                        headers={'X-API-KEY': 'synthetic-key'}).status_code, 200)
+                                        headers={'X-API-KEY': self.today_key}).status_code, 200)
+
+    def test_daily_key_changes_and_expires_at_utc_midnight(self):
+        yesterday = date(2026, 10, 22)
+        today = yesterday + timedelta(days=1)
+        old = make_daily_api_key('synthetic-key', yesterday)
+        new = make_daily_api_key('synthetic-key', today)
+        self.assertEqual(old, make_daily_api_key('synthetic-key', yesterday))
+        self.assertNotEqual(old, new)
+        self.assertTrue(valid_daily_api_key(old, 'synthetic-key', yesterday))
+        self.assertFalse(valid_daily_api_key(old, 'synthetic-key', today))
+        self.assertFalse(valid_daily_api_key(old, 'wrong-master-secret', yesterday))
+        self.assertFalse(valid_daily_api_key('synthetic-key', 'synthetic-key', yesterday))
+        with mock.patch('daily_api_key.utc_today', return_value=today):
+            self.assertEqual(self.client.get('/protected', headers={'X-API-KEY': old}).status_code, 401)
+            self.assertEqual(self.client.get('/protected', headers={'X-API-KEY': new}).status_code, 200)
+
+    def test_current_key_requires_verified_dashboard_login(self):
+        import jwt
+        signed = jwt.encode({
+            'email': 'fixture', 'role': 'grp_SSO_DIS_ITBSReportUser',
+            'exp': datetime.now(timezone.utc) + timedelta(minutes=5),
+        }, 'synthetic-secret', algorithm='HS256')
+        for headers in ({}, {'X-API-KEY': self.today_key},
+                        {'X-API-KEY': 'synthetic-key'},
+                        {'X-MSAL-ID-Token': 'arbitrary'}):
+            with self.subTest(headers=headers):
+                self.assertEqual(self.client.get('/api-key/current', headers=headers).status_code, 401)
+        response = self.client.get('/api-key/current', headers={'Authorization': 'Bearer ' + signed})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json['api_key'], self.today_key)
+        self.assertEqual(response.json['timezone'], 'UTC')
+        self.assertIn('no-store', response.headers['Cache-Control'])
+        with mock.patch('authentication.verify_microsoft_token', return_value={'sub': 'verified'}):
+            self.assertEqual(self.client.get('/api-key/current', headers={
+                'X-MSAL-ID-Token': 'signed-id-token',
+            }).status_code, 200)
+        os.environ.pop('ALL_FILTERS_CHART_API_KEY')
+        unavailable = self.client.get('/api-key/current', headers={'Authorization': 'Bearer ' + signed})
+        self.assertEqual(unavailable.status_code, 503)
+        self.assertNotIn('api_key', unavailable.json)
 
     def test_wrong_or_missing_credentials(self):
         self.assertEqual(self.client.get('/protected').status_code, 401)
         self.assertEqual(self.client.get('/protected', headers={'X-API-Key': 'not-it'}).status_code, 401)
         self.assertEqual(self.client.get('/protected', headers={
-            'X-API-Key': 'synthetic-key', 'Authorization': 'Bearer invalid',
+            'X-API-Key': self.today_key, 'Authorization': 'Bearer invalid',
         }).status_code, 401)
 
     def test_ldap_signed_jwt_expires(self):
@@ -63,7 +106,7 @@ class AuthenticationTests(unittest.TestCase):
 
     def test_api_key_unset_never_allows_access(self):
         os.environ.pop('ALL_FILTERS_CHART_API_KEY')
-        self.assertEqual(self.client.get('/protected', headers={'X-API-Key': 'synthetic-key'}).status_code, 401)
+        self.assertEqual(self.client.get('/protected', headers={'X-API-Key': self.today_key}).status_code, 401)
 
     def test_login_validation_and_msal_config(self):
         self.assertEqual(self.client.post('/login', json={}).status_code, 400)
@@ -99,7 +142,7 @@ class AuthenticationTests(unittest.TestCase):
                     'X-MSAL-ID-Token': value, 'X-API-Key': 'wrong',
                 }).status_code, 401)
                 self.assertEqual(self.client.get('/protected', headers={
-                    'X-MSAL-ID-Token': value, 'X-API-Key': 'synthetic-key',
+                    'X-MSAL-ID-Token': value, 'X-API-Key': self.today_key,
                 }).status_code, 200)
         self.assertEqual(self.client.post('/sso/session', json={}).status_code, 404)
 
