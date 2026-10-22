@@ -95,6 +95,11 @@ class EndpointTests(unittest.TestCase):
 
 
 class ExtractTests(unittest.TestCase):
+    def setUp(self):
+        self.jm_config = patch("jm_endpoints.get_env_value", return_value="https://jm.example")
+        self.jm_config.start()
+        self.addCleanup(self.jm_config.stop)
+
     xml = "<Root><AvokaSmartForm><Application><Id>42</Id></Application></AvokaSmartForm></Root>"
 
     @patch.object(application, "get_env_value")
