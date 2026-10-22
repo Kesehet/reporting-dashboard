@@ -10,6 +10,7 @@ from flask import Flask
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'api-server'))
 from authentication import authentication, request_identity, unauthorized
 from daily_api_key import make_daily_api_key, valid_daily_api_key
+from role_filter import all_groups, get_role, role_filter
 
 
 class AuthenticationTests(unittest.TestCase):
@@ -32,6 +33,18 @@ class AuthenticationTests(unittest.TestCase):
             return {'role': identity.get('role', 'msal')}
         self.client = app.test_client()
         self.today_key = make_daily_api_key('synthetic-key')
+
+    def test_ldap_dev_report_group_gets_report_user_filtering(self):
+        dev_group = 'SSO_DIS_ITBSReport_DEV_User'
+        self.assertIn(dev_group, all_groups)
+        self.assertEqual(
+            get_role({'memberOf': ['CN=' + dev_group + ',OU=Security,DC=example,DC=com']}),
+            dev_group,
+        )
+        rows = '[{"eCAID": 123, "tId": 456, "account": "example"}]'
+        for role in all_groups:
+            with self.subTest(role=role):
+                self.assertEqual(role_filter(rows, role), [{'account': 'example'}])
 
     def test_api_key_header_only_for_get_and_post(self):
         for method in (self.client.get, self.client.post):
