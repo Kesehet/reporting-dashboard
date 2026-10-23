@@ -10,9 +10,6 @@ from daily_api_key import make_daily_api_key
 
 
 INSIGHT = "CSV Contract Insight"
-HEADERS = {"X-API-KEY": make_daily_api_key("fixture-chart-api-key")}
-
-
 class CsvExportTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -36,10 +33,11 @@ class CsvExportTests(unittest.TestCase):
             **options,
         }
         path = "/charts/" + quote(INSIGHT)
+        valid_headers = {"X-API-KEY": make_daily_api_key("fixture-chart-api-key")}
         with patch.object(self.server, "getChartData", return_value=data):
             if method == "POST":
-                return self.client.post(path, json=params, headers=HEADERS if headers is None else headers)
-            return self.client.get(path, query_string=params, headers=HEADERS if headers is None else headers)
+                return self.client.post(path, json=params, headers=valid_headers if headers is None else headers)
+            return self.client.get(path, query_string=params, headers=valid_headers if headers is None else headers)
 
     def test_csv_writer_quotes_commas_newlines_and_double_quotes(self):
         source = [{"Count": 1234, "Customer": "Acme, Inc.", "Note": 'He said "yes"\nand left', "Null": None}]
