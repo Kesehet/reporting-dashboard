@@ -32,6 +32,7 @@ test("gets today's key using the normal login header and copies it", async () =>
   expect(opts.headers.Authorization).toBe('ldap-signed-token');
   expect(opts.headers['X-API-KEY']).toBeUndefined();
   expect(opts.cache).toBe('no-store');
+  expect(opts.credentials).toBe('same-origin');
   fireEvent.click(screen.getByRole('button', { name: /Copy API key/i }));
   await waitFor(() => expect(navigator.clipboard.writeText).toHaveBeenCalledWith('ak1.sample.signed'));
   expect(screen.getByRole('status')).toHaveTextContent('Copied');
@@ -44,6 +45,7 @@ test('uses unchanged Microsoft SSO header', async () => {
   render(<ApiKeyTab />);
   await screen.findByText('ak1.signed');
   expect(fetch.mock.calls[0][1].headers['X-MSAL-ID-Token']).toBe('msal-signed-token');
+  expect(fetch.mock.calls[0][1].credentials).toBe('same-origin');
 });
 
 test('never shows or copies a key when endpoint refuses access', async () => {

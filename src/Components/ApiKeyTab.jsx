@@ -12,7 +12,7 @@ export default function ApiKeyTab() {
       const response = await fetch(apiBaseUrl() + '/api-key/current', {
         method: 'GET',
         headers: { ...sessionHeaders() },
-        credentials: 'include',
+        credentials: 'same-origin',
         cache: 'no-store',
       });
       const result = await response.json();

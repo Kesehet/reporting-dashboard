@@ -12,6 +12,9 @@ describe('TransactionService', () => {
       status: 200,
       json: async () => responseRows,
     });
+    localStorage.clear();
+    localStorage.setItem('login_method', 'msal');
+    localStorage.setItem('token', 'synthetic-id-token');
     const onload = jest.fn();
 
     try {
@@ -28,11 +31,16 @@ describe('TransactionService', () => {
       }
       expect(onload).toHaveBeenCalledWith(transactionService.json);
       expect(fetchSpy).toHaveBeenCalledTimes(1);
+      // The token header is independent of cross-origin cookie credentials.
+      const [, requestOptions] = fetchSpy.mock.calls[0];
+      expect(requestOptions.credentials).toBe('same-origin');
+      expect(requestOptions.headers['X-MSAL-ID-Token']).toBe('synthetic-id-token');
       const requestUrl = new URL(fetchSpy.mock.calls[0][0], 'http://localhost');
       expect(requestUrl.searchParams.get('start_date')).toBe('2024-04-09');
       expect(requestUrl.searchParams.get('end_date')).toBe('2024-04-11');
     } finally {
       fetchSpy.mockRestore();
+      localStorage.clear();
     }
   });
 });

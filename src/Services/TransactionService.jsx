@@ -25,7 +25,7 @@ class TransactionService {
 
     try {
       const response = await fetch(this.url, {
-        credentials: 'include',
+        credentials: 'same-origin',
         headers: sessionHeaders(),
       });
       if (response.status !== 200) {
