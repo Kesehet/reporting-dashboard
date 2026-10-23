@@ -18,6 +18,8 @@ build_failed=0
 test_failed=0
 echo "Building frontend production assets first"
 CI=false npm run build || build_failed=1
+echo "Normalizing frontend manifest line endings to LF"
+"$PYTHON_EXEC" scripts/normalize_line_endings.py --to lf --if-exists build/asset-manifest.json || build_failed=1
 echo "Packaging standalone Python executables"
 "$PYTHON_EXEC" api-server/build/generate_build.py || build_failed=1
 mkdir -p dist
