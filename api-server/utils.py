@@ -2,6 +2,9 @@ from dateutil.relativedelta import relativedelta
 from datetime import datetime
 from decimal import Decimal
 import re
+import csv
+import io
+import json
 from report_modules.condition_utils import CorBFilter
 
 def params_to_condition_list(params):
@@ -214,37 +217,46 @@ def add_comma_to_long_numbers(num):
         return num
 
 def insight_report_to_csv_response(params, insight_report, txn=None):
-    
-    # Check return format
-    return_format = params.get("return_format", "json")
-    if return_format == "json":
+    """Convert the requested insight's underlying rows to standards-compliant CSV.
+
+    Reports expose export data under _report_* keys, as rows, deferred SQL,
+    or a nested report. Never export display-formatted chart numbers.
+    """
+    if params.get("return_format", "json") != "csv":
         return 0
-    
-    block_name = "_report_" + params.get("report_name", "")
-    
-    
-    # Check Key Name from insight_report that start with _report_
-    report_keys = []
-    for key in insight_report.keys():
-        if key.startswith("_report_"):
-            report_keys.append(key)
-    if len(report_keys) == 0:
-        return 0
-    
-    if block_name == "_report_":
-        block_name = report_keys[0]
-        print("Block name not provided, defaulting to first report block: ", block_name)
-    
-    print(f"Generating CSV for block: {block_name} with return format: {return_format} and block type: {type(insight_report.get(block_name))}")
-    if type(insight_report.get(block_name)) == str:
-        # Get data from sql query
-        return  sql_response_to_csv(txn.get_transactions_by_sql_query(insight_report.get(block_name)))
-    elif type(insight_report.get(block_name)) == dict:
-        return insight_report_to_csv_response(params, insight_report.get(block_name), txn)
-    elif type(insight_report.get(block_name)) == list:
-        return sql_response_to_csv(insight_report.get(block_name))
-    else:
-        return 0
+
+    if not isinstance(insight_report, dict):
+        raise ValueError("CSV export requires an insight report.")
+
+    requested_name = str(params.get("report_name") or "")
+    report_key = requested_name if requested_name.startswith("_report_") else "_report_" + requested_name
+    report_keys = [key for key in insight_report if key.startswith("_report_")]
+
+    if not report_keys:
+        if "headers" in insight_report and "rows" in insight_report:
+            return sql_response_to_csv(insight_report)
+        raise ValueError("No exportable CSV report was found.")
+
+    if not requested_name:
+        report_key = report_keys[0]
+    elif report_key not in insight_report:
+        raise ValueError("Requested report_name was not found.")
+
+    report = insight_report[report_key]
+    if isinstance(report, str):
+        if txn is None:
+            raise ValueError("CSV export requires a database transaction.")
+        report = txn.get_transactions_by_sql_query(report)
+
+    if isinstance(report, dict):
+        if "headers" in report and "rows" in report:
+            return sql_response_to_csv(report)
+        if any(key.startswith("_report_") for key in report):
+            return insight_report_to_csv_response({**params, "report_name": ""}, report, txn)
+        return sql_response_to_csv([report])
+
+    return sql_response_to_csv(report)
+
 
 def table_fix_for_api_response(report):
     # Header order is positional: sorting or deduplicating it breaks the
@@ -252,12 +264,44 @@ def table_fix_for_api_response(report):
     return report
 
 def sql_response_to_csv(sql_response):
-    if type(sql_response) == list and len(sql_response) > 0 and type(sql_response[0]) == dict:
-        headers = ','.join(list(sql_response[0].keys()))
-        rows = ['{}'.format(','.join(map(str, row.values()))) for row in sql_response]
-        return '\n'.join([headers] + rows)
+    """Serialize rowsets and header/row tables without losing column boundaries."""
+    if sql_response is None or sql_response == 0:
+        return ""
+
+    if isinstance(sql_response, dict):
+        if "headers" not in sql_response or "rows" not in sql_response:
+            raise ValueError("Unsupported CSV report structure.")
+        headers = list(sql_response["headers"])
+        rows = sql_response["rows"]
+        if not headers and not rows:
+            return ""
+        records = ([row.get(header) for header in headers] if isinstance(row, dict) else row for row in rows)
+    elif isinstance(sql_response, list):
+        if not sql_response:
+            return ""
+        if isinstance(sql_response[0], dict):
+            # Preserve first-row order; do not discard keys present on later rows.
+            headers = list(dict.fromkeys(key for row in sql_response for key in row))
+            records = ([row.get(header) for header in headers] for row in sql_response)
+        elif isinstance(sql_response[0], (list, tuple)):
+            headers = []
+            records = sql_response
+        else:
+            raise ValueError("Unsupported CSV row structure.")
     else:
-        return 0
+        raise ValueError("Unsupported CSV result type.")
+
+    out = io.StringIO(newline="")
+    writer = csv.writer(out, lineterminator="\n")
+    if headers:
+        writer.writerow(headers)
+    for row in records:
+        writer.writerow([
+            "" if value is None else json.dumps(value, ensure_ascii=False, default=str)
+            if isinstance(value, (dict, list, tuple)) else value
+            for value in row
+        ])
+    return out.getvalue()
 
 
 def get_all_product_set_ids(txn, CorB="C") -> list: 

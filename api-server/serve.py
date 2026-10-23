@@ -125,6 +125,16 @@ def all_transactions():
         sql.disconnect()
 
 
+def _chart_http_response(payload, csv_requested=False):
+    if csv_requested:
+        return app.response_class(
+            payload,
+            content_type="text/csv; charset=utf-8",
+            headers={"Content-Disposition": 'attachment; filename="report.csv"'},
+        ), 200
+    return jsonify(payload), 200
+
+
 @app.route('/charts/<name>', methods=['GET', 'POST'])
 def charts(name):
     if request_identity() is None:
@@ -149,13 +159,18 @@ def charts(name):
 
     # Build the workload key based on name + dates + request parameters
     params = get_request_dict(request)
+    return_format = params.get("return_format", "json")
+    if return_format not in ("json", "csv"):
+        return jsonify({"error": "Unsupported return_format. Use json or csv."}), 400
+    csv_requested = return_format == "csv" and "Insight" in name
+
     log_unique_url(name, params)
     key = _chart_key(name, start_date, end_date, params)
 
     # Fast path: return from cache if available
     cached_data = get_cached_item(name, start_date, end_date, params)
-    if cached_data:
-        return jsonify(cached_data), 200
+    if cached_data is not None:
+        return _chart_http_response(cached_data, csv_requested)
 
     # Coordination: either become the owner (compute) or wait for the owner to finish
     role, ev = _acquire_or_wait_for_slot(key)
@@ -163,8 +178,8 @@ def charts(name):
     if role != "owner":
         # Not the owner; re-check cache after waiting
         cached_after_wait = get_cached_item(name, start_date, end_date, params)
-        if cached_after_wait:
-            return jsonify(cached_after_wait), 200
+        if cached_after_wait is not None:
+            return _chart_http_response(cached_after_wait, csv_requested)
 
         # If still missing and the role indicates failure/timeout upstream,
         # report a transient condition; a subsequent call can retry.
@@ -186,17 +201,20 @@ def charts(name):
     try:
         # Get chart data from the database
         resp = getChartData(name, transactions, start_date, end_date, params=params)
-        if params.get("showComma", "true").lower() == "true":
+        if csv_requested:
+            # Export raw values: showComma display formatting corrupts numeric CSV.
+            try:
+                resp = insight_report_to_csv_response(params, resp, transactions)
+            except (TypeError, ValueError) as exc:
+                return jsonify({"error": str(exc), "chartName": name}), 400
+        elif params.get("showComma", "true").lower() == "true":
             resp = format_numbers_recursive(resp)
-        
-        
-        if name.find("Insight") != -1 and params.get("return_format") == "csv":
-            resp = insight_report_to_csv_response(params, resp, transactions)
 
-        # Set cache before signaling completion so waiters can fetch it immediately
+        # Cache the converted representation, then use the same content type
+        # for fresh responses, cache hits, and concurrent waiters.
         set_cached_item(resp, name, start_date, end_date, params)
 
-        return jsonify(resp), 200
+        return _chart_http_response(resp, csv_requested)
 
     except Exception as e:
         resp = {
