@@ -20,6 +20,10 @@ test('MSAL token is included in GET and POST report request headers', async () =
     expect(response).toEqual({ rows: [1] });
     const [url, options] = fetchMock.mock.calls[fetchMock.mock.calls.length - 1];
     expect(url).toContain('/charts/Test');
+    // The backend uses token headers, not cross-origin cookie sessions.
+    // 'include' makes Chrome reject localhost:5000 responses without
+    // Access-Control-Allow-Credentials: true even when OPTIONS succeeds.
+    expect(options.credentials).toBe('same-origin');
     expect(options.headers['X-MSAL-ID-Token']).toBe('synthetic-msal-id-token');
     expect(options.headers.Authorization).toBeUndefined();
   }
@@ -38,6 +42,7 @@ test('chart requests do not serialize api_key into GET URLs or POST JSON', async
     } else {
       expect(url).toContain('BranchID=1000');
     }
+    expect(options.credentials).toBe('same-origin');
     expect(options.headers).not.toHaveProperty('X-API-KEY');
   }
 });
