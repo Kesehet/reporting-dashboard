@@ -35,6 +35,9 @@ echo === Building React production assets ===
 set "CI=false"
 call npm run build
 if errorlevel 1 set "BUILD_FAILED=1"
+echo === Normalizing frontend manifest line endings to LF ===
+"%PYTHON_EXEC%" scripts\normalize_line_endings.py --to lf --if-exists build\asset-manifest.json
+if errorlevel 1 set "BUILD_FAILED=1"
 
 echo === Packaging standalone Python executables ===
 "%PYTHON_EXEC%" api-server\build\generate_build.py
