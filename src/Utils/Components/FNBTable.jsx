@@ -31,7 +31,7 @@ const FNBTable = ({data, dates, styleNow={}, subHeaderRow=null, chartAPIParams={
                 let report;
                 if (typeof data === 'string') {
                     const chart = new ChartDataService(data, JSON.parse(paramsKey));
-                    report = dataParser(await chart.getChart());
+                    report = dataParser(await chart.getChart({ throwOnError: true }));
                 } else {
                     report = dataParser(data);
                 }
