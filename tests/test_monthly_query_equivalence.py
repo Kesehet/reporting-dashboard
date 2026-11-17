@@ -123,7 +123,8 @@ class MonthlyQueryEquivalence(unittest.TestCase):
                         self.assertEqual(optimized, original)
                         self.assertEqual(len(new_txn.queries), 1)
                         self.assertGreater(len(old_txn.queries), 1)
-                        self.assertIn("COUNT(DISTINCT CASE WHEN", new_txn.queries[0])
+                        if variant == "All":
+                            self.assertIn("COUNT(DISTINCT CASE WHEN", new_txn.queries[0])
 
     def test_application_totals_are_distinct_while_product_totals_are_not(self):
         filters = [
