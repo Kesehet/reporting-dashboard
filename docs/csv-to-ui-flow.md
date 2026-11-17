@@ -60,24 +60,20 @@ flowchart LR
 - `read_file(file_path)` detects file type by extension
 - CSV files are processed with `pandas.read_csv()` first
 - Excel files are processed with `pandas.read_excel()` if the extension is `.xlsx` or `.xls`
-- If a CSV cannot be read with common encodings, a fallback to Excel parsing also runs
+- CSVs are decoded strictly; malformed CSVs are not reinterpreted as Excel files. XLSX/XLS formats use `pandas.read_excel()`.
 
-### 2.2 Encoding fallback strategy
-- The loader tries multiple encodings in sequence:
-  - `utf-8`
-  - `utf-16`
-  - `latin-1`
-  - `windows-1252`
-  - `iso-8859-1`
-  - `cp1252`
-  - `utf-8-sig`
-- If all specified encodings fail, `detect_encoding(file_path)` reads the first 10KB of raw bytes and uses `chardet.detect()` to infer encoding
-- Finally, it attempts `pandas.read_csv()` with the detected encoding
+### 2.2 Encoding strategy
+- BOM-marked CSV files use their declared UTF-8 or UTF-16 encoding.
+- UTF-16 files with no BOM use the alternating NUL bytes in the column headings to determine byte order.
+- Ordinary CSV files try strict `utf-8-sig` decoding first, then strict Windows-1252 (`cp1252`) decoding.
+- Every attempt parses the **whole file**, including bytes past 10 KB. A first-10-KB `chardet` guess of ASCII is not used.
+- No `errors=replace`, permissive Latin-1 catch-all, or bad-line skipping is allowed. Unknown or damaged encodings are reported instead of silently corrupting field values.
 
 ### 2.3 Handling parse failures
-- Parse errors are caught and do not raise directly to the user
-- If `read_csv()` fails due to parser errors or Unicode issues, it tries `read_excel()` before giving up
-- If parsing ultimately fails, `read_file()` returns an empty DataFrame
+- A genuine CSV parse failure does not trigger an Excel parser or another character encoding.
+- `read_file()` logs the failure and returns an empty DataFrame to preserve the existing caller contract.
+- `get_csv()` skips files without readable rows; they are not added to `ctrl.conf`, so a corrected file can be retried.
+- XLSX and XLS files still use `pandas.read_excel()`.
 
 ### 2.4 Converting file contents into rows
 - `prepare_rows(file_path)` reads the file into a DataFrame
