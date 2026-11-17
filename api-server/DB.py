@@ -21,6 +21,7 @@ import sys
 import base64
 import hashlib
 import pickle
+import tempfile
 import unicodedata
 from typing import Optional
 from urllib.parse import urljoin
@@ -431,7 +432,15 @@ class Transaction:
                 with open(cache_file, "rb") as f:
                     return pickle.load(f)
             except Exception as e:
-                print("SQL Error: Failed to load cache:", e)
+                # Never trust an incomplete cache file, and never let it mask
+                # the current database result. Retry the SQL query instead.
+                logger.warning("Discarding unreadable SQL cache %s: %s", query_hash, type(e).__name__)
+                try:
+                    os.remove(cache_file)
+                except FileNotFoundError:
+                    pass
+                except OSError:
+                    logger.warning("Could not remove unreadable SQL cache %s", query_hash)
 
         if debug:
             print("SQL Error: Executing SQL query:")
@@ -441,6 +450,9 @@ class Transaction:
         if "()" in query:
             query = query.replace("IN ()", "IN ('0000','00000')")
             query = query.replace("in ()", "in ('0000','00000')")
+
+        if self.sql_conn.connection is None:
+            raise ConnectionError("SQL Server is not connected; refusing to cache an empty result")
 
         resp = 0
         query_started = time.perf_counter()
@@ -476,6 +488,8 @@ class Transaction:
                 query_hash,
                 len(query),
             )
+            # Propagate database errors so callers do not treat them as zero.
+            raise
 
         try:
             resp = float(resp)
@@ -496,11 +510,24 @@ class Transaction:
         # Diagnostic requests bypass both cache reads and writes so a previously
         # cached zero cannot conceal the current database result.
         if use_cache:
+            temp_path = None
             try:
-                with open(cache_file, "wb") as f:
-                    pickle.dump(resp, f)
-            except Exception as e:
-                print("SQL Error: Failed to save cache:", e)
+                # Atomic replacement avoids half-written pickle files when a
+                # worker is interrupted while updating the cache.
+                with tempfile.NamedTemporaryFile(
+                    mode="wb", dir=cache_dir, prefix=".sql-cache-", delete=False
+                ) as cache_output:
+                    temp_path = cache_output.name
+                    pickle.dump(resp, cache_output)
+                    cache_output.flush()
+                    os.fsync(cache_output.fileno())
+                os.replace(temp_path, cache_file)
+                temp_path = None
+            except OSError:
+                logger.exception("Failed to save SQL cache %s", query_hash)
+            finally:
+                if temp_path and os.path.exists(temp_path):
+                    os.unlink(temp_path)
 
         return resp
 
