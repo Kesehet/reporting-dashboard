@@ -527,7 +527,10 @@ class Transaction:
                 logger.exception("Failed to save SQL cache %s", query_hash)
             finally:
                 if temp_path and os.path.exists(temp_path):
-                    os.unlink(temp_path)
+                    try:
+                        os.unlink(temp_path)
+                    except OSError:
+                        logger.warning("Could not remove temporary SQL cache %s", query_hash)
 
         return resp
 
