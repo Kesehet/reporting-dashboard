@@ -348,9 +348,13 @@ def generate_report_variants_by_filters(base_filters, intervals, variant, transa
             predicates = [p for p in (stage_filter, category_filter) if p]
             condition = " AND ".join("(" + p + ")" for p in predicates) or "1=1"
             alias = "metric_" + str(len(selected))
-            selected.append((label, alias,
-                             "COALESCE(SUM(CASE WHEN " + condition +
-                             " THEN " + amount + " ELSE 0 END), 0) AS " + alias))
+            if category_name == "Applications":
+                # Preserve original countColumn=COUNT(DISTINCT ecaTrackingCode).
+                expression = "COUNT(DISTINCT CASE WHEN " + condition + " THEN ecaTrackingCode END)"
+            else:
+                expression = ("COALESCE(SUM(CASE WHEN " + condition +
+                              " THEN " + amount + " ELSE 0 END), 0)")
+            selected.append((label, alias, expression + " AS " + alias))
 
     if not selected:
         return {"headers": ["-"] + [get_header(month)["label"] for month in intervals],
