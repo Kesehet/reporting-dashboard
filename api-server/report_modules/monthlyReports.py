@@ -26,23 +26,23 @@ def get_monthly_all_report(start_date, end_date, params=None, transactions=None)
     )
     return table_fix_for_api_response(report)
 
-def get_monthly_in_branch_report(start_date, end_date, params={"monthlyReportProductTypeSelector":"All"}):
+def get_monthly_in_branch_report(start_date, end_date, params={"monthlyReportProductTypeSelector":"All"}, transactions=None):
     base_filters = [get_date_filter(start_date,end_date), excludeZeroProductApps, consumerTransaction, application_type_filter("Banker Assisted"), bot_filter(25)]
     intervals = get_list_of_months_between(start_date, end_date)
-    report = generate_report_variants_by_filters(base_filters, intervals, params.get("monthlyReportProductTypeSelector"))
+    report = generate_report_variants_by_filters(base_filters, intervals, params.get("monthlyReportProductTypeSelector"), transactions=transactions)
     return table_fix_for_api_response(report)
 
-def get_monthly_consumer_facing_report(start_date, end_date, params={"monthlyReportProductTypeSelector":"All"}): 
+def get_monthly_consumer_facing_report(start_date, end_date, params={"monthlyReportProductTypeSelector":"All"}, transactions=None): 
     base_filters = [get_date_filter(start_date,end_date), excludeZeroProductApps, consumerTransaction, application_type_filter("Online"), bot_filter(25)]
     intervals = get_list_of_months_between(start_date, end_date)
-    report = generate_report_variants_by_filters(base_filters, intervals, params.get("monthlyReportProductTypeSelector"))
+    report = generate_report_variants_by_filters(base_filters, intervals, params.get("monthlyReportProductTypeSelector"), transactions=transactions)
     return table_fix_for_api_response(report)
 
 
-def get_monthly_business_deposits_report(start_date, end_date, params={"monthlyReportProductTypeSelector":"All"}): 
+def get_monthly_business_deposits_report(start_date, end_date, params={"monthlyReportProductTypeSelector":"All"}, transactions=None): 
     base_filters = [get_date_filter(start_date,end_date), excludeZeroProductApps, businessTransaction, bot_filter(25)]
     intervals = get_list_of_months_between(start_date, end_date)
-    report = generate_report_variants_by_filters(base_filters, intervals, params.get("monthlyReportProductTypeSelector"))
+    report = generate_report_variants_by_filters(base_filters, intervals, params.get("monthlyReportProductTypeSelector"), transactions=transactions)
     return table_fix_for_api_response(report)
 
 def get_monthly_bpm_and_crif_report(start_date, end_date, params):
