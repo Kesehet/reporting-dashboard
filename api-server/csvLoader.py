@@ -31,11 +31,11 @@ def read_file(file_path):
             with open(file_path, 'rb') as raw_file:
                 prefix = raw_file.read(4096)
 
-            if prefix.startswith((b'\\xff\\xfe', b'\\xfe\\xff')):
+            if prefix.startswith((b'\xff\xfe', b'\xfe\xff')):
                 encodings = ('utf-16',)
-            elif prefix.startswith(b'\\xef\\xbb\\xbf'):
+            elif prefix.startswith(b'\xef\xbb\xbf'):
                 encodings = ('utf-8-sig',)
-            elif b'\\x00' in prefix:
+            elif b'\x00' in prefix:
                 # A UTF-16 file without a BOM can be identified by the
                 # alternating NUL bytes in its ASCII CSV column headings.
                 even_nuls = prefix[::2].count(0)
