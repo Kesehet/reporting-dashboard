@@ -14,56 +14,61 @@ import random
 import os
 import sys
 import time
-import chardet
 import json
 
-def detect_encoding(file_path):
-    with open(file_path, 'rb') as f:
-        raw_data = f.read(10000)  # Read the first 10KB for encoding detection
-    result = chardet.detect(raw_data)
-    return result['encoding']
-
-
 def read_file(file_path):
+    """Read uploaded CSVs without guessing ASCII from a short file prefix.
+
+    The entire file must decode strictly before its DataFrame can be used.
+    A declared Unicode BOM takes precedence. A conventional UTF-8 CSV is
+    tried before Windows-1252 (the common legacy Windows CSV encoding).
+    Do not use lossy replacement, ignore bad lines, or try the permissive
+    Latin-1 codec: doing so can silently corrupt customer information.
+    """
     try:
-        if file_path.endswith('.csv'):
+        lower_path = str(file_path).lower()
+        if lower_path.endswith('.csv'):
             with open(file_path, 'rb') as raw_file:
-                header = raw_file.read(4)
+                prefix = raw_file.read(4096)
 
-            if header.startswith(b'\xff\xfe'):
-                encodings_to_try = ['utf-16', 'utf-16-le', 'utf-8-sig', 'utf-8', 'windows-1252']
-            elif header.startswith(b'\xfe\xff'):
-                encodings_to_try = ['utf-16', 'utf-16-be', 'utf-8-sig', 'utf-8', 'windows-1252']
-            elif b'\x00' in header:
-                encodings_to_try = ['utf-16-le', 'utf-16-be', 'utf-8-sig', 'utf-8', 'windows-1252']
+            if prefix.startswith((b'\\xff\\xfe', b'\\xfe\\xff')):
+                encodings = ('utf-16',)
+            elif prefix.startswith(b'\\xef\\xbb\\xbf'):
+                encodings = ('utf-8-sig',)
+            elif b'\\x00' in prefix:
+                # A UTF-16 file without a BOM can be identified by the
+                # alternating NUL bytes in its ASCII CSV column headings.
+                even_nuls = prefix[::2].count(0)
+                odd_nuls = prefix[1::2].count(0)
+                if odd_nuls > even_nuls * 2:
+                    encodings = ('utf-16-le',)
+                elif even_nuls > odd_nuls * 2:
+                    encodings = ('utf-16-be',)
+                else:
+                    raise UnicodeError('Unrecognized UTF-16 byte order in CSV header')
             else:
-                encodings_to_try = ['utf-8-sig', 'utf-8', 'utf-16-le', 'utf-16-be', 'windows-1252', 'latin-1']
+                encodings = ('utf-8-sig', 'cp1252')
 
-            for enc in encodings_to_try:
+            failures = []
+            for encoding in encodings:
                 try:
-                    return pd.read_csv(file_path, encoding=enc)
-                except UnicodeDecodeError:
-                    continue
-                except pd.errors.ParserError:
-                    # If parsing fails, try reading as Excel
-                    try:
-                        return pd.read_excel(file_path)
-                    except Exception:
-                        continue
-            encoding = detect_encoding(file_path)
-            try:
-                return pd.read_csv(file_path, encoding=encoding)
-            except pd.errors.ParserError:
-                try:
-                    return pd.read_excel(file_path)
-                except Exception:
-                    pass
-        elif file_path.endswith('.xlsx') or file_path.endswith('.xls'):
+                    # read_csv decodes the complete input, including bytes
+                    # beyond the first 10 KB; no fallback to chardet/ascii.
+                    return pd.read_csv(file_path, encoding=encoding,
+                                       encoding_errors='strict')
+                except UnicodeDecodeError as error:
+                    failures.append(f"{encoding}: {error}")
+
+            raise UnicodeError("Unable to decode CSV with supported encodings: " +
+                               "; ".join(failures))
+
+        if lower_path.endswith(('.xlsx', '.xls')):
             return pd.read_excel(file_path)
-        else:
-            raise ValueError("Unsupported file format. Only CSV, XLSX, and XLS are allowed.")
-    except Exception as e:
-        print(f"Error reading file {file_path}: {e}")
+        raise ValueError("Unsupported file format. Only CSV, XLSX, and XLS are allowed.")
+    except Exception as error:
+        # Preserve the historical DataFrame return contract: callers skip
+        # unreadable files instead of importing partial or garbled rows.
+        print(f"Error reading file {file_path}: {error}")
         return pd.DataFrame()
 
 def list_csv_report_files(folder_path="uploads/reports", processed_files=None, status_filter="all", date_filter="all"):
