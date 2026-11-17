@@ -1,11 +1,11 @@
 """CSV encoding regression tests with synthetic customer data only."""
 import contextlib
 import io
-import os
 import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "api-server"))
 from csvLoader import read_file, list_csv_report_files
@@ -87,9 +87,12 @@ class CsvEncodingTests(unittest.TestCase):
         text = "eCA Tracking Code,Primary Name\nC-99,Ada\n"
         frame = read_file(self.write("plain.csv", text.encode("ascii")))
         self.assertEqual(frame.loc[0, "Primary Name"], "Ada")
-        excel_path = self.root / "plain.xlsx"
-        frame.to_excel(excel_path, index=False)
-        self.assertEqual(read_file(str(excel_path)).loc[0, "Primary Name"], "Ada")
+        # Lightweight chart-contract runners intentionally omit openpyxl;
+        # verify Excel dispatch without requiring that optional dependency.
+        excel_path = self.write("plain.xlsx", b"synthetic fixture")
+        with patch("csvLoader.pd.read_excel", return_value=frame) as excel_reader:
+            self.assertEqual(read_file(excel_path).loc[0, "Primary Name"], "Ada")
+            excel_reader.assert_called_once_with(excel_path)
 
 
 if __name__ == "__main__":
