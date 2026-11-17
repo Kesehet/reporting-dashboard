@@ -95,7 +95,7 @@ def request_identity():
     # URL and JSON body API keys are never credentials.
     provided = request.headers.get('X-API-KEY', '')
     configured = setting('ALL_FILTERS_CHART_API_KEY', '')
-    if provided and configured and hmac.compare_digest(provided, configured):
+    if provided and configured and hmac.compare_digest(provided.encode('utf-8'), configured.encode('utf-8')):
         return {'role': 'api_key'}
     return None
 
