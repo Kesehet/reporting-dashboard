@@ -29,6 +29,8 @@ MONTHLY_OPTIMIZED_REPORTS = {
     'Monthly In Branch Report',
     'Monthly Consumer Facing Report',
     'Monthly Business Deposits And Loans Report',
+    # Uses get_monthly_in_branch_report() internally; responses unchanged.
+    'Monthly In Branch vs BPM and CRIF Report',
 }
 
 KNOWN_ERRORS = {
