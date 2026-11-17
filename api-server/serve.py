@@ -642,11 +642,15 @@ if __name__ == "__main__":
     f2.close()
 
     
-    if str(get_env_value("REACT_APP_DEBUG")).lower() == "true":
-        print("Running in Debug mode")
+    # REACT_APP_DEBUG configures the frontend; never let it enable an exposed
+    # Flask development debugger in the production API.
+    if os.environ.get("RESET_CHART_CACHE_ON_START", "").lower() == "true":
         clear_all_cache()
-        app.run(host="0.0.0.0",port=5000, debug=True)
+
+    if os.environ.get("REPORTING_DASHBOARD_ENV", "").lower() == "development":
+        print("Running local development API without interactive debugger")
+        app.run(host="127.0.0.1", port=5000, debug=False, use_reloader=False)
     else:
-        print("Running in Production mode")
-        clear_all_cache()
-        serve(app, host='0.0.0.0', port=5000, threads=16, connection_limit= 300, backlog=1024, channel_timeout=150)
+        print("Running production WSGI API")
+        serve(app, host='0.0.0.0', port=5000, threads=16, connection_limit=300,
+              backlog=1024, channel_timeout=150)
