@@ -285,6 +285,28 @@ def key_metadata():
     }
 
 
+def ensure_write_key():
+    """Provision an initial persistent GCM key only when no GCM key exists.
+
+    This is not rotation: never replace an existing active key or silently
+    reactivate a previously disabled GCM key. Legacy ECB keys remain intact.
+    The key is generated only on the first plaintext write, not on import.
+    """
+    with _LOCK:
+        with _ring_file_lock():
+            ring = _sync_ring()
+            if ring.get("current_id"):
+                _key_bytes(ring, ring["current_id"], "AES_GCM")
+                return ring
+            if any(key["algorithm"] == "AES_GCM" for key in ring["keys"]):
+                raise ValueError("Historical GCM keys have no active key; reconcile before writing")
+            raw = secrets.token_bytes(32)
+            _insert(ring, raw, "AES_GCM", "initial-write")
+            ring["current_id"] = _key_id(raw)
+            _save_ring(ring)
+            return ring
+
+
 def key_rotation():
     """Activate a new AES-GCM key, preserving the entire historical keyring."""
     with _LOCK:
@@ -342,10 +364,12 @@ def encrypted_key_id(value):
 def encrypt_string(value, max_length=None, ring=None):
     if not isinstance(value, str):
         raise TypeError("Plaintext must be a string")
-    ring = ring or get_keyring()
+    # A fresh deployment provisions once on its first plaintext write.
+    # Explicitly supplied rings keep their exact key state for migrations.
+    ring = ring if ring is not None else ensure_write_key()
     kid = ring.get("current_id")
     if not kid:
-        raise ValueError("No active GCM key; provision it explicitly before writing")
+        raise ValueError("No active GCM key available; reconcile keyring before writing")
     raw = _key_bytes(ring, kid, "AES_GCM")
     cipher = AES.new(raw, AES.MODE_GCM, nonce=secrets.token_bytes(_NONCE_SIZE), mac_len=_TAG_SIZE)
     cipher.update(("reporting-dashboard:" + _VERSION + ":" + kid).encode("ascii"))
