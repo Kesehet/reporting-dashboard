@@ -401,7 +401,7 @@ def generate_report_variants_by_filters(base_filters, intervals, variant, transa
             date_parts = month["start_date"].split("-")
             group = values_by_month.get((int(date_parts[0]), int(date_parts[1])), {})
             value = group.get(alias)
-            row.append(float(value) if value is not None else 0)
+            row.append(value if value is not None else 0)
         rows.append(row)
     return {"headers": headers, "rows": rows}
 
