@@ -187,6 +187,27 @@ class CryptoRotationTests(unittest.TestCase):
                 with self.assertRaises(PermissionError):
                     rot._status()
 
+    def test_first_plaintext_write_creates_a_persistent_active_key(self):
+        self.assertIsNone(crypto.get_keyring()["current_id"])
+        encrypted = crypto.encrypt_string("first record")
+        current_id = crypto.get_keyring()["current_id"]
+        self.assertIsNotNone(current_id)
+        self.assertTrue((Path(self.tmp.name) / "keyring.json").is_file())
+        self.assertEqual(crypto.decrypt_string(encrypted), "first record")
+        self.assertEqual(crypto.get_keyring()["current_id"], current_id)
+        crypto.encrypt_string("second record")
+        self.assertEqual(crypto.get_keyring()["current_id"], current_id)
+
+    def test_inactive_historical_gcm_key_is_not_silently_replaced(self):
+        original_id = crypto.key_rotation()
+        ring = crypto.get_keyring()
+        ring["current_id"] = None
+        crypto._save_ring(ring)
+        with self.assertRaisesRegex(ValueError, "Historical GCM keys"):
+            crypto.encrypt_string("must not silently rotate")
+        self.assertEqual(crypto.get_keyring()["current_id"], None)
+        self.assertIn(original_id, [key["id"] for key in crypto.get_keyring()["keys"]])
+
     def test_gcm_roundtrip_unicode_empty_and_nonce_uniqueness(self):
         crypto.key_rotation()
         for text in ("", "hello", "عربي اردو", "José \U0001f680", "x" * 750):
