@@ -195,10 +195,15 @@ def charts(name):
 
     # At this point, this request is the owner and must compute and signal completion.
     sql = SQLConn()
-    sql.connect()
-    transactions = Transaction(sql)
-
     try:
+        sql.connect()
+        if sql.connection is None:
+            return jsonify({
+                "error": "Database connection unavailable. Please retry.",
+                "chartName": name,
+            }), 503
+        transactions = Transaction(sql)
+
         # Get chart data from the database
         resp = getChartData(name, transactions, start_date, end_date, params=params)
         if csv_requested:
