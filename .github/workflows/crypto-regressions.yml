@@ -69,7 +69,8 @@ jobs:
         run: CI=false npm run build
 
   crypto-browser:
-    runs-on: ubuntu-latest
+    # Playwright 1.56.1 lacks browser bundles for ubuntu-26.04 (ubuntu-latest).
+    runs-on: ubuntu-24.04
     timeout-minutes: 18
     env:
       CI: 'true'
