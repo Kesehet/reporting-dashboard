@@ -21,10 +21,11 @@ test('provides navigation items instead of rendering menu configuration as JSX',
     expect(reports).toBeDefined();
     reports.command();
     expect(setPage).toHaveBeenCalledWith('Business Accounts Summary');
-    const apiKey = items.find(item => item.label === 'API Key');
-    expect(apiKey).toBeDefined();
-    apiKey.command();
-    expect(setPage).toHaveBeenCalledWith('API Key');
+    expect(items.some(item => item.label === 'API Key')).toBe(false);
+    const encryptionRotation = items.find(item => item.label === 'Key Rotation');
+    expect(encryptionRotation).toBeDefined();
+    encryptionRotation.command();
+    expect(setPage).toHaveBeenCalledWith('Key Rotation');
 });
 
 test('calendar and filter templates propagate the user selection', () => {
