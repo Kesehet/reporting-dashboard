@@ -7,7 +7,7 @@ class ChartDataService {
         this.extraParams = extraParams;
     }
 
-    async getChart() {
+    async getChart({ throwOnError = false } = {}) {
         try {
             const startDate = localStorage.getItem("start_date");
             const endDate = localStorage.getItem("end_date");
@@ -41,6 +41,9 @@ class ChartDataService {
                     method: 'POST',
                     body: JSON.stringify(extraPostParams)
                 });
+                if (!response.ok) {
+                    throw new Error('Report API returned HTTP ' + response.status);
+                }
                 let data = await response.json();
                 return data;
                 
@@ -56,6 +59,9 @@ class ChartDataService {
                     },
                     method: 'GET',
                 });
+                if (!response.ok) {
+                    throw new Error('Report API returned HTTP ' + response.status);
+                }
                 let data = await response.json();
                 return data;
             }
@@ -63,6 +69,7 @@ class ChartDataService {
             
         } catch (error) {
             console.error(error);
+            if (throwOnError) throw error;
             return "Unknown Error Occurred.";
         }
     }

@@ -21,7 +21,6 @@ from unittest.mock import patch
 ROOT = Path(__file__).resolve().parents[2]
 API = ROOT / 'api-server'
 sys.path.insert(0, str(API))
-from daily_api_key import make_daily_api_key
 
 
 def chart_names():
@@ -68,6 +67,27 @@ class SqlFixture:
         if ' as [total_started_applications' in low:
             aliases = re.findall(r'\bAS\s+\[([^]]+)\]', query, re.I)
             return [{alias: (17 if populated else 0) for alias in aliases}]
+        if " as metric_" in low and "group by year(appstartdate), month(appstartdate)" in low:
+            # Mirror the original scalar fixture values for each selected
+            # product category, preserving the reviewed wire-format oracle.
+            selected = re.findall(r",\s*(.+?)\s+AS\s+metric_(\d+)(?=,|\s+FROM\s)", query, re.I | re.S)
+            # Regex spans one CASE expression per metric (not SQL conditions).
+            metrics = {}
+            for expr, idx in selected:
+                normalized = re.sub(r'\s+', '', expr.lower())
+                if 'numlendingproducts>0andnumdepositproducts=0' in normalized:
+                    value = 1234
+                elif 'numlendingproducts=0andnumdepositproducts>0' in normalized:
+                    value = 567
+                elif 'numlendingproducts>=1andnumdepositproducts>=1' in normalized:
+                    value = 89
+                else:
+                    value = 1890
+                metrics['metric_' + idx] = value if populated else 0
+            if not populated:
+                return 0
+            return [{'report_year': 2026, 'report_month': month, **metrics}
+                    for month in (1, 2, 3)]
         # Match Transaction's AS data scalar convention.
         if re.search(r'\bas\s+data\b', low):
             if not populated:
@@ -144,7 +164,11 @@ def runtime():
         # Imports can create local cache/upload folders, so import inside the sandbox.
         with contextlib.redirect_stdout(io.StringIO()):
             server = importlib.import_module('serve')
-        stack.enter_context(patch.object(DB.SQLConn, 'connect', return_value=None))
+        def synthetic_connect(sql_conn):
+            # HTTP handlers now reject missing connections instead of
+            # invoking Transaction(None). Use a truthy fake for safe CI I/O.
+            sql_conn.connection = types.SimpleNamespace()
+        stack.enter_context(patch.object(DB.SQLConn, 'connect', synthetic_connect))
         stack.enter_context(patch.object(DB.SQLConn, 'disconnect', return_value=None))
         # A Session may call only the transaction-search endpoint. Empty HTTP data
         # exercises the real parsing/no-transactions path without contacting JM.
@@ -184,9 +208,9 @@ def collect(consumers):
                                 req = {**params, 'showComma': comma}
                                 if method == 'GET':
                                     req = {k: str(v).lower() if isinstance(v, bool) else v for k, v in req.items()}
-                                    response = client.get('/charts/' + name, query_string=req, headers={'X-API-KEY': make_daily_api_key('fixture-chart-api-key')})
+                                    response = client.get('/charts/' + name, query_string=req, headers={'X-API-KEY': 'fixture-chart-api-key'})
                                 else:
-                                    response = client.post('/charts/' + name, json=req, headers={'X-API-KEY': make_daily_api_key('fixture-chart-api-key')})
+                                    response = client.post('/charts/' + name, json=req, headers={'X-API-KEY': 'fixture-chart-api-key'})
                                 payload = response.get_json()
                                 if response.status_code != 200:
                                     payload = {'error': payload.get('error'), 'chartName': payload.get('chartName')}

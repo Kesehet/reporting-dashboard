@@ -17,30 +17,43 @@ const FNBTable = ({data, dates, styleNow={}, subHeaderRow=null, chartAPIParams={
 
     const [TableData, setTableData] = useState({ headers: [], rows: [] });
     const [formattedRows, setFormattedRows] = useState([]);
-
-    const getChartData = async () => {
-        let chart = new ChartDataService(data, chartAPIParams );
-        let chartResponse = await chart.getChart();
-        setTableData(
-            dataParser(
-                chartResponse
-            )
-        );
-    };
-    var headerReplicaWithUniqueDuplicates = [];
-
+    const [loading, setLoading] = useState(true);
+    const [loadError, setLoadError] = useState(null);
+    // Inline chartAPIParams objects should not refetch on every render.
+    const paramsKey = JSON.stringify(chartAPIParams);
 
     useEffect(() => {
-        const fetchData = () => {
-            if (typeof (data) === "string") {
-                getChartData();
-            } else {
-                setTableData(data);
+        let mounted = true;
+        const fetchData = async () => {
+            setLoading(true);
+            setLoadError(null);
+            try {
+                let report;
+                if (typeof data === 'string') {
+                    const chart = new ChartDataService(data, JSON.parse(paramsKey));
+                    report = dataParser(await chart.getChart({ throwOnError: true }));
+                } else {
+                    report = dataParser(data);
+                }
+                if (report?.error) throw new Error(report.error);
+                if (!report || !Array.isArray(report.headers) || !Array.isArray(report.rows)) {
+                    throw new Error('The report API returned an invalid response.');
+                }
+                if (mounted) setTableData(report);
+            } catch (error) {
+                if (mounted) {
+                    setTableData({ headers: [], rows: [] });
+                    setLoadError(error?.message || 'Unable to load report.');
+                }
+            } finally {
+                if (mounted) setLoading(false);
             }
         };
-    
         fetchData();
-    }, [data, dates, chartAPIParams]);
+        return () => { mounted = false; };
+    }, [data, dates, paramsKey]);
+
+    var headerReplicaWithUniqueDuplicates = [];
 
     useEffect(() => {
         let isMounted = true;
@@ -111,19 +124,21 @@ const FNBTable = ({data, dates, styleNow={}, subHeaderRow=null, chartAPIParams={
     }
 
     
-    if (TableData?.headers?.length === 0 || TableData?.rows?.length === 0) {
-        
-        if (typeof (data) === "string") {
-            return (
-                <>
-                    <ProgressSpinner /> 
-                    <p>{'Loading ' + data + "..."}</p>
-                </>
-            );
-        }
+    if (loadError) {
+        return <p role="alert">Unable to load {typeof data === 'string' ? data : 'report'}: {loadError}</p>;
+    }
+
+    if (loading) {
         return (
-            <p>Loading...</p>
+            <>
+                <ProgressSpinner />
+                <p>{'Loading ' + (typeof data === 'string' ? data : 'report') + '...'}</p>
+            </>
         );
+    }
+
+    if (TableData.headers.length === 0 || TableData.rows.length === 0) {
+        return <p>No report data available for the selected filters.</p>;
     }
 
     headerReplicaWithUniqueDuplicates = TableData.headers.map((value, index)=>{

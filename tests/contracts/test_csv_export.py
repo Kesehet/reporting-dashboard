@@ -6,7 +6,6 @@ from unittest.mock import patch
 from urllib.parse import quote
 
 from runtime import BASE_PARAMS, runtime
-from daily_api_key import make_daily_api_key
 
 
 INSIGHT = "CSV Contract Insight"
@@ -33,7 +32,7 @@ class CsvExportTests(unittest.TestCase):
             **options,
         }
         path = "/charts/" + quote(INSIGHT)
-        valid_headers = {"X-API-KEY": make_daily_api_key("fixture-chart-api-key")}
+        valid_headers = {"X-API-KEY": "fixture-chart-api-key"}
         with patch.object(self.server, "getChartData", return_value=data):
             if method == "POST":
                 return self.client.post(path, json=params, headers=valid_headers if headers is None else headers)

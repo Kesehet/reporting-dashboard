@@ -22,6 +22,17 @@ OUT = ROOT / 'contract-results'
 
 # These are observed defects in existing code, not successful contracts. Any new
 # error, changed error, or repaired error fails until explicitly reviewed here.
+# Only these four reports have intentionally consolidated SQL. All wire
+# response digests, rowsets and deferred queries must still match main.
+MONTHLY_OPTIMIZED_REPORTS = {
+    'Common App In Branch and Consumer Facing Report',
+    'Monthly In Branch Report',
+    'Monthly Consumer Facing Report',
+    'Monthly Business Deposits And Loans Report',
+    # Uses get_monthly_in_branch_report() internally; responses unchanged.
+    'Monthly In Branch vs BPM and CRIF Report',
+}
+
 KNOWN_ERRORS = {
     ('Multi Products Product Set Id Bar', 'empty'): "'int' object is not iterable",
     ('Monthly In Branch vs BPM and CRIF Report', 'empty'): 'list index out of range',
@@ -81,7 +92,14 @@ def main():
         if set(baseline) != set(expected):
             failures.append(f'Chart case inventory changed: added={set(expected)-set(baseline)}, removed={set(baseline)-set(expected)}')
         for key in expected.keys() & baseline.keys():
-            if expected[key] != baseline[key]:
+            actual, before = expected[key], baseline[key]
+            if key.split(' | ', 1)[0] in MONTHLY_OPTIMIZED_REPORTS:
+                unchanged = ('responses', 'rowsets', 'deferred_queries')
+                if any(actual[field] != before[field] for field in unchanged):
+                    failures.append(f'{key}: optimized monthly report changed wire data or rows')
+                if actual['queries'] >= before['queries']:
+                    failures.append(f'{key}: optimized monthly report did not reduce SQL calls')
+            elif actual != before:
                 failures.append(f'{key}: response or query baseline changed (see backend-observed.json)')
     summary = f'{len(names)} backend handlers; {len({c["name"] for c in consumers})} frontend endpoint names; {len(cases)} scenarios; {len(cases)*4} HTTP chart requests; {len(issues)} known failing scenarios.'
     print(summary)

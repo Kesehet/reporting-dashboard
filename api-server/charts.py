@@ -3376,13 +3376,13 @@ def getChartData(name,transactions,start_date,end_date, request=None, params=Non
         )
 
     elif name == "Monthly In Branch Report":
-        return get_monthly_in_branch_report(start_date, end_date, params)
+        return get_monthly_in_branch_report(start_date, end_date, params, transactions=transactions)
     
     elif name == "Monthly Consumer Facing Report":
-        return get_monthly_consumer_facing_report(start_date, end_date, params)
+        return get_monthly_consumer_facing_report(start_date, end_date, params, transactions=transactions)
     
     elif name == "Monthly Business Deposits And Loans Report":
-        return get_monthly_business_deposits_report(start_date, end_date, params)
+        return get_monthly_business_deposits_report(start_date, end_date, params, transactions=transactions)
 
     elif name == "Monthly BPM and CRIF Report":
         return get_monthly_bpm_and_crif_report(start_date, end_date, params)

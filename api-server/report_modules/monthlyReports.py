@@ -26,23 +26,23 @@ def get_monthly_all_report(start_date, end_date, params=None, transactions=None)
     )
     return table_fix_for_api_response(report)
 
-def get_monthly_in_branch_report(start_date, end_date, params={"monthlyReportProductTypeSelector":"All"}):
+def get_monthly_in_branch_report(start_date, end_date, params={"monthlyReportProductTypeSelector":"All"}, transactions=None):
     base_filters = [get_date_filter(start_date,end_date), excludeZeroProductApps, consumerTransaction, application_type_filter("Banker Assisted"), bot_filter(25)]
     intervals = get_list_of_months_between(start_date, end_date)
-    report = generate_report_variants_by_filters(base_filters, intervals, params.get("monthlyReportProductTypeSelector"))
+    report = generate_report_variants_by_filters(base_filters, intervals, params.get("monthlyReportProductTypeSelector"), transactions=transactions)
     return table_fix_for_api_response(report)
 
-def get_monthly_consumer_facing_report(start_date, end_date, params={"monthlyReportProductTypeSelector":"All"}): 
+def get_monthly_consumer_facing_report(start_date, end_date, params={"monthlyReportProductTypeSelector":"All"}, transactions=None): 
     base_filters = [get_date_filter(start_date,end_date), excludeZeroProductApps, consumerTransaction, application_type_filter("Online"), bot_filter(25)]
     intervals = get_list_of_months_between(start_date, end_date)
-    report = generate_report_variants_by_filters(base_filters, intervals, params.get("monthlyReportProductTypeSelector"))
+    report = generate_report_variants_by_filters(base_filters, intervals, params.get("monthlyReportProductTypeSelector"), transactions=transactions)
     return table_fix_for_api_response(report)
 
 
-def get_monthly_business_deposits_report(start_date, end_date, params={"monthlyReportProductTypeSelector":"All"}): 
+def get_monthly_business_deposits_report(start_date, end_date, params={"monthlyReportProductTypeSelector":"All"}, transactions=None): 
     base_filters = [get_date_filter(start_date,end_date), excludeZeroProductApps, businessTransaction, bot_filter(25)]
     intervals = get_list_of_months_between(start_date, end_date)
-    report = generate_report_variants_by_filters(base_filters, intervals, params.get("monthlyReportProductTypeSelector"))
+    report = generate_report_variants_by_filters(base_filters, intervals, params.get("monthlyReportProductTypeSelector"), transactions=transactions)
     return table_fix_for_api_response(report)
 
 def get_monthly_bpm_and_crif_report(start_date, end_date, params):
@@ -312,131 +312,98 @@ def generate_report_variants_by_EDW_filters(base_filters, intervals, params):
 
 
 def generate_report_variants_by_filters(base_filters, intervals, variant, transactions=None):
+    """Run all selected monthly metrics in one grouped SQL query.
+
+    Previously each row/month executed a separate query (12 x months for
+    Products), repeatedly evaluating expensive bot and application filters.
+    Keep the established row labels, selected variants, and API shape.
+    """
+    if not intervals:
+        return {"headers": ["-"], "rows": []}
+
     variant = variant or "All"
-    if variant == "All":
-        variant = "Applications"
-    
-    test_report_header, test_report_rows = generate_report(
-        intervals, 
-        [
-            {
-                "sql": {
-                    # Started Applications
-                    "Apps" : query_maker(columns=[countColumn], where=base_filters), # Yellow
-                    "%Change" : "", # Green
-                },
-                "label": "Started Applications" # Red
-            },
-            {
-                "sql": {
-                    # Started Applications
-                    "Apps" : query_maker(columns=[sumColumn("NumLendingProducts+NumDepositProducts")], where=base_filters), # Yellow
-                    "%Change" : "", # Green
-                },
-                "label": "Started Products" # Red
-            },
-            {
-                "sql": {
-                    # Started Applications
-                    "Apps" : query_maker(columns=[sumColumn("NumLendingProducts+NumDepositProducts")], where=[loanApps] + base_filters), # Yellow
-                    "%Change" : "", # Green
-                },
-                "label": "Started Loan Products" # Red
-            }, 
-            {
-                "sql": {
-                    # Started Applications
-                    "Apps" : query_maker(columns=[sumColumn("NumLendingProducts+NumDepositProducts")], where=[depositApps] + base_filters), # Yellow
-                    "%Change" : "", # Green
-                },
-                "label": "Started Deposit Products" # Red
-            },
-            {
-                "sql": {
-                    # Started Applications
-                    "Apps" : query_maker(columns=[sumColumn("NumLendingProducts+NumDepositProducts")], where=[mixedApps] + base_filters), # Yellow
-                    "%Change" : "", # Green
-                },
-                "label": "Started Mixed Products" # Red
-            },            
-            {
-                "sql": {
-                    "Apps" : query_maker(columns=[countColumn], where=[submittedApps] + base_filters ), # Yellow
-                    "%Change" : "", # Green
-                },
-                "label": "Submitted Applications" # Red
-            },
-            {
-                "sql": {
-                    "Apps" : query_maker(columns=[sumColumn("NumLendingProducts+NumDepositProducts")], where=[submittedApps] + base_filters ), # Yellow
-                    "%Change" : "", # Green
-                },
-                "label": "Submitted Products" # Red
-            },
-            {
-                "sql": {
-                    "Apps" : query_maker(columns=[sumColumn("NumLendingProducts+NumDepositProducts")], where=[submittedApps] + [loanApps] + base_filters ), # Yellow
-                    "%Change" : "", # Green
-                },
-                "label": "Submitted Loan Products" # Red
-            },{
-                "sql": {
-                    "Apps" : query_maker(columns=[sumColumn("NumLendingProducts+NumDepositProducts")], where=[submittedApps] + [depositApps] + base_filters ), # Yellow
-                    "%Change" : "", # Green
-                },
-                "label": "Submitted Deposit Products" # Red
-            },{
-                "sql": {
-                    "Apps" : query_maker(columns=[sumColumn("NumLendingProducts+NumDepositProducts")], where=[submittedApps] + [mixedApps] + base_filters ), # Yellow
-                    "%Change" : "", # Green
-                },
-                "label": "Submitted Mixed Products" # Red
-            },
-            
-            {
-                "sql": {
-                    "Apps" : query_maker(columns=[countColumn], where=[approvedApps]+base_filters), # Yellow
-                    "%Change" : "", # Green
-                },
-                "label": "Opened/Approved Applications" # Red
-            },
-            {
-                "sql": {
-                    "Apps" : query_maker(columns=[sumColumn("NumLendingProducts+NumDepositProducts")], where=[approvedApps]+base_filters), # Yellow
-                    "%Change" : "", # Green
-                },
-                "label": "Opened/Approved Products" # Red
-            },
-            {
-                "sql": {
-                    "Apps" : query_maker(columns=[sumColumn("NumLendingProducts+NumDepositProducts")], where=[approvedApps,loanApps]+base_filters), # Yellow
-                    "%Change" : "", # Green
-                },
-                "label": "Opened/Approved Loan Products" # Red
-            },
-            {
-                "sql": {
-                    "Apps" : query_maker(columns=[sumColumn("NumLendingProducts+NumDepositProducts")], where=[approvedApps,depositApps]+base_filters), # Yellow
-                    "%Change" : "", # Green
-                },
-                "label": "Opened/Approved Deposit Products" # Red
-            },
-            {
-                "sql": {
-                    "Apps" : query_maker(columns=[sumColumn("NumLendingProducts+NumDepositProducts")], where=[approvedApps,mixedApps]+base_filters), # Yellow
-                    "%Change" : "", # Green
-                },
-                "label": "Opened/Approved Mixed Products" # Red
-            },
-        ],
-        transaction=transactions,
-        variant=variant,
+    variant = {"All": "Applications", "All Applications": "Applications",
+               "All Products": "Products"}.get(variant, variant)
+    selected_variant = variant.split(" ")[0]
+
+    categories = (
+        ("Applications", None, "1"),
+        ("Products", None, "(NumLendingProducts + NumDepositProducts)"),
+        ("Loan Products", loanApps, "(NumLendingProducts + NumDepositProducts)"),
+        ("Deposit Products", depositApps, "(NumLendingProducts + NumDepositProducts)"),
+        ("Mixed Products", mixedApps, "(NumLendingProducts + NumDepositProducts)"),
+    )
+    stages = (
+        ("Started", None),
+        ("Submitted", submittedApps),
+        ("Opened/Approved", approvedApps),
     )
 
-    return {
-                "headers": test_report_header,
-                "rows": test_report_rows
-            }
+    selected = []
+    for stage_name, stage_filter in stages:
+        for category_name, category_filter, amount in categories:
+            label = stage_name + " " + category_name
+            if selected_variant not in label:
+                continue
+            predicates = [p for p in (stage_filter, category_filter) if p]
+            condition = " AND ".join("(" + p + ")" for p in predicates) or "1=1"
+            alias = "metric_" + str(len(selected))
+            if category_name == "Applications":
+                # Preserve original countColumn=COUNT(DISTINCT ecaTrackingCode).
+                expression = "COUNT(DISTINCT CASE WHEN " + condition + " THEN ecaTrackingCode END)"
+            else:
+                expression = ("COALESCE(SUM(CASE WHEN " + condition +
+                              " THEN " + amount + " ELSE 0 END), 0)")
+            selected.append((label, alias, expression + " AS " + alias))
+
+    if not selected:
+        return {"headers": ["-"] + [get_header(month)["label"] for month in intervals],
+                "rows": []}
+
+    if not all(isinstance(condition, str) for condition in base_filters):
+        raise ValueError("Monthly report filters must be SQL predicate strings")
+    conditions = [condition.strip() for condition in base_filters if condition.strip()]
+    conditions.append("AppStartDate IS NOT NULL")
+    where_clause = " AND ".join("(" + condition + ")" for condition in conditions)
+    query = (
+        "SELECT YEAR(AppStartDate) AS report_year, "
+        "MONTH(AppStartDate) AS report_month, " +
+        ", ".join(metric[2] for metric in selected) +
+        " FROM [DigitalReport].[dbo].[Transactions] WITH (NOLOCK) "
+        "WHERE " + where_clause +
+        " GROUP BY YEAR(AppStartDate), MONTH(AppStartDate)"
+    )
+
+    own_sql = None
+    if transactions is None:
+        own_sql = SQLConn()
+        own_sql.connect()
+        if own_sql.connection is None:
+            raise ConnectionError("SQL Server is unavailable for monthly reports")
+        transactions = Transaction(own_sql)
+
+    try:
+        result = transactions.get_transactions_by_sql_query(query)
+    finally:
+        if own_sql is not None:
+            own_sql.disconnect()
+
+    values_by_month = {}
+    for result_row in result if isinstance(result, list) else []:
+        key = (int(result_row["report_year"]), int(result_row["report_month"]))
+        values_by_month[key] = result_row
+
+    headers = ["-"] + [get_header(month)["label"] for month in intervals]
+    rows = []
+    for label, alias, _ in selected:
+        row = [label]
+        for month in intervals:
+            date_parts = month["start_date"].split("-")
+            group = values_by_month.get((int(date_parts[0]), int(date_parts[1])), {})
+            value = group.get(alias)
+            row.append(value if value is not None else 0)
+        rows.append(row)
+    return {"headers": headers, "rows": rows}
 
 
 def generate_report(intervals, query_list, transaction=None, variant="All"):

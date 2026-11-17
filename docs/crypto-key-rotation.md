@@ -29,7 +29,20 @@ original working-directory location for backward compatibility. All .key files
 in CRYPTO_STATE_DIR/import are also imported. Sources are deduplicated by
 fingerprint and preserved even when only one key is active. Valid
 formats are base64 and explicit hex: or raw: prefixes. Do not delete any keys.
-No key is generated automatically during module import. Old executables that ran an AES-GCM demo during import must be rebuilt; that demo discarded its nonce and caused startup crashes. When frozen, .env and legacy key files beside the executable are also discovered.
+No key is generated automatically during module import. On the first new
+plaintext write, an installation with no existing GCM key now creates and
+atomically saves one AES-256-GCM key under the existing private crypto-state
+directory. Historical ECB keys are retained. If a historical GCM key exists
+but has no active key ID, writes fail rather than silently replacing it.
+Old executables that ran an AES-GCM demo during import must be rebuilt; that
+demo discarded its nonce and caused startup crashes. When frozen, .env and
+legacy key files beside the executable are also discovered.
+
+Without CRYPTO_STATE_DIR, the default is the service user's home directory,
+`.reporting-dashboard-crypto`. This is sufficient when both the API and CSV
+loader run under the same Windows account. If they run under different service
+accounts, they MUST share a deliberately protected, backed-up CRYPTO_STATE_DIR:
+never point it into the IIS web root or create a second independent keyring.
 
 CRYPTO_STATE_DIR contains:
 - keyring.json: every historical key, with stable fingerprints and current ID

@@ -35,7 +35,6 @@ import { Dropdown } from 'primereact/dropdown';
 import ChartDataService from './Services/ChartDataService';
 import CsvLoaderReportsTab from './Components/CsvLoaderReportsTab';
 import CryptoRotationTab from './Components/CryptoRotationTab';
-import ApiKeyTab from './Components/ApiKeyTab';
 
 class PageErrorBoundary extends React.Component {
     constructor(props) {
@@ -714,9 +713,6 @@ function App() {
                         
                     </>
                 )
-            }
-            else if (page === "API Key") {
-                return <ApiKeyTab />;
             }
             else if (page === "Key Rotation") {
                 return <CryptoRotationTab />;
