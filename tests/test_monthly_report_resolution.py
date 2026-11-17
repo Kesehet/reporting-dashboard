@@ -11,10 +11,13 @@ from utils import table_fix_for_api_response
 
 
 class MonthlyReportResolutionTests(unittest.TestCase):
-    def test_product_report_executes_only_selected_queries(self):
+    def test_product_report_executes_one_grouped_query(self):
         transaction = Mock()
-        transaction.get_transactions_by_sql_query.return_value = 17
-        intervals = [{"start_date": "2025-01-01", "end_date": "2025-01-01"}]
+        transaction.get_transactions_by_sql_query.return_value = [{
+            "report_year": 2025, "report_month": 1,
+            **{f"metric_{i}": 17 for i in range(12)},
+        }]
+        intervals = [{"start_date": "2025-01-01", "end_date": "2025-01-31"}]
 
         report = monthly_reports.generate_report_variants_by_filters(
             ["1 = 1"], intervals, "Products", transactions=transaction
@@ -23,14 +26,21 @@ class MonthlyReportResolutionTests(unittest.TestCase):
         self.assertEqual(len(report["rows"]), 12)
         self.assertTrue(all("Products" in row[0] for row in report["rows"]))
         self.assertTrue(all(row[1] == 17 for row in report["rows"]))
-        self.assertEqual(transaction.get_transactions_by_sql_query.call_count, 12)
-        self.assertTrue(
-            all(
-                "SELECT" in call.args[0]
-                and "AppStartDate >= '2025-01-01'" in call.args[0]
-                for call in transaction.get_transactions_by_sql_query.call_args_list
-            )
+        transaction.get_transactions_by_sql_query.assert_called_once()
+        query = transaction.get_transactions_by_sql_query.call_args.args[0]
+        self.assertIn("GROUP BY YEAR(AppStartDate), MONTH(AppStartDate)", query)
+        self.assertIn("SUM(CASE WHEN", query)
+
+    def test_single_day_and_empty_month_still_have_rows(self):
+        transaction = Mock()
+        transaction.get_transactions_by_sql_query.return_value = 0
+        report = monthly_reports.generate_report_variants_by_filters(
+            ["1 = 1"], [{"start_date": "2025-01-01", "end_date": "2025-01-01"}],
+            "All Products", transactions=transaction
         )
+        self.assertEqual(len(report["headers"]), 2)
+        self.assertEqual(len(report["rows"]), 12)
+        self.assertTrue(all(row[1] == 0 for row in report["rows"]))
 
     def test_combined_monthly_report_applies_requested_tracking_filter(self):
         with (
