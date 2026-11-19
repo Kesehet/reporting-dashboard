@@ -34,6 +34,7 @@ import TransactionLogger from './Utils/Components/TransactionLogger';
 import { Dropdown } from 'primereact/dropdown';
 import ChartDataService from './Services/ChartDataService';
 import CsvLoaderReportsTab from './Components/CsvLoaderReportsTab';
+import OppiqReportTab from './Components/OppiqReportTab';
 import CryptoRotationTab from './Components/CryptoRotationTab';
 
 class PageErrorBoundary extends React.Component {
