@@ -15,6 +15,7 @@ from helper.crypto_rotation import crypto_api
 from datetime import datetime
 import os
 from DB import SQLConn, Transaction
+from report_modules.oppiq import oppiq_api
 from waitress import serve
 import sched
 import time
@@ -44,6 +45,7 @@ CORS(app)
 app.register_blueprint(decrypt_tools)
 app.register_blueprint(crypto_api)
 app.register_blueprint(authentication)
+app.register_blueprint(oppiq_api)
 CSV_FOLDER_REPORT = 'uploads/report'
 CSV_FOLDER_REPORTS = 'uploads/reports'
 
