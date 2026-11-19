@@ -34,6 +34,7 @@ import TransactionLogger from './Utils/Components/TransactionLogger';
 import { Dropdown } from 'primereact/dropdown';
 import ChartDataService from './Services/ChartDataService';
 import CsvLoaderReportsTab from './Components/CsvLoaderReportsTab';
+import OppiqReportTab from './Components/OppiqReportTab';
 import CryptoRotationTab from './Components/CryptoRotationTab';
 
 class PageErrorBoundary extends React.Component {
@@ -719,6 +720,9 @@ function App() {
             }
             else if (page === "CSV Loader Reports") {
                 return <CsvLoaderReportsTab />;
+            }
+            else if (page === "OPPIQ Report") {
+                return <OppiqReportTab />;
             }
             else if (page === "Direct Deposit Switch"){
                 var cds = new ChartDataService("Current Total DDS Amount and Switches Insights", {});

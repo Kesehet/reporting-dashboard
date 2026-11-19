@@ -124,6 +124,14 @@ const ReportHeaderComponent = ( dates, setDates, CorBFilter, setCorBFilter, setP
                     section: "Document Center",
                 },
                 {
+                    label: 'OPPIQ Report',
+                    icon: 'pi pi-table',
+                    command: () => {
+                        setPage('OPPIQ Report');
+                    },
+                    section: "Reports",
+                },
+                {
                     label: 'CSV Loader Reports',
                     icon: 'pi pi-file-excel',
                     command: () => {
