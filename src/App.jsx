@@ -721,6 +721,9 @@ function App() {
             else if (page === "CSV Loader Reports") {
                 return <CsvLoaderReportsTab />;
             }
+            else if (page === "OPPIQ Report") {
+                return <OppiqReportTab />;
+            }
             else if (page === "Direct Deposit Switch"){
                 var cds = new ChartDataService("Current Total DDS Amount and Switches Insights", {});
                 if( pageConfig["Direct Deposit Switch Current Total DDS Amount"] === null || pageConfig["Direct Deposit Switch Total Number of Successful Switches"] === null){                
