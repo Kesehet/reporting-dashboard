@@ -253,140 +253,73 @@ def metrics_updater(sql, txn):
 
 
 def account_status_fetch(sql, txn):
-
+    """Enrich loan account statuses from CRFEDW only (no PTYEDW deposit lookup)."""
     sql_crfedw = SQLConn("CRFEDW")
     sql_crfedw.connect()
-    sql_PTYEDW = SQLConn("PTYEDW")
-    sql_PTYEDW.connect()
-    if not sql_crfedw.connection or not sql_PTYEDW.connection:
-        print("Skipping account status post processing because an EDW connection could not be established.")
-        sql_crfedw.disconnect()
-        sql_PTYEDW.disconnect()
+    if not sql_crfedw.connection:
+        print("Skipping loan account status post processing: CRFEDW connection unavailable.")
         return
-    txn_crfedw = Transaction(sql_crfedw)
-    txn_PTYEDW = Transaction(sql_PTYEDW)
-    properties = Properties(sql)
-    
-    # Select SSN, APPID from [CRFEDW].[CRF_EMPL_PII_V1].[CRF_APP_ACTION_CUSTOMER_CUR] where SSN IN (list of PrimarySSN from transactions ) - push appid to VSDISWEBPRD01
-    # Select APPID, DecisionStatusName from [CRFEDW].[CRF_EMPL_PII_V1].[CRF_APP_ACTION_APPLICATION_CUR] where AppID IN (list of appid from above) - push decision status to VSDISWEBPRD01
-    # Select SSN, DDA_ACCT_NUM from [PTYEDW].[PTY_EMPL_PII_V2].[PTYMSTR_DDA] where SSN IN (list of PrimarySSN from transactions]. push the acct num to VSDISWEBPRD01
-    # Select Status_Code_desc, DDA_ACCT_NUM from [CAMEDW].[CAM_EMPL_PII_V1].[CAM_DDA_TRAN] where DDA_ACCT_NUM IN (list of acct num from above)  push the status code desc to VSDISWEBPRD01
 
-
-    get_all_loans_ssn = txn.get_transactions_by_sql_query(f'''
-        SELECT DISTINCT PrimarySSN, ecaTrackingCode, EDW_APPID, LoanAcctStatus, AppStartDate, PrimaryName FROM [DigitalReport].[dbo].[Transactions] WHERE 
-                                                          PrimarySSN IS NOT NULL AND PrimarySSN != ''
-                                                          AND {excludeBotData} AND {excludeZeroProductApps}
-                                                          AND {approvedAppsForBPMandCRIF}
-    ''')
-
-    get_all_deposit_ssn = txn.get_transactions_by_sql_query(f'''
-        SELECT DISTINCT PrimarySSN, ecaTrackingCode, AccountNumber, DepositAcctStatus, AppStartDate, PrimaryName FROM [DigitalReport].[dbo].[Transactions] WHERE 
-                                                            PrimarySSN IS NOT NULL AND PrimarySSN != '' 
-                                                            AND NumDepositProducts > 0
-                                                            AND {excludeBotData} AND {excludeZeroProductApps}
-                                                            AND {approvedAppsForBPMandCRIF}
-    ''')
-    
-    print(f"Found {len(get_all_loans_ssn)} unique SSNs with loans and {len(get_all_deposit_ssn)} unique SSNs with deposit accounts to process for app ids, account numbers, and statuses...")
     try:
-        for ssn_row in get_all_loans_ssn:
-            if properties.ecaTrackingCode_exists(ssn_row.get("ecaTrackingCode")):
-                continue
-            ssn = ssn_row.get("PrimarySSN").replace("-", "")
-            app_ids = txn_crfedw.get_transactions_by_sql_query(f'''
-                SELECT DISTINCT APPID FROM [CRFEDW].[CRF_EMPL_PII_V1].[CRF_APP_ACTION_CUSTOMER_CUR] WHERE SSN = '{ssn}'
-            ''')
-            
-            if app_ids == 0:
-                app_ids = []
+        txn_crfedw = Transaction(sql_crfedw)
+        properties = Properties(sql)
 
-            for i, app_id_row in enumerate(app_ids):
-                properties.set_properties_for_ecaTrackingCode(ssn_row.get("ecaTrackingCode"), {
-                    f"AppID_{i}": app_id_row.get("APPID"),
-                    "PrimaryName": ssn_row.get("PrimaryName"),
-                    "PrimarySSN": ssn_row.get("PrimarySSN"),
-                    "AppStartDate": ssn_row.get("AppStartDate")
-                })
+        get_all_loans_ssn = txn.get_transactions_by_sql_query(f'''
+            SELECT DISTINCT PrimarySSN, ecaTrackingCode, EDW_APPID, LoanAcctStatus, AppStartDate, PrimaryName FROM [DigitalReport].[dbo].[Transactions] WHERE 
+                                                              PrimarySSN IS NOT NULL AND PrimarySSN != ''
+                                                              AND {excludeBotData} AND {excludeZeroProductApps}
+                                                              AND {approvedAppsForBPMandCRIF}
+        ''')
 
-            for i, app_id_row in enumerate(app_ids):
-                app_id = app_id_row.get("APPID")
+        if get_all_loans_ssn == 0:
+            get_all_loans_ssn = []
+        print(f"Found {len(get_all_loans_ssn)} unique SSNs with loans to process for app IDs and statuses...")
 
-                # We push the decision status to VSDISWEBPRD01 by matching on appid
-                decision_status = txn_crfedw.get_transactions_by_sql_query(f'''
-                    SELECT DISTINCT DecisionStatusName FROM [CRFEDW].[CRF_EMPL_PII_V1].[CRF_APP_ACTION_APPLICATION_CUR] WHERE APPID = '{app_id}'
+        try:
+            for ssn_row in get_all_loans_ssn:
+                if properties.ecaTrackingCode_exists(ssn_row.get("ecaTrackingCode")):
+                    continue
+                ssn = ssn_row.get("PrimarySSN").replace("-", "")
+                app_ids = txn_crfedw.get_transactions_by_sql_query(f'''
+                    SELECT DISTINCT APPID FROM [CRFEDW].[CRF_EMPL_PII_V1].[CRF_APP_ACTION_CUSTOMER_CUR] WHERE SSN = '{ssn}'
                 ''')
-                if decision_status == 0:
-                    decision_status = []
-
-                for j, status_row in enumerate(decision_status):
-                    properties.set_properties_for_ecaTrackingCode(ssn_row.get("ecaTrackingCode"), {
-                        f"AppID_{i}_LoanAcctStatus_{j}": status_row.get("DecisionStatusName"),                        
-                        "PrimaryName": ssn_row.get("PrimaryName"),
-                        "PrimarySSN": ssn_row.get("PrimarySSN"),
-                        "AppStartDate": ssn_row.get("AppStartDate")
-                    })
-
-    except Exception as e:
-        print("Error processing loan account statuses" + str(e))
-
-    print("Finished processing loan account statuses. Starting deposit account post processing...")
-    try:
-        for ssn_row in get_all_deposit_ssn:
-            if properties.ecaTrackingCode_exists(ssn_row.get("ecaTrackingCode")):
-                continue
-
-            ssn = (ssn_row.get("PrimarySSN") or "").replace("-", "")
-            account_numbers = txn_PTYEDW.get_transactions_by_sql_query(f'''
-                SELECT DISTINCT DDA_ACCT_NUM FROM [PTYEDW].[PTY_EMPL_PII_V2].[PTYMSTR_DDA] WHERE SSN = '{ssn}'
-            ''')
-            if account_numbers == 0:
-                account_numbers = []
-
-            external_accounts = [str(ac.get("DDA_ACCT_NUM")) for ac in account_numbers if ac.get("DDA_ACCT_NUM")]
-            all_account_numbers = process_account_number("|".join([str(ssn_row.get("AccountNumber") or "")] + external_accounts))
-
-            for i, acc in enumerate(all_account_numbers):
-                properties.set_properties_for_ecaTrackingCode(ssn_row.get("ecaTrackingCode"), {
-                    f"AccountNumber_{i}": acc,
-                    "PrimaryName": ssn_row.get("PrimaryName"),
-                    "PrimarySSN": ssn_row.get("PrimarySSN"),
-                    "AppStartDate": ssn_row.get("AppStartDate")
-                })
-
-                status_code = txn_PTYEDW.get_transactions_by_sql_query(f''' 
-                    SELECT DISTINCT Status_Code_desc FROM [CAMEDW].[CAM_EMPL_PII_V1].[CAM_DDA_TRAN] WHERE DDA_ACCT_NUM = '{acc}'
-                ''')
-                if status_code == 0:
-                    status_code = []
-
-                for j, status_row in enumerate(status_code):
-                    properties.set_properties_for_ecaTrackingCode(ssn_row.get("ecaTrackingCode"), {
-                        f"AccountNumber_{i}_DepositAcctStatus_{j}": status_row.get("Status_Code_desc"),
-                        "PrimaryName": ssn_row.get("PrimaryName"),
-                        "PrimarySSN": ssn_row.get("PrimarySSN"),
-                        "AppStartDate": ssn_row.get("AppStartDate")
-                    })
                 
-    except Exception as e:
-        print("Error processing deposit account statuses" + str(e))
-        
-    print("Finished processing deposit account statuses.")
-    sql_crfedw.disconnect()
-    sql_PTYEDW.disconnect()
-    
-                    
+                if app_ids == 0:
+                    app_ids = []
 
-        
-# SELECT ACCT_ID, ACCT_NUM, TAX_ID FROM [PTYEDW].[PTY_EMPL_PII_V2].[PTYMSTR_DDA] where TAX_ID IN ()
-# SELECT APPID, SSN FROM [CRFEDW].[CRF_EMPL_PII_V1].[CRF_APP_ACTION_CUSTOMER_CUR] where SSN IN ()
+                for i, app_id_row in enumerate(app_ids):
+                    properties.set_properties_for_ecaTrackingCode(ssn_row.get("ecaTrackingCode"), {
+                        f"AppID_{i}": app_id_row.get("APPID"),
+                        "PrimaryName": ssn_row.get("PrimaryName"),
+                        "PrimarySSN": ssn_row.get("PrimarySSN"),
+                        "AppStartDate": ssn_row.get("AppStartDate")
+                    })
 
+                for i, app_id_row in enumerate(app_ids):
+                    app_id = app_id_row.get("APPID")
 
+                    # We push the decision status to VSDISWEBPRD01 by matching on appid
+                    decision_status = txn_crfedw.get_transactions_by_sql_query(f'''
+                        SELECT DISTINCT DecisionStatusName FROM [CRFEDW].[CRF_EMPL_PII_V1].[CRF_APP_ACTION_APPLICATION_CUR] WHERE APPID = '{app_id}'
+                    ''')
+                    if decision_status == 0:
+                        decision_status = []
 
+                    for j, status_row in enumerate(decision_status):
+                        properties.set_properties_for_ecaTrackingCode(ssn_row.get("ecaTrackingCode"), {
+                            f"AppID_{i}_LoanAcctStatus_{j}": status_row.get("DecisionStatusName"),                        
+                            "PrimaryName": ssn_row.get("PrimaryName"),
+                            "PrimarySSN": ssn_row.get("PrimarySSN"),
+                            "AppStartDate": ssn_row.get("AppStartDate")
+                        })
 
-# appid1, appid2, acctid1, acctid2 = appid1|appid2|acctid1|acctid2
+        except Exception as e:
+            print("Error processing loan account statuses" + str(e))
 
-    
+        print("Finished processing loan account statuses.")
+    finally:
+        sql_crfedw.disconnect()
+
 
 
 def get_dds_dollar_amount(acct_number, appstartdate):
