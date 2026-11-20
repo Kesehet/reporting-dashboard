@@ -15,7 +15,7 @@ from helper.crypto_rotation import crypto_api
 from datetime import datetime
 import os
 from DB import SQLConn, Transaction
-from report_modules.oppiq import oppiq_api
+from report_modules.oppiq import oppiq_api, save_oppiq_csv
 from waitress import serve
 import sched
 import time
@@ -616,6 +616,41 @@ def show_cache():
 
  
 if __name__ == "__main__":
+    if sys.argv[1:] == ["--verify-packaging"]:
+        # No network or database calls: verify that the frozen EXE can load its
+        # required libraries, application modules, and the OPPIQ report module.
+        import importlib
+        import importlib.util
+
+        required_modules = (
+            "DB", "authentication", "charts", "csvLoader", "decrypt_tools",
+            "helper.crypto_rotation", "report_modules.oppiq",
+            "flask", "flask_cors", "waitress", "pyodbc",
+            "pandas", "openpyxl", "Crypto", "cryptography", "jwt", "ldap3",
+        )
+        for module in required_modules:
+            importlib.import_module(module)
+        # cache_gen runs API calls when imported; inspect its bundled presence
+        # without executing those network calls.
+        if importlib.util.find_spec("cache_gen") is None:
+            raise RuntimeError("Missing packaged cache_gen module")
+        print(
+            "PACKAGING_CHECK_OK: "
+            + str(len(required_modules) + 1)
+            + " modules available; OPPIQ CSV target: "
+            + str(save_oppiq_csv.__module__)
+        )
+        sys.exit(0)
+
+    # Each run of serve.py refreshes the one local OPPIQ CSV snapshot.
+    # A database/export failure must not prevent the API from starting.
+    try:
+        oppiq_csv_path, oppiq_csv_rows = save_oppiq_csv()
+        print(f"OPPIQ CSV refreshed: {oppiq_csv_path} ({oppiq_csv_rows} rows)")
+    except Exception:
+        print("OPPIQ CSV refresh failed; existing CSV (if any) was left untouched.")
+        traceback.print_exc()
+
     print("--------------------------------------------------------- Testing Default SQL Connection ---------------------------------------------------------")
     sql = SQLConn()
     sql.connect()

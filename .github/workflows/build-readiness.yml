@@ -48,6 +48,16 @@ jobs:
           if ($missing.Count -gt 0) { throw "Missing or empty executables: $($missing -join ', ')" }
           "## Windows packaging" >> $env:GITHUB_STEP_SUMMARY
           "All 9 Windows executables were generated and checked for nonzero size." >> $env:GITHUB_STEP_SUMMARY
+      - name: Smoke-test all packaged serve.exe module imports
+        shell: pwsh
+        run: |
+          foreach ($envName in @('qa','prod','dev')) {
+            $exe = "exe_dist/${envName}_serve.exe"
+            & $exe --verify-packaging
+            if ($LASTEXITCODE -ne 0) {
+              throw "Module verification failed for $exe (exit $LASTEXITCODE)"
+            }
+          }
       - name: Upload executables and diagnostic warnings
         if: always()
         uses: actions/upload-artifact@v4
