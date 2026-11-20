@@ -1,7 +1,14 @@
 import csv
+import logging
+import os
+import sys
+import tempfile
+import time
 from datetime import date, datetime
 from decimal import Decimal
 from io import StringIO
+from pathlib import Path
+from threading import Thread
 
 from flask import Blueprint, Response, current_app, jsonify, request, stream_with_context
 
@@ -10,6 +17,8 @@ from DB import SQLConn
 
 
 oppiq_api = Blueprint("oppiq_api", __name__)
+logger = logging.getLogger(__name__)
+CSV_FILENAME = "OPPIQ_Report.csv"
 
 HEADERS = [
     "Banker_Name",
@@ -112,6 +121,88 @@ def _connect():
     if sql.connection is None:
         raise ConnectionError("OPPIQ SQL Server connection unavailable")
     return sql
+
+
+def get_oppiq_csv_path():
+    """Persist in the repository root (beside the application for packaged builds)."""
+    if getattr(sys, "frozen", False):
+        base = Path(sys.executable).resolve().parent
+        if base.name.lower() == "api-server":
+            base = base.parent
+    else:
+        base = Path(__file__).resolve().parents[2]
+    return base / "OPPIQ Report" / CSV_FILENAME
+
+
+def save_oppiq_csv(destination=None):
+    """Replace the daily CSV atomically, keeping the previous file on errors."""
+    path = Path(destination) if destination is not None else get_oppiq_csv_path()
+    sql = None
+    cursor = None
+    temporary_path = None
+    row_count = 0
+    try:
+        sql = _connect()
+        cursor = sql.connection.cursor()
+        cursor.execute(EXPORT_QUERY)
+        path.parent.mkdir(parents=True, exist_ok=True)
+
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            encoding="utf-8-sig",
+            newline="",
+            dir=path.parent,
+            prefix=".oppiq_",
+            suffix=".tmp",
+            delete=False,
+        ) as output:
+            temporary_path = Path(output.name)
+            writer = csv.writer(output)
+            writer.writerow(HEADERS)
+            while True:
+                batch = cursor.fetchmany(1000)
+                if not batch:
+                    break
+                for record in batch:
+                    writer.writerow([_csv_cell(value) for value in record])
+                    row_count += 1
+            output.flush()
+            os.fsync(output.fileno())
+
+        os.replace(temporary_path, path)
+        temporary_path = None
+        return path, row_count
+    finally:
+        if temporary_path is not None:
+            try:
+                temporary_path.unlink(missing_ok=True)
+            except OSError:
+                logger.warning("Could not remove temporary OPPIQ CSV: %s", temporary_path)
+        if cursor is not None:
+            cursor.close()
+        if sql is not None:
+            sql.disconnect()
+
+
+def start_daily_oppiq_csv_export():
+    """Export immediately on startup, then once per calendar day while running."""
+    def refresh_loop():
+        last_successful_day = None
+        while True:
+            today = date.today()
+            if today != last_successful_day:
+                try:
+                    path, count = save_oppiq_csv()
+                    last_successful_day = date.today()
+                    logger.info("OPPIQ CSV refreshed: %s (%d rows)", path, count)
+                except Exception:
+                    logger.exception("OPPIQ CSV refresh failed; previous CSV retained")
+            # Check for a new day; retry failures without restarting the server.
+            time.sleep(300)
+
+    worker = Thread(target=refresh_loop, name="oppiq-csv-refresh", daemon=True)
+    worker.start()
+    return worker
 
 
 @oppiq_api.route("/oppiq-report", methods=["GET"])
