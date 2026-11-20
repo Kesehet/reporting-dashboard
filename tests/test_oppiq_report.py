@@ -1,4 +1,5 @@
 import sys
+import tempfile
 import unittest
 from datetime import datetime
 from pathlib import Path
@@ -120,6 +121,37 @@ class OppiqReportTests(unittest.TestCase):
         instance = FakeSql.instances[0]
         self.assertEqual(instance.connection.instance.query, oppiq.EXPORT_QUERY)
         self.assertTrue(instance.closed)
+
+    def test_save_oppiq_csv_overwrites_one_file(self):
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "OPPIQ Report" / "OPPIQ_Report.csv"
+            output.parent.mkdir()
+            output.write_text("previous data", encoding="utf-8")
+
+            saved_path, row_count = oppiq.save_oppiq_csv(output)
+
+            self.assertEqual(saved_path, output)
+            self.assertEqual(row_count, 2)
+            content = output.read_text(encoding="utf-8-sig")
+            self.assertTrue(content.startswith("Banker_Name,"))
+            self.assertIn("'=HYPERLINK(1)", content)
+            self.assertNotIn("previous data", content)
+            self.assertEqual([path.name for path in output.parent.iterdir()], ["OPPIQ_Report.csv"])
+            self.assertTrue(FakeSql.instances[0].closed)
+
+    def test_failed_csv_refresh_preserves_old_file(self):
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "OPPIQ Report" / "OPPIQ_Report.csv"
+            output.parent.mkdir()
+            output.write_text("previous data", encoding="utf-8")
+
+            with patch.object(oppiq, "_csv_cell", side_effect=ValueError("write failed")):
+                with self.assertRaisesRegex(ValueError, "write failed"):
+                    oppiq.save_oppiq_csv(output)
+
+            self.assertEqual(output.read_text(encoding="utf-8"), "previous data")
+            self.assertEqual([path.name for path in output.parent.iterdir()], ["OPPIQ_Report.csv"])
+            self.assertTrue(FakeSql.instances[0].closed)
 
     def test_requires_login_for_both_routes(self):
         self.auth_mock.return_value = None
