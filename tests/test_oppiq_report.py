@@ -139,6 +139,29 @@ class OppiqReportTests(unittest.TestCase):
             self.assertEqual([path.name for path in output.parent.iterdir()], ["OPPIQ_Report.csv"])
             self.assertTrue(FakeSql.instances[0].closed)
 
+    def test_save_oppiq_csv_creates_missing_folder(self):
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory) / "OPPIQ Report" / "OPPIQ_Report.csv"
+            self.assertFalse(output.parent.exists())
+
+            saved_path, row_count = oppiq.save_oppiq_csv(output)
+
+            self.assertEqual(saved_path, output)
+            self.assertEqual(row_count, 2)
+            self.assertTrue(output.is_file())
+            self.assertEqual([p.name for p in output.parent.iterdir()], ["OPPIQ_Report.csv"])
+
+    def test_frozen_exe_dist_writes_at_project_root(self):
+        with tempfile.TemporaryDirectory() as directory:
+            project = Path(directory)
+            executable = project / "exe_dist" / "prod_serve.exe"
+            with patch.object(oppiq.sys, "frozen", True, create=True):
+                with patch.object(oppiq.sys, "executable", str(executable)):
+                    self.assertEqual(
+                        oppiq.get_oppiq_csv_path(),
+                        project / "OPPIQ Report" / "OPPIQ_Report.csv",
+                    )
+
     def test_failed_csv_refresh_preserves_old_file(self):
         with tempfile.TemporaryDirectory() as directory:
             output = Path(directory) / "OPPIQ Report" / "OPPIQ_Report.csv"
