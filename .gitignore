@@ -88,3 +88,6 @@ crypto-state/
 **/backups/**
 
 **/keyring-history/*.json
+
+# OPPIQ CSV is generated locally at API startup; do not commit customer data
+/OPPIQ Report/*.csv
