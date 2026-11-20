@@ -3,12 +3,10 @@ import logging
 import os
 import sys
 import tempfile
-import time
 from datetime import date, datetime
 from decimal import Decimal
 from io import StringIO
 from pathlib import Path
-from threading import Thread
 
 from flask import Blueprint, Response, current_app, jsonify, request, stream_with_context
 
@@ -182,27 +180,6 @@ def save_oppiq_csv(destination=None):
             cursor.close()
         if sql is not None:
             sql.disconnect()
-
-
-def start_daily_oppiq_csv_export():
-    """Export immediately on startup, then once per calendar day while running."""
-    def refresh_loop():
-        last_successful_day = None
-        while True:
-            today = date.today()
-            if today != last_successful_day:
-                try:
-                    path, count = save_oppiq_csv()
-                    last_successful_day = date.today()
-                    logger.info("OPPIQ CSV refreshed: %s (%d rows)", path, count)
-                except Exception:
-                    logger.exception("OPPIQ CSV refresh failed; previous CSV retained")
-            # Check for a new day; retry failures without restarting the server.
-            time.sleep(300)
-
-    worker = Thread(target=refresh_loop, name="oppiq-csv-refresh", daemon=True)
-    worker.start()
-    return worker
 
 
 @oppiq_api.route("/oppiq-report", methods=["GET"])
