@@ -15,7 +15,7 @@ from helper.crypto_rotation import crypto_api
 from datetime import datetime
 import os
 from DB import SQLConn, Transaction
-from report_modules.oppiq import oppiq_api
+from report_modules.oppiq import oppiq_api, save_oppiq_csv
 from waitress import serve
 import sched
 import time
@@ -616,6 +616,15 @@ def show_cache():
 
  
 if __name__ == "__main__":
+    # Each run of serve.py refreshes the one local OPPIQ CSV snapshot.
+    # A database/export failure must not prevent the API from starting.
+    try:
+        oppiq_csv_path, oppiq_csv_rows = save_oppiq_csv()
+        print(f"OPPIQ CSV refreshed: {oppiq_csv_path} ({oppiq_csv_rows} rows)")
+    except Exception:
+        print("OPPIQ CSV refresh failed; existing CSV (if any) was left untouched.")
+        traceback.print_exc()
+
     print("--------------------------------------------------------- Testing Default SQL Connection ---------------------------------------------------------")
     sql = SQLConn()
     sql.connect()
