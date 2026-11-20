@@ -159,7 +159,7 @@ class OppiqReportTests(unittest.TestCase):
                 with patch.object(oppiq.sys, "executable", str(executable)):
                     self.assertEqual(
                         oppiq.get_oppiq_csv_path(),
-                        project / "OPPIQ Report" / "OPPIQ_Report.csv",
+                        (project / "OPPIQ Report" / "OPPIQ_Report.csv").resolve(),
                     )
 
     def test_failed_csv_refresh_preserves_old_file(self):
