@@ -125,7 +125,7 @@ def get_oppiq_csv_path():
     """Persist in the repository root (beside the application for packaged builds)."""
     if getattr(sys, "frozen", False):
         base = Path(sys.executable).resolve().parent
-        if base.name.lower() == "api-server":
+        if base.name.lower() in ("api-server", "exe_dist"):
             base = base.parent
     else:
         base = Path(__file__).resolve().parents[2]
