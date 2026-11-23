@@ -470,7 +470,7 @@ def update_conf(file_name, folder_path="uploads/reports"):
             f.write(file_name + "\n")
 
 
-def update_JMExtracts(sql,txn):
+def update_JMExtracts(sql, txn, *, report_error=None):
     """Pull missing JM data without treating empty RawData rows as completed."""
     import sys
     started_at = datetime.now().isoformat()
@@ -485,10 +485,13 @@ def update_JMExtracts(sql,txn):
         date_filter = get_date_filter(
             startDate.isoformat().split(".")[0], endDate.isoformat().split(".")[0]
         )
+        query_options = {"use_cache": False} if report_error is not None else {}
         all_codes = txn.get_transactions_by_sql_query(
             f"SELECT eCATrackingCode FROM [DigitalReport].[dbo].[Transactions] "
-            f"WHERE {date_filter} ORDER BY AppStartDate ASC"
+            f"WHERE {date_filter} ORDER BY AppStartDate ASC", **query_options
         )
+        if report_error is not None and all_codes == 0:
+            all_codes = []
         if not isinstance(all_codes, list):
             raise RuntimeError("Failed to query transactions for JM extraction")
         # Preserve SQL oldest-first order: these XML records expire soonest.
@@ -503,8 +506,10 @@ def update_JMExtracts(sql,txn):
         valid_codes = txn.get_transactions_by_sql_query(
             "SELECT DISTINCT tID AS code FROM [DigitalReport].[dbo].[JMExtract] "
             "WHERE tID IS NOT NULL AND tID != '' AND RawData IS NOT NULL "
-            "AND LTRIM(RTRIM(RawData)) NOT IN ('', 'null')"
+            "AND LTRIM(RTRIM(RawData)) NOT IN ('', 'null')", **query_options
         )
+        if report_error is not None and valid_codes == 0:
+            valid_codes = []
         if not isinstance(valid_codes, list):
             raise RuntimeError("Failed to query existing JM RawData")
         already_processed = {
@@ -516,16 +521,21 @@ def update_JMExtracts(sql,txn):
         print(f"{len(missing_codes)} missing JM RawData codes to process")
 
         for code in missing_codes:
-            sys.stdout.write(f"\rJM XML extraction for: {code}")
-            sys.stdout.flush()
+            if report_error is None:
+                sys.stdout.write(f"\rJM XML extraction for: {code}")
+                sys.stdout.flush()
             try:
-                if update_JMExtract(sql, code):
+                options = {"report_error": report_error} if report_error is not None else {}
+                if update_JMExtract(sql, code, **options):
                     stats["saved"] += 1
                 else:
                     stats["failed"] += 1
             except Exception as exc:
                 stats["failed"] += 1
-                print(f"JM XML extraction error for {code}: {type(exc).__name__}: {exc}")
+                if report_error is None:
+                    print(f"JM XML extraction error for {code}: {type(exc).__name__}: {exc}")
+                else:
+                    report_error("Unexpected error while extracting a Journey Manager record.")
 
         state = "ended" if not stats["failed"] else "partial_failure"
         update_metrics("manual_xml_pull", f"{state} {datetime.now().isoformat()} "

@@ -57,7 +57,7 @@ def post_process_txns(sql, txn, tracking_codes_added_this_run=None):
 
 
 def ensure_properties_table(txn):
-    txn.sql_conn.execute(f'''
+    created = txn.sql_conn.execute(f'''
         IF OBJECT_ID('[DigitalReport].[dbo].[Properties]', 'U') IS NULL
         BEGIN
             CREATE TABLE [DigitalReport].[dbo].[Properties] (
@@ -106,6 +106,8 @@ def ensure_properties_table(txn):
             END
         END
     ''')
+    if created is False:
+        raise RuntimeError("Could not prepare the Properties table")
     print("Checked for Properties table and created if not exists, also added missing columns if any.")
 
 
@@ -135,13 +137,13 @@ def populate_properties_table(sql, txn):
         properties.set_properties_for_ecaTrackingCode(eCATrackingCode, txn_row)
 
 
-def process_dds_amounts(sql, txn):
+def process_dds_amounts(sql, txn, *, report_error=None):
     all_ecatrackingCodes_with_null_accounts = txn.get_transactions_by_sql_query('''
         SELECT eCATrackingCode, AppStartDate, AccountNumber, PrimaryName, PrimarySSN
         FROM [DigitalReport].[dbo].[Transactions]
         WHERE NumLendingProducts > 0
         ORDER BY AppStartDate DESC
-    ''')
+    ''', use_cache=report_error is None)
     if all_ecatrackingCodes_with_null_accounts == 0:
         all_ecatrackingCodes_with_null_accounts = []
 
@@ -157,28 +159,35 @@ def process_dds_amounts(sql, txn):
             continue
 
         for acc in process_account_number(accNo):
-            doll_amt = get_dds_dollar_amount(acc, appstartdate)
+            doll_amt = get_dds_dollar_amount(acc, appstartdate, use_cache=report_error is None)
             if doll_amt is None:
                 continue
 
-            sql.execute(f'''
+            updated = sql.execute(f'''
                 UPDATE [DigitalReport].[dbo].[Transactions]
                 SET DDSTranAmount = {doll_amt}
                 WHERE eCATrackingCode = '{tcc}'
             ''')
+            if updated is False and report_error is not None:
+                sql.connection.rollback()
+                report_error("Could not update a DDS amount in the reporting database.")
+                continue
             sql.connection.commit()
 
             month_year = datetime.now().strftime("%m_%Y")
             property_key = f"Account_{acc}_{month_year}"
-            properties.set_properties_for_ecaTrackingCode(tcc, {
+            result = properties.set_properties_for_ecaTrackingCode(tcc, {
                 "AppStartDate": appstartdate,
                 "PrimaryName": item.get("PrimaryName"),
                 "PrimarySSN": item.get("PrimarySSN"),
                 property_key: doll_amt
             })
 
+            if report_error is not None and "error" in result:
+                report_error("Could not save DDS properties because required data was missing.")
+
             runs += 1
-            if total_items:
+            if total_items and report_error is None:
                 sys.stdout.write(f"\r{int((runs / total_items) * 100)}% - DDS dollar amount for account number {acc}. - {doll_amt}     ")
                 sys.stdout.flush()
 
@@ -322,22 +331,24 @@ def account_status_fetch(sql, txn):
 
 
 
-def get_dds_dollar_amount(acct_number, appstartdate):
+def get_dds_dollar_amount(acct_number, appstartdate, *, use_cache=True):
     camedw_sql = SQLConn("CAMEDW")
     camedw_sql.connect()
     camedw_txn = Transaction(camedw_sql)
     appstartdate = str(appstartdate).split("T")[0] if appstartdate else None
     date_filter = f"AND Tran_Date <= '{appstartdate}'" if appstartdate else ""
-    result = camedw_txn.get_transactions_by_sql_query(f'''
-        SELECT TOP 1 [Tran_Amount] FROM [CAMEDW].[CAM_EMPL_PII_V1].[CAM_DDA_TRAN]
-        WHERE [DDA_ACCT_NUM] = '{acct_number}'
-          AND Tran_Amount IS NOT NULL
-          AND Tran_Amount != 0
-          AND {DDSDescriptionFilter}
-          {date_filter}
-        ORDER BY [Tran_Date] DESC
-    ''')
-    camedw_sql.disconnect()
+    try:
+        result = camedw_txn.get_transactions_by_sql_query(f'''
+            SELECT TOP 1 [Tran_Amount] FROM [CAMEDW].[CAM_EMPL_PII_V1].[CAM_DDA_TRAN]
+            WHERE [DDA_ACCT_NUM] = '{acct_number}'
+              AND Tran_Amount IS NOT NULL
+              AND Tran_Amount != 0
+              AND {DDSDescriptionFilter}
+              {date_filter}
+            ORDER BY [Tran_Date] DESC
+        ''', use_cache=use_cache)
+    finally:
+        camedw_sql.disconnect()
     if result == 0 or not result:
         return None
     first_row = result[0]
