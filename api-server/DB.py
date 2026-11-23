@@ -33,6 +33,19 @@ logger = logging.getLogger(__name__)
 load_dotenv()
 
 
+def replace_sql_cache(temp_path, cache_file):
+    """Retry short-lived Windows file locks without exposing partial cache data."""
+    delays = (0.025, 0.05, 0.1, 0.2)
+    for delay in (*delays, None):
+        try:
+            os.replace(temp_path, cache_file)
+            return
+        except OSError as error:
+            if delay is None or getattr(error, "winerror", None) not in (5, 32, 33):
+                raise
+            time.sleep(delay)
+
+
 def sanitize_csv_text(value):
     """Keep CSV text safe for the loader's SQL and log strings."""
     normalized = unicodedata.normalize("NFD", str(value))
@@ -521,10 +534,10 @@ class Transaction:
                     pickle.dump(resp, cache_output)
                     cache_output.flush()
                     os.fsync(cache_output.fileno())
-                os.replace(temp_path, cache_file)
+                replace_sql_cache(temp_path, cache_file)
                 temp_path = None
-            except OSError:
-                logger.exception("Failed to save SQL cache %s", query_hash)
+            except OSError as error:
+                logger.warning("SQL cache write skipped for %s (%s); returning query result", query_hash, error)
             finally:
                 if temp_path and os.path.exists(temp_path):
                     try:
