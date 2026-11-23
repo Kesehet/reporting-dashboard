@@ -1,0 +1,90 @@
+.manual-review {
+    display: grid;
+    gap: 1rem;
+    padding-block: 1rem;
+}
+
+.manual-review__panel {
+    min-width: 0;
+    padding: 1.25rem;
+    border: 1px solid #dce4ee;
+    border-radius: 8px;
+    background: #fff;
+}
+
+.manual-review__panel h1,
+.manual-review__panel h2 {
+    margin: 0 0 .75rem;
+    color: #003975;
+}
+
+.manual-review__panel h2 {
+    font-size: 1.125rem;
+}
+
+.manual-review__overview {
+    display: grid;
+    grid-template-columns: minmax(0, 2fr) minmax(16rem, 1fr);
+    gap: 1rem;
+}
+
+.manual-review__controls {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: .75rem 1rem;
+}
+
+.manual-review__controls label {
+    display: grid;
+    gap: .35rem;
+    font-weight: 600;
+}
+
+.manual-review__controls input,
+.manual-review__controls select {
+    min-height: 2.5rem;
+    padding: .45rem .65rem;
+    border: 1px solid #bbc8d7;
+    border-radius: 6px;
+    background: #fff;
+    font: inherit;
+}
+
+.manual-review__metrics {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: .75rem;
+    margin: 1rem 0 0;
+}
+
+.manual-review__metrics div {
+    padding: .8rem;
+    border-radius: 6px;
+    background: #eef4fa;
+}
+
+.manual-review__metrics dd {
+    margin: .25rem 0 0;
+    color: #003975;
+    font-size: 1.6rem;
+    font-weight: 700;
+}
+
+.manual-review__message {
+    margin: 0;
+    padding: .75rem 1rem;
+    background: #eef4fa;
+}
+
+.manual-review__message[role="alert"] {
+    color: #842029;
+    background: #fff0f0;
+}
+
+@media (max-width: 760px) {
+    .manual-review__overview,
+    .manual-review__metrics {
+        grid-template-columns: 1fr;
+    }
+}
