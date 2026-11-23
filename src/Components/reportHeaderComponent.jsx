@@ -124,6 +124,12 @@ const ReportHeaderComponent = ( dates, setDates, CorBFilter, setCorBFilter, setP
                     section: "Document Center",
                 },
                 {
+                    label: 'Manual Review Report',
+                    icon: 'pi pi-table',
+                    command: () => setPage('Manual Review Report'),
+                    section: 'Reports',
+                },
+                {
                     label: 'OPPIQ Report',
                     icon: 'pi pi-table',
                     command: () => {

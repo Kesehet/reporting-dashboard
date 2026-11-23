@@ -35,6 +35,7 @@ import { Dropdown } from 'primereact/dropdown';
 import ChartDataService from './Services/ChartDataService';
 import CsvLoaderReportsTab from './Components/CsvLoaderReportsTab';
 import OppiqReportTab from './Components/OppiqReportTab';
+import ManualReviewReport from './Components/ManualReviewReport';
 import CryptoRotationTab from './Components/CryptoRotationTab';
 
 class PageErrorBoundary extends React.Component {
@@ -720,6 +721,9 @@ function App() {
             }
             else if (page === "CSV Loader Reports") {
                 return <CsvLoaderReportsTab />;
+            }
+            else if (page === "Manual Review Report") {
+                return <ManualReviewReport />;
             }
             else if (page === "OPPIQ Report") {
                 return <OppiqReportTab />;

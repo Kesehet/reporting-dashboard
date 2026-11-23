@@ -824,12 +824,13 @@ class Properties:
 
 
 class WorkspaceExtract:
-    def __init__(self):
+    def __init__(self, setup_table=True):
         self.base_url = jm_workspaces_url()
         self.username = get_env_value("REACT_APP_JOURNEY_MANAGER_USER")
         self.password = get_env_value("REACT_APP_JOURNEY_MANAGER_PASSWORD")
         self.session = None
-        self.setup_table()
+        if setup_table:
+            self.setup_table()
 
         
     def setup_table(self):
@@ -939,7 +940,7 @@ class WorkspaceExtract:
             
             # Check for JSESSIONID cookie
             if "JSESSIONID" in self.session.cookies:
-                print(f"[+] Authentication successful! Session ID: {self.session.cookies.get('JSESSIONID')[:20]}...")
+                print("[+] Workspace authentication successful")
                 return True
             else:
                 print(f"[-] Authentication failed. Status: {response.status_code}")
