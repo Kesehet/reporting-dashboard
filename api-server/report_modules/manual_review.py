@@ -27,7 +27,7 @@ class WorkspaceReportError(Exception):
 
 
 def normalized(value):
-    return str(value or "").strip().lower()
+    return str(value if value is not None else "").strip().lower()
 
 
 def timestamp(value):
@@ -121,7 +121,7 @@ def job_rows(workspace, start, end):
         details = list(query_jobs(workspace, {
             "attributes": [
                 "jobKey", "jobRefNumber", "status", "timeFinished", "timeCreated",
-                "steps", "txns", "txns.comments", "txns.properties",
+                "steps", "comments", "properties", "txns", "txns.comments", "txns.properties",
             ],
             "filters": [
                 date_filter,
@@ -155,17 +155,57 @@ def tracking_code(job, transactions):
     return None
 
 
+def workspace_channel(job, transactions):
+    values = {
+        normalized((record.get("properties") or {}).get("isBankerAssisted"))
+        for record in [job, *transactions]
+    }
+    channels = set()
+    if values & {"true", "1", "yes"}:
+        channels.add("In-Branch")
+    if values & {"false", "0", "no"}:
+        channels.add("Online")
+    return next(iter(channels)) if len(channels) == 1 else None
+
+
+def workflow_decision(steps, index):
+    """Infer a decision only from an executed, unambiguous downstream branch."""
+    outcomes = set()
+    for step in steps[index + 1:]:
+        name = normalized(step.get("name"))
+        if name in REVIEW_STEPS:
+            break
+        outcome = {
+            "approve application": "Approved",
+            "decline application": "Denied",
+        }.get(name)
+        if outcome and normalized(step.get("status")) in {"in progress", "completed"}:
+            outcomes.add(outcome)
+    return next(iter(outcomes)) if len(outcomes) == 1 else None
+
+
 def review_visits(job, transactions, now):
-    by_key = {txn["submitKey"]: txn for txn in transactions if txn.get("submitKey")}
-    for step in job.get("steps") or []:
+    steps = job.get("steps") or []
+    only_review = sum(normalized(step.get("name")) in REVIEW_STEPS for step in steps) == 1
+    for index, step in enumerate(steps):
         if normalized(step.get("name")) not in REVIEW_STEPS:
             continue
         actions = step.get("jobActions") or []
-        keys = dict.fromkeys(
-            action["submission"] for action in actions
-            if normalized(action.get("type")) == "job task assign" and action.get("submission")
-        )
-        tasks = [by_key[key] for key in keys if key in by_key]
+        action_keys = {action["jobActionKey"] for action in actions if action.get("jobActionKey")}
+        submissions = {action["submission"] for action in actions if isinstance(action.get("submission"), str)}
+        tasks = [
+            txn for txn in transactions
+            if txn.get("submitKey") in submissions or txn.get("trackingCode") in submissions
+            or txn.get("jobActionKey") in action_keys
+        ]
+        if not tasks and only_review:
+            candidates = [
+                txn for txn in transactions
+                if normalized(txn.get("groupName")) == "manual review"
+                or normalized(txn.get("taskType")) == "review"
+            ]
+            if len(candidates) == 1:
+                tasks = candidates
         started = timestamp(step.get("timeCreated"))
         action_times = [timestamp(action.get("timeActionExecuted")) for action in actions]
         task_times = [timestamp(task.get("timeCreated") or task.get("timeRequest")) for task in tasks]
@@ -174,19 +214,40 @@ def review_visits(job, transactions, now):
         if not started and not tasks and step_status not in {"in progress", "completed", "expired"}:
             continue
 
-        completed_tasks = [task for task in tasks if timestamp(task.get("timeCompleted"))]
-        completed_tasks.sort(key=lambda task: timestamp(task["timeCompleted"]))
+        completed_tasks = [
+            task for task in tasks
+            if timestamp(task.get("timeCompleted")) or normalized(task.get("formStatus")) == "completed"
+        ]
+        completed_tasks.sort(
+            key=lambda task: timestamp(task.get("timeCompleted")) or datetime.min.replace(tzinfo=timezone.utc)
+        )
         finished = timestamp(step.get("timeFinished") or step.get("timeCompleted"))
         if not finished and step_status == "completed" and completed_tasks:
-            finished = timestamp(completed_tasks[-1]["timeCompleted"])
+            finished = timestamp(completed_tasks[-1].get("timeCompleted"))
         outcome = decision(step) or next(
             (value for action in reversed(actions) if (value := decision(action))), None
         )
+        if not outcome and step_status == "completed":
+            outcome = workflow_decision(steps, index)
         reviewer = step.get("userLoginName") or (
             completed_tasks[-1].get("userLoginName") if completed_tasks else None
         )
+        if not reviewer and len(tasks) == 1:
+            reviewer = tasks[0].get("userLoginName")
+
+        task_ids = {
+            key for task in tasks for key in (task.get("submitKey"), task.get("trackingCode")) if key
+        }
+        comments = [comment for task in tasks for comment in task.get("comments") or []]
+        comments.extend(
+            comment for comment in job.get("comments") or []
+            if comment.get("jobActionKey") in action_keys
+            or comment.get("trackingCode") in task_ids
+            or comment.get("submitKey") in task_ids
+            or (only_review and normalized(comment.get("jobStep")) == normalized(step.get("name")))
+        )
         notes = list(dict.fromkeys(
-            comment["message"] for task in tasks for comment in task.get("comments") or []
+            comment["message"] for comment in comments
             if isinstance(comment.get("message"), str) and comment["message"].strip()
         ))
         active = step_status in {"ready", "in progress", "assigned"} and not finished
@@ -213,6 +274,7 @@ def build_report(jobs, now):
             continue
         finished = timestamp(job.get("timeFinished")) if normalized(job.get("status")) == "completed" else None
         for visit in review_visits(job, transactions, now):
+            visit["channel"] = workspace_channel(job, transactions)
             visit["application_finished"] = finished
             by_application[code].append(visit)
 
@@ -228,6 +290,7 @@ def build_report(jobs, now):
         rows.append({
             "application_id": code,
             "application_type": "Business" if code.startswith("B-") else "Consumer",
+            "channel": latest["channel"],
             "outcome": latest["outcome"],
             "reviewer": latest["reviewer"],
             "notes": list(dict.fromkeys(note for visit in visits for note in visit["notes"])),
@@ -315,11 +378,11 @@ def manual_review():
         return jsonify(error="Journey Manager could not return the Manual Review history."), 502
 
     try:
-        channels = channels_for([row["application_id"] for row in rows])
+        channels = channels_for([row["application_id"] for row in rows if not row["channel"]])
     except Exception as error:
         current_app.logger.error("Manual Review channel lookup failed: %s", type(error).__name__)
         return jsonify(error="The application channel lookup failed."), 503
 
     for row in rows:
-        row["channel"] = channels.get(row["application_id"], "Unknown")
+        row["channel"] = row["channel"] or channels.get(row["application_id"], "Unknown")
     return jsonify(rows=rows)
