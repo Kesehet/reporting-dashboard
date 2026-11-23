@@ -33,6 +33,8 @@ def _configured_url(base_url=None):
 
 def jm_fluent_base_url(base_url=None):
     """Return the complete Fluent API base, preserving an explicit /manager."""
+    if base_url is None:
+        base_url = get_env_value("JM_FLUENT_BASE_URL") or os.environ.get("JM_FLUENT_BASE_URL")
     parsed, path = _configured_url(base_url)
     if not path.endswith(_FLUENT_PATH):
         path += _FLUENT_PATH
