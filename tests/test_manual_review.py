@@ -80,3 +80,36 @@ class ManualReviewReportTests(unittest.TestCase):
         self.assertEqual(second["fetchOffset"], 1)
         self.assertIn("txns.comments", third["attributes"])
         self.assertEqual(third["filters"][1]["criteria"], ["jobRefNumber IN ('C-A1')"])
+
+    def test_workspace_channel_and_review_task_without_assignment_action(self):
+        job = {
+            "jobRefNumber": "C-B1",
+            "status": "In Progress",
+            "steps": [
+                {"name": "Review Application", "status": "Completed",
+                 "timeCreated": "2026-11-21T16:00:00Z",
+                 "timeFinished": "2026-11-21T17:00:00Z"},
+                {"name": "Approve Application", "status": "Completed"},
+            ],
+            "txns": [
+                {"trackingCode": "C-B1", "properties": {"isBankerAssisted": True},
+                 "comments": [{"message": "Unrelated"}]},
+                {"trackingCode": "C-T1", "groupName": "Manual Review",
+                 "formStatus": "Completed", "userLoginName": "reviewer",
+                 "comments": [{"message": "Task note"}]},
+            ],
+            "comments": [
+                {"trackingCode": "C-T1", "message": "Linked note"},
+                {"trackingCode": "C-B1", "message": "Unrelated job note"},
+            ],
+        }
+        now = datetime(2026, 11, 22, tzinfo=timezone.utc)
+        row, = build_report([job], now)
+        self.assertEqual(row["channel"], "In-Branch")
+        self.assertEqual(row["outcome"], "Approved")
+        self.assertEqual(row["reviewer"], "reviewer")
+        self.assertEqual(row["notes"], ["Task note", "Linked note"])
+        self.assertFalse(row["completed"])
+        job["txns"][0]["properties"]["isBankerAssisted"] = False
+        online, = build_report([job], now)
+        self.assertEqual(online["channel"], "Online")
