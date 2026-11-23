@@ -32,7 +32,7 @@ class FluentAPIBase:
         self.timeout = timeout
         
         self.session = requests.Session()
-        self.session.auth = HTTPBasicAuth(username, password)
+        self.session.auth = HTTPBasicAuth(self.username, self.password)
         self._auth_retry_count = 0
 
 
@@ -46,7 +46,8 @@ class FluentAPIBase:
         cache_dir = "jm_cache"     
         os.makedirs(cache_dir, exist_ok=True)
         
-        filepath = f"{cache_dir}/"+hashlib.sha256("_".join(f"{key}-{value}" for key, value in data.items()).encode() ).hexdigest()+ ".json"
+        cache_key = json.dumps([method, url, self.username, data], sort_keys=True)
+        filepath = os.path.join(cache_dir, hashlib.sha256(cache_key.encode("utf-8")).hexdigest() + ".json")
 
         if os.path.exists(filepath):         
             if debug:             
@@ -145,46 +146,40 @@ class FluentAPITransactionSearch:
                 '/txnquery/listValues', data =base_payload , retries=1, delay=2
                 )
 
-            indirect_payloads = self.client.make_request(
-                        '/txnquery/listValues', data ={
-                                "setStartDate": startDate.isoformat().split(".")[0] + " MDT",
-                                "setEndDate": endDate.isoformat().split(".")[0] + " MDT",
-                                "withFormXml": "true",
-                                "setFormStatus": "Abandoned",
-                                "setFormCode": form_code
-                            } , retries=1, delay=2
-                        )
+            payloads = [direct_payloads]
+            if not tracking_code:
+                for status in ("Abandoned", "Saved"):
+                    payloads.append(self.client.make_request(
+                        "/txnquery/listValues",
+                        data={
+                            "setStartDate": base_payload["setStartDate"],
+                            "setEndDate": base_payload["setEndDate"],
+                            "withFormXml": base_payload["withFormXml"],
+                            "setFormStatus": status,
+                            "setFormCode": form_code,
+                        },
+                        retries=1,
+                        delay=2,
+                    ))
 
-            saved_payloads = self.client.make_request(
-                                '/txnquery/listValues', data ={
-                                        "setStartDate": startDate.isoformat().split(".")[0] + " MDT",
-                                        "setEndDate": endDate.isoformat().split(".")[0] + " MDT",
-                                        "withFormXml": "true",
-                                        "setFormStatus": "Saved",
-                                        "setFormCode": form_code
-                                    } , retries=1, delay=2
-                                )
-            
+            if any(not isinstance(payload, list) for payload in payloads):
+                raise TransactionSearchError("Journey Manager did not return a transaction list")
 
-            if len(direct_payloads) == 0:
-                continue
+            seen_ids = set()
+            all_transactions = []
+            for payload in payloads:
+                for txn in payload:
+                    if not isinstance(txn, dict):
+                        raise TransactionSearchError("Journey Manager returned an invalid transaction")
+                    txn_id = txn.get("id")
+                    if not txn_id:
+                        raise TransactionSearchError("Transaction payload did not include an id")
+                    if txn_id in seen_ids:
+                        continue
+                    seen_ids.add(txn_id)
+                    all_transactions.append(txn)
 
-            if isinstance(indirect_payloads, dict) != 0:
-                direct_payloads.update(indirect_payloads)
-
-            if isinstance(saved_payloads, dict):
-                direct_payloads.update(saved_payloads)
-
-            if len(direct_payloads) == 0:
-                continue
-
-            
-
-        
-            for txn in direct_payloads:
-                if not isinstance(txn, dict):
-                    print(txn)
-                    continue
+            for txn in all_transactions:
                 txn_id = txn.get("id")
 
                 if not txn_id:
