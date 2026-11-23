@@ -41,6 +41,8 @@ def jm_fluent_base_url(base_url=None):
 
 def jm_workspaces_url(base_url=None):
     """Build the separate workspaces API against the server/deployment root."""
+    if base_url is None:
+        base_url = get_env_value("JM_WORKSPACES_URL") or os.environ.get("JM_WORKSPACES_URL")
     parsed, path = _configured_url(base_url)
     if path.endswith(_MANAGER_FLUENT_PATH):
         path = path[:-len(_MANAGER_FLUENT_PATH)]
@@ -48,4 +50,6 @@ def jm_workspaces_url(base_url=None):
         path = path[:-len(_FLUENT_PATH)]
     elif path.endswith("/manager"):
         path = path[:-len("/manager")]
-    return urlunsplit((parsed.scheme, parsed.netloc, path + "/workspaces", "", ""))
+    if not path.endswith("/workspaces"):
+        path += "/workspaces"
+    return urlunsplit((parsed.scheme, parsed.netloc, path, "", ""))

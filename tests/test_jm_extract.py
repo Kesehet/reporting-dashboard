@@ -89,7 +89,8 @@ class EndpointTests(unittest.TestCase):
 
     def test_workspace_variants(self):
         for value in ("https://jm.example", "https://jm.example/secure/rest/fluentapi",
-                      "https://jm.example/manager/secure/rest/fluentapi"):
+                      "https://jm.example/manager/secure/rest/fluentapi",
+                      "https://jm.example/workspaces/"):
             self.assertEqual(jm_workspaces_url(value), "https://jm.example/workspaces")
 
     def test_invalid_configuration_does_not_make_request(self):
