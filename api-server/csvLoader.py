@@ -490,7 +490,7 @@ def update_JMExtracts(sql, txn, *, report_error=None):
             f"SELECT eCATrackingCode FROM [DigitalReport].[dbo].[Transactions] "
             f"WHERE {date_filter} ORDER BY AppStartDate ASC", **query_options
         )
-        if all_codes == 0:
+        if report_error is not None and all_codes == 0:
             all_codes = []
         if not isinstance(all_codes, list):
             raise RuntimeError("Failed to query transactions for JM extraction")
@@ -508,7 +508,7 @@ def update_JMExtracts(sql, txn, *, report_error=None):
             "WHERE tID IS NOT NULL AND tID != '' AND RawData IS NOT NULL "
             "AND LTRIM(RTRIM(RawData)) NOT IN ('', 'null')", **query_options
         )
-        if valid_codes == 0:
+        if report_error is not None and valid_codes == 0:
             valid_codes = []
         if not isinstance(valid_codes, list):
             raise RuntimeError("Failed to query existing JM RawData")
