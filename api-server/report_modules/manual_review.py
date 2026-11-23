@@ -17,7 +17,9 @@ OUTCOMES = {
     "deny": "Denied", "denied": "Denied", "decline": "Denied", "declined": "Denied",
     "reject": "Denied", "rejected": "Denied",
 }
-PAGE_SIZE = 100
+JOB_PAGE_SIZE = 20
+DETAIL_BATCH_SIZE = 10
+QUERY_TIMEOUT_SECONDS = 60
 
 
 class WorkspaceReportError(Exception):
@@ -46,57 +48,91 @@ def decision(record):
     return None
 
 
-def job_rows(workspace, start, end):
-    if not workspace.login():
-        raise WorkspaceReportError("Journey Manager Workspace sign-in failed.")
-
-    payload = {
-        "attributes": [
-            "jobKey", "jobRefNumber", "status", "timeFinished", "timeCreated",
-            "steps", "txns", "txns.comments", "txns.properties",
-        ],
-        "filters": [{
-            "operator": "and",
-            "criteria": [f"timeCreated >= '{start}'", f"timeCreated < '{end}'"],
-        }],
-        "sorts": ["timeCreated asc", "jobRefNumber asc"],
-        "fetchLimit": PAGE_SIZE,
-    }
+def query_jobs(workspace, payload, stage):
     offset = 0
     while True:
-        response = workspace.session.post(
-            workspace.base_url.rstrip("/") + "/secure/api/v1/job/query",
-            json={**payload, "fetchOffset": offset},
-            timeout=20,
-            allow_redirects=False,
-        )
+        try:
+            response = workspace.session.post(
+                workspace.base_url.rstrip("/") + "/secure/api/v1/job/query",
+                json={**payload, "fetchOffset": offset},
+                timeout=(10, QUERY_TIMEOUT_SECONDS),
+                allow_redirects=False,
+            )
+        except Timeout:
+            raise Timeout(f"Workspace {stage} timed out at offset {offset}") from None
         status = response.status_code
         if 300 <= status < 400 or status in (401, 403):
             raise WorkspaceReportError(
-                f"Journey Manager did not authorize the job history request (HTTP {status})."
+                f"Journey Manager did not authorize the {stage} (HTTP {status})."
             )
         if status != 200:
             raise WorkspaceReportError(
-                f"Journey Manager rejected the job history request (HTTP {status})."
+                f"Journey Manager rejected the {stage} (HTTP {status})."
             )
         try:
             data = response.json()
         except ValueError:
-            raise WorkspaceReportError("Journey Manager job history returned a non-JSON response.") from None
+            raise WorkspaceReportError(f"Journey Manager {stage} returned a non-JSON response.") from None
         rows = data.get("result") if isinstance(data, dict) else None
         if not isinstance(rows, list):
-            raise WorkspaceReportError("Journey Manager job history did not contain a result list.")
+            raise WorkspaceReportError(f"Journey Manager {stage} did not contain a result list.")
         total = data.get("totalCount")
         if not rows:
             if isinstance(total, int) and offset < total:
-                raise ValueError("Incomplete Workspace job response")
-            break
+                raise WorkspaceReportError(f"Journey Manager returned an incomplete {stage}.")
+            return
         yield from rows
         offset += len(rows)
         if isinstance(total, int) and offset >= total:
-            break
+            return
         if offset >= 20000:
-            raise ValueError("Workspace range is too large")
+            raise WorkspaceReportError("Workspace range is too large. Select a shorter date range.")
+
+
+def job_rows(workspace, start, end):
+    if not workspace.login():
+        raise WorkspaceReportError("Journey Manager Workspace sign-in failed.")
+
+    date_filter = {
+        "operator": "and",
+        "criteria": [f"timeCreated >= '{start}'", f"timeCreated < '{end}'"],
+    }
+    sorts = ["timeCreated asc", "jobRefNumber asc"]
+    summaries = query_jobs(workspace, {
+        "attributes": ["jobRefNumber", "steps"],
+        "filters": [date_filter],
+        "sorts": sorts,
+        "fetchLimit": JOB_PAGE_SIZE,
+    }, "job history scan")
+
+    references = {}
+    for job in summaries:
+        if not any(normalized(step.get("name")) in REVIEW_STEPS for step in job.get("steps") or []):
+            continue
+        reference = job.get("jobRefNumber")
+        if not isinstance(reference, str) or not re.fullmatch(r"[A-Za-z0-9_-]+", reference):
+            raise WorkspaceReportError("Journey Manager returned an invalid review job reference.")
+        references[reference] = None
+
+    references = list(references)
+    for offset in range(0, len(references), DETAIL_BATCH_SIZE):
+        batch = references[offset:offset + DETAIL_BATCH_SIZE]
+        reference_list = ", ".join(f"'{reference}'" for reference in batch)
+        details = list(query_jobs(workspace, {
+            "attributes": [
+                "jobKey", "jobRefNumber", "status", "timeFinished", "timeCreated",
+                "steps", "txns", "txns.comments", "txns.properties",
+            ],
+            "filters": [
+                date_filter,
+                {"operator": "and", "criteria": [f"jobRefNumber IN ({reference_list})"]},
+            ],
+            "sorts": sorts,
+            "fetchLimit": DETAIL_BATCH_SIZE,
+        }, "review detail query"))
+        if {job.get("jobRefNumber") for job in details} != set(batch):
+            raise WorkspaceReportError("Journey Manager returned incomplete review details. Rerun the report.")
+        yield from details
 
 
 def tracking_code(job, transactions):
@@ -271,8 +307,8 @@ def manual_review():
     except WorkspaceReportError as error:
         current_app.logger.warning("Manual Review Workspace query failed: %s", error)
         return jsonify(error=str(error)), 502
-    except Timeout:
-        current_app.logger.warning("Manual Review Workspace job query timed out")
+    except Timeout as error:
+        current_app.logger.warning("Manual Review query timed out: %s", error)
         return jsonify(error="Journey Manager job history request timed out. Try a shorter date range."), 504
     except (RequestException, ValueError, TypeError, AttributeError) as error:
         current_app.logger.warning("Manual Review Workspace query failed: %s", type(error).__name__)
