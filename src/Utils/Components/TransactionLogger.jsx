@@ -19,7 +19,7 @@ const TransactionLogger = ({ dates, requestedTransactions = [] }) => {
 
     const [tableParams, setTableParams] = useState(null);
     const [loading, setLoading] = useState(false);
-    const [formChanged, setformChanged] = useState(true);
+    const [error, setError] = useState('');
 
     const formCodeOptions = useMemo(
         () => [
@@ -47,8 +47,10 @@ const TransactionLogger = ({ dates, requestedTransactions = [] }) => {
     );
 
     useEffect(() => {
+        let active = true;
         const buildParams = async () => {
             setLoading(true);
+            setError('');
             try {
                 const startDate =
                     dates?.[0]?.toISOString().split('T')[0] ??
@@ -60,7 +62,7 @@ const TransactionLogger = ({ dates, requestedTransactions = [] }) => {
 
                 let trackingCodes = [...requestedTransactionFilter];
 
-                if (trackingCodes.length === 0 || formChanged) {
+                if (trackingCodes.length === 0) {
                     const service = new ChartDataService(
                         'Transaction Logger Recent Txns',
                         {
@@ -72,7 +74,8 @@ const TransactionLogger = ({ dates, requestedTransactions = [] }) => {
 
                     const recentTxns = await service.getChart();
 
-                    trackingCodes = recentTxns?.[0] || [];
+                    if (!Array.isArray(recentTxns)) throw new Error('Invalid recent transaction response');
+                    trackingCodes = recentTxns.flat().filter(code => typeof code === 'string' && code.trim());
                 }
 
                 const params = {
@@ -81,19 +84,24 @@ const TransactionLogger = ({ dates, requestedTransactions = [] }) => {
                     form_code: selectedFormCode
                 };
 
-                if (!formChanged) {
+                if (trackingCodes.length) {
                     params.tracking_codes = trackingCodes.join(',');
                 }
 
-                setTableParams(params);
+                if (active) setTableParams(params);
+            } catch {
+                if (active) {
+                    setTableParams(null);
+                    setError('Unable to load recent Journey Manager transactions. You can try a specific transaction ID.');
+                }
             } finally {
-                setLoading(false);
-                setformChanged(false);
+                if (active) setLoading(false);
             }
         };
 
         buildParams();
-    }, [dates, requestedTransactionFilter, selectedFormCode, formChanged]);
+        return () => { active = false; };
+    }, [dates, requestedTransactionFilter, selectedFormCode]);
 
     const parseRequestedTransactions = (value) => {
         if (!value) return [];
@@ -138,7 +146,6 @@ const TransactionLogger = ({ dates, requestedTransactions = [] }) => {
                             options={formCodeOptions}
                             onChange={(e) => {
                                     setSelectedFormCode(e.value);
-                                    setformChanged(true);
                                     setRequestedTransactionFilter([]);
                                 }
                             }
@@ -151,6 +158,7 @@ const TransactionLogger = ({ dates, requestedTransactions = [] }) => {
                         />
                     </div>
 
+                    {error && <p role="alert">{error}</p>}
                     {loading ? (
                         <p>Loading recent transactions...</p>
                     ) : (
