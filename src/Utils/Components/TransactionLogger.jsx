@@ -1,8 +1,8 @@
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useState, useMemo } from 'react';
 import { InputText } from 'primereact/inputtext';
 import { Dropdown } from 'primereact/dropdown';
 import { Button } from 'primereact/button';
-import ChartDataService from '../../Services/ChartDataService';
+import '../../Styles/transactionLogger.css';
 import ChartCard from './ChartCard';
 import FNBDataTable from './FNBDataTable';
 
@@ -16,10 +16,6 @@ const TransactionLogger = ({ dates, requestedTransactions = [] }) => {
 
     const [selectedFormCode, setSelectedFormCode] =
         useState('fnb-consumer');
-
-    const [tableParams, setTableParams] = useState(null);
-    const [loading, setLoading] = useState(false);
-    const [error, setError] = useState('');
 
     const formCodeOptions = useMemo(
         () => [
@@ -46,131 +42,53 @@ const TransactionLogger = ({ dates, requestedTransactions = [] }) => {
         []
     );
 
-    useEffect(() => {
-        let active = true;
-        const buildParams = async () => {
-            setLoading(true);
-            setError('');
-            try {
-                const startDate =
-                    dates?.[0]?.toISOString().split('T')[0] ??
-                    localStorage.getItem('start_date');
-
-                const endDate =
-                    dates?.[1]?.toISOString().split('T')[0] ??
-                    localStorage.getItem('end_date');
-
-                let trackingCodes = [...requestedTransactionFilter];
-
-                if (trackingCodes.length === 0) {
-                    const service = new ChartDataService(
-                        'Transaction Logger Recent Txns',
-                        {
-                            start_date: startDate,
-                            end_date: endDate,
-                            form_code: selectedFormCode
-                        }
-                    );
-
-                    const recentTxns = await service.getChart();
-
-                    if (!Array.isArray(recentTxns)) throw new Error('Invalid recent transaction response');
-                    trackingCodes = recentTxns.flat().filter(code => typeof code === 'string' && code.trim());
-                }
-
-                const params = {
-                    start_date: startDate,
-                    end_date: endDate,
-                    form_code: selectedFormCode
-                };
-
-                if (trackingCodes.length) {
-                    params.tracking_codes = trackingCodes.join(',');
-                }
-
-                if (active) setTableParams(params);
-            } catch {
-                if (active) {
-                    setTableParams(null);
-                    setError('Unable to load recent Journey Manager transactions. You can try a specific transaction ID.');
-                }
-            } finally {
-                if (active) setLoading(false);
-            }
-        };
-
-        buildParams();
-        return () => { active = false; };
-    }, [dates, requestedTransactionFilter, selectedFormCode]);
-
-    const parseRequestedTransactions = (value) => {
-        if (!value) return [];
-
-        return value
-            .split(',')
-            .map(x => x.trim())
-            .filter(Boolean);
+    const startDate = dates?.[0]?.toISOString().split('T')[0] ?? localStorage.getItem('start_date');
+    const endDate = dates?.[1]?.toISOString().split('T')[0] ?? localStorage.getItem('end_date');
+    const tableParams = {
+        start_date: startDate,
+        end_date: endDate,
+        form_code: selectedFormCode,
+        ...(requestedTransactionFilter.length
+            ? { tracking_codes: requestedTransactionFilter.join(',') }
+            : {}),
     };
 
-    const handleLoadTransactions = () => {
-        setRequestedTransactionFilter(
-            parseRequestedTransactions(requestedTxnInput)
-        );
-    };
+    function loadTransactions(event) {
+        event.preventDefault();
+        const codes = [...new Set(requestedTxnInput.split(',').map(code => code.trim()).filter(Boolean))];
+        setRequestedTransactionFilter(codes);
+    }
 
     return (
-        <ChartCard
-            title="Transaction Logger"
-            styleNow={{ width: '100%' }}
-            noDialog={true}
+        <ChartCard title="Transaction Logger" styleNow={{ width: '100%' }} noDialog
             items={
-                <div style={{ width: '100%' }}>
-                    <div
-                        style={{
-                            marginBottom: '0.75rem',
-                            display: 'flex',
-                            gap: '0.5rem',
-                            flexWrap: 'wrap'
-                        }}
-                    >
-                        <InputText
-                            value={requestedTxnInput}
-                            onChange={(e) =>
-                                setRequestedTxnInput(e.target.value)
-                            }
-                            placeholder="Transaction IDs (comma separated)"
-                        />
-
-                        <Dropdown
-                            value={selectedFormCode}
-                            options={formCodeOptions}
-                            onChange={(e) => {
-                                    setSelectedFormCode(e.value);
+                <div className="transaction-logger">
+                    <form className="transaction-logger__filters" onSubmit={loadTransactions}>
+                        <label htmlFor="logger-tracking-codes">
+                            Transaction IDs
+                            <InputText id="logger-tracking-codes" value={requestedTxnInput}
+                                onChange={event => setRequestedTxnInput(event.target.value)}
+                                placeholder="Comma-separated IDs" />
+                        </label>
+                        <label htmlFor="logger-form">
+                            Journey Manager form
+                            <Dropdown inputId="logger-form" value={selectedFormCode}
+                                options={formCodeOptions} onChange={event => {
+                                    setSelectedFormCode(event.value);
                                     setRequestedTransactionFilter([]);
-                                }
-                            }
-                        />
-
-                        <Button
-                            label="Load"
-                            icon="pi pi-search"
-                            onClick={handleLoadTransactions}
-                        />
-                    </div>
-
-                    {error && <p role="alert">{error}</p>}
-                    {loading ? (
-                        <p>Loading recent transactions...</p>
-                    ) : (
-                        tableParams && (
-                            <FNBDataTable
-                                key={JSON.stringify(tableParams)}
-                                data="Transaction Logger"
-                                extraParams={tableParams}
-                                styleNow={{ width: '100%' }}
-                            />
-                        )
-                    )}
+                                    setRequestedTxnInput('');
+                                }} />
+                        </label>
+                        <Button type="submit" label="Load transactions" icon="pi pi-search" />
+                    </form>
+                    <section className="transaction-logger__results" aria-labelledby="logger-results-title">
+                        <h2 id="logger-results-title">
+                            {requestedTransactionFilter.length ? 'Transaction search results' : 'Recent transactions'}
+                        </h2>
+                        <p>{startDate} through {endDate}</p>
+                        <FNBDataTable key={JSON.stringify(tableParams)} data="Transaction Logger"
+                            extraParams={tableParams} styleNow={{ width: '100%' }} />
+                    </section>
                 </div>
             }
         />

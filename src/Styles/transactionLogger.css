@@ -1,0 +1,13 @@
+.transaction-logger { display: grid; gap: 1rem; width: 100%; text-align: left; }
+.transaction-logger__filters,
+.transaction-logger__results {
+    min-width: 0;
+    padding: 1rem;
+    border: 1px solid #dce4ee;
+    border-radius: 8px;
+    background: #fff;
+}
+.transaction-logger__filters { display: flex; flex-wrap: wrap; align-items: end; gap: .75rem 1rem; }
+.transaction-logger__filters label { display: grid; gap: .35rem; flex: 1 1 14rem; min-width: 0; font-weight: 600; }
+.transaction-logger__results h2 { color: #003975; font-size: 1.125rem; margin: 0 0 .35rem; }
+.transaction-logger__results > p { margin: 0 0 .75rem; color: #465970; }
