@@ -4,7 +4,7 @@ from datetime import date, datetime, timedelta, timezone
 import re
 
 from flask import Blueprint, current_app, jsonify, request
-from requests import RequestException
+from requests import RequestException, Timeout
 
 from authentication import unauthorized, verify_microsoft_token, verify_token
 from role_filter import all_groups
@@ -18,6 +18,10 @@ OUTCOMES = {
     "reject": "Denied", "rejected": "Denied",
 }
 PAGE_SIZE = 100
+
+
+class WorkspaceReportError(Exception):
+    """A safe reason for a failed Workspace request."""
 
 
 def normalized(value):
@@ -44,7 +48,7 @@ def decision(record):
 
 def job_rows(workspace, start, end):
     if not workspace.login():
-        raise ValueError("Workspace login failed")
+        raise WorkspaceReportError("Journey Manager Workspace sign-in failed.")
 
     payload = {
         "attributes": [
@@ -64,12 +68,24 @@ def job_rows(workspace, start, end):
             workspace.base_url.rstrip("/") + "/secure/api/v1/job/query",
             json={**payload, "fetchOffset": offset},
             timeout=20,
+            allow_redirects=False,
         )
-        response.raise_for_status()
-        data = response.json()
-        rows = data.get("result")
+        status = response.status_code
+        if 300 <= status < 400 or status in (401, 403):
+            raise WorkspaceReportError(
+                f"Journey Manager did not authorize the job history request (HTTP {status})."
+            )
+        if status != 200:
+            raise WorkspaceReportError(
+                f"Journey Manager rejected the job history request (HTTP {status})."
+            )
+        try:
+            data = response.json()
+        except ValueError:
+            raise WorkspaceReportError("Journey Manager job history returned a non-JSON response.") from None
+        rows = data.get("result") if isinstance(data, dict) else None
         if not isinstance(rows, list):
-            raise ValueError("Invalid Workspace job response")
+            raise WorkspaceReportError("Journey Manager job history did not contain a result list.")
         total = data.get("totalCount")
         if not rows:
             if isinstance(total, int) and offset < total:
@@ -252,6 +268,12 @@ def manual_review():
         finally:
             if workspace.session is not None:
                 workspace.session.close()
+    except WorkspaceReportError as error:
+        current_app.logger.warning("Manual Review Workspace query failed: %s", error)
+        return jsonify(error=str(error)), 502
+    except Timeout:
+        current_app.logger.warning("Manual Review Workspace job query timed out")
+        return jsonify(error="Journey Manager job history request timed out. Try a shorter date range."), 504
     except (RequestException, ValueError, TypeError, AttributeError) as error:
         current_app.logger.warning("Manual Review Workspace query failed: %s", type(error).__name__)
         return jsonify(error="Journey Manager could not return the Manual Review history."), 502
