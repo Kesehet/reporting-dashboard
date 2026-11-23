@@ -112,6 +112,8 @@ class FluentAPITransactionSearch:
                    ) -> Dict[str, Any]:
             
         all_possible_results = []
+        tracking_codes = {}
+        seen_ids = set()
         intervals = get_list_of_days_between(start_date, end_date)
         for interval in intervals:
             if isinstance(interval['start_date'], datetime):
@@ -132,7 +134,7 @@ class FluentAPITransactionSearch:
             base_payload = {
                 "setStartDate": startDate.isoformat().split(".")[0] + " MDT",
                 "setEndDate": endDate.isoformat().split(".")[0] + " MDT",
-                "withFormXml": "true",
+                "withFormXml": "false" if just_tracking_code else "true",
             }
             if tracking_code:            
                 base_payload["setTrackingCode"] = tracking_code
@@ -165,7 +167,6 @@ class FluentAPITransactionSearch:
             if any(not isinstance(payload, list) for payload in payloads):
                 raise TransactionSearchError("Journey Manager did not return a transaction list")
 
-            seen_ids = set()
             all_transactions = []
             for payload in payloads:
                 for txn in payload:
@@ -180,10 +181,12 @@ class FluentAPITransactionSearch:
                     all_transactions.append(txn)
 
             for txn in all_transactions:
-                txn_id = txn.get("id")
-
-                if not txn_id:
-                    raise TransactionSearchError("Transaction payload did not include an id")
+                if just_tracking_code:
+                    code = txn.get("trackingCode")
+                    if code:
+                        tracking_codes[code] = None
+                    continue
+                txn_id = txn["id"]
 
                 result: Dict[str, Any] = {
                     "transaction": txn,
@@ -256,8 +259,10 @@ class FluentAPITransactionSearch:
 
                 
                 all_possible_results.append(result)
+            if tracking_code and all_transactions:
+                break
         if just_tracking_code:
-            return list(set([t.get("trackingCode", "") for t in all_possible_results if isinstance(t, dict) ]))
+            return list(tracking_codes)
         
         return all_possible_results
 
