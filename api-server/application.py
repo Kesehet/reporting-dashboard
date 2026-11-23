@@ -105,13 +105,19 @@ def _store_xml(sql, tracking_code, raw_data):
         cursor.close()
 
 
-def update_JMExtract(sql, trackingCode):
+def update_JMExtract(sql, trackingCode, *, report_error=None):
     """Return True only when nonempty, valid XML was persisted successfully."""
+    def failure(message):
+        if report_error is None:
+            print(message)
+        else:
+            report_error(message)
+        return False
+
     if not trackingCode or not str(trackingCode).strip():
-        return False
+        return failure("Missing Journey Manager tracking code.")
     if not sql.connection:
-        print("Journey Manager extraction failed: SQL connection unavailable")
-        return False
+        return failure("Reporting database connection unavailable.")
 
     start_date = datetime.now() - timedelta(days=JM_RETENTION_DAYS)
     end_date = datetime.now()
@@ -124,25 +130,21 @@ def update_JMExtract(sql, trackingCode):
             "setEndDate": end_date.isoformat().split(".")[0] + " MDT",
             "withFormXml": "true",
         })
-    except Exception as exc:
-        print(f"JM XML pull failed for {trackingCode}: {type(exc).__name__}: {exc}")
-        return False
+    except Exception:
+        return failure("Journey Manager request failed.")
 
     if response.status_code != 200:
-        print(f"JM XML pull failed for {trackingCode}: HTTP {response.status_code}")
-        return False
+        return failure(f"Journey Manager returned HTTP {response.status_code}.")
 
     try:
         data = json.loads(response.text)
     except (TypeError, ValueError):
-        print(f"JM XML pull failed for {trackingCode}: invalid JSON response")
-        return False
+        return failure("Journey Manager returned invalid JSON.")
 
     if isinstance(data, dict):
         data = [data]
     if not isinstance(data, list) or not data:
-        print(f"JM XML pull failed for {trackingCode}: no transactions returned")
-        return False
+        return failure("Journey Manager returned no transactions.")
 
     for txn in data:
         if not isinstance(txn, dict) or not txn.get("formXml"):
@@ -151,20 +153,13 @@ def update_JMExtract(sql, trackingCode):
             root = etree.fromstring(txn["formXml"].encode("utf-8"))
             parsed = xml_dict(root).get("Root")
             if not isinstance(parsed, (dict, list)) or not parsed:
-                print(f"JM XML pull failed for {trackingCode}: unexpected/empty XML root")
                 continue
             raw_data = json.dumps(parsed, ensure_ascii=False)
-            saved = _store_xml(sql, trackingCode, raw_data)
-            if saved:
-                print(f"JM XML successfully stored for {trackingCode}")
-                return True
-            print(f"JM XML for {trackingCode} already stored; existing RawData preserved")
+            _store_xml(sql, trackingCode, raw_data)
             return True
-        except (ValueError, TypeError, etree.XMLSyntaxError) as exc:
-            print(f"JM XML pull failed for {trackingCode}: invalid XML ({type(exc).__name__})")
-        except Exception as exc:
-            print(f"JM XML pull failed for {trackingCode}: database write failed ({type(exc).__name__}: {exc})")
-            return False
+        except (ValueError, TypeError, etree.XMLSyntaxError):
+            continue
+        except Exception:
+            return failure("Could not save the Journey Manager extract.")
 
-    print(f"JM XML pull failed for {trackingCode}: no usable formXml in response")
-    return False
+    return failure("Journey Manager returned no usable form XML.")

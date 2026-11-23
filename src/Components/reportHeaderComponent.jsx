@@ -138,6 +138,12 @@ const ReportHeaderComponent = ( dates, setDates, CorBFilter, setCorBFilter, setP
                     section: "Reports",
                 },
                 {
+                    label: 'Post Processing',
+                    icon: 'pi pi-cog',
+                    command: () => setPage('Post Processing'),
+                    section: 'Reports',
+                },
+                {
                     label: 'CSV Loader Reports',
                     icon: 'pi pi-file-excel',
                     command: () => {

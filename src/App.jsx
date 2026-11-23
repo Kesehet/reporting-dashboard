@@ -33,6 +33,7 @@ import CardReport from './Utils/Components/CardReport';
 import TransactionLogger from './Utils/Components/TransactionLogger';
 import { Dropdown } from 'primereact/dropdown';
 import ChartDataService from './Services/ChartDataService';
+import PostProcessingTab from './Components/PostProcessingTab';
 import CsvLoaderReportsTab from './Components/CsvLoaderReportsTab';
 import OppiqReportTab from './Components/OppiqReportTab';
 import ManualReviewReport from './Components/ManualReviewReport';
@@ -718,6 +719,9 @@ function App() {
             }
             else if (page === "Key Rotation") {
                 return <CryptoRotationTab />;
+            }
+            else if (page === "Post Processing") {
+                return <PostProcessingTab />;
             }
             else if (page === "CSV Loader Reports") {
                 return <CsvLoaderReportsTab />;

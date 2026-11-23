@@ -30,6 +30,7 @@ from urllib.parse import urlencode
 from utils import insight_report_to_csv_response, format_numbers_recursive
 from csvLoader import list_csv_report_files, get_tracking_codes_from_file
 from csvLoader import get_tracking_code_missing_reason
+from helper.post_processing import post_processing
 # helpers for quick_insert
 import tempfile
 import csv
@@ -48,6 +49,7 @@ app.register_blueprint(crypto_api)
 app.register_blueprint(authentication)
 app.register_blueprint(oppiq_api)
 app.register_blueprint(manual_review_api)
+app.register_blueprint(post_processing)
 CSV_FOLDER_REPORT = 'uploads/report'
 CSV_FOLDER_REPORTS = 'uploads/reports'
 
