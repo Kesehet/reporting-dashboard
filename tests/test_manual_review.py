@@ -2,9 +2,11 @@ from datetime import datetime, timezone
 from pathlib import Path
 import sys
 import unittest
+from types import SimpleNamespace
+from unittest.mock import Mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "api-server"))
-from report_modules.manual_review import build_report
+from report_modules.manual_review import build_report, job_rows
 
 
 class ManualReviewReportTests(unittest.TestCase):
@@ -59,3 +61,22 @@ class ManualReviewReportTests(unittest.TestCase):
         self.assertFalse(row["completed"])
         self.assertEqual(row["duration_seconds"], 3600)
         self.assertIsNone(row["outcome"])
+
+    def test_job_scan_loads_details_only_for_review_references(self):
+        review = {"jobRefNumber": "C-A1", "steps": [{"name": "Review Application"}]}
+        other = {"jobRefNumber": "C-A2", "steps": [{"name": "Application Start"}]}
+        detail = {**review, "txns": [{"trackingCode": "C-A1"}]}
+        workspace = Mock(base_url="https://workspace.example")
+        workspace.session.post.side_effect = [
+            SimpleNamespace(status_code=200, json=lambda: {"result": [other], "totalCount": 2}),
+            SimpleNamespace(status_code=200, json=lambda: {"result": [review], "totalCount": 2}),
+            SimpleNamespace(status_code=200, json=lambda: {"result": [detail], "totalCount": 1}),
+        ]
+        self.assertEqual(list(job_rows(workspace, "2026-11-21", "2026-11-23")), [detail])
+        first, second, third = [
+            call.kwargs["json"] for call in workspace.session.post.call_args_list
+        ]
+        self.assertEqual(first["attributes"], ["jobRefNumber", "steps"])
+        self.assertEqual(second["fetchOffset"], 1)
+        self.assertIn("txns.comments", third["attributes"])
+        self.assertEqual(third["filters"][1]["criteria"], ["jobRefNumber IN ('C-A1')"])
