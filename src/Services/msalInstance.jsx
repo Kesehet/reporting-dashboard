@@ -1,5 +1,5 @@
 import { PublicClientApplication, EventType } from '@azure/msal-browser';
-import apiBaseUrl from './apiBaseUrl';
+import apiBaseUrl, { msalConfigForLocation } from './apiBaseUrl';
 
 let clientPromise;
 let interactionInProgress = false;
@@ -9,7 +9,7 @@ export async function ensureMsal() {
     clientPromise = (async () => {
       const response = await fetch(apiBaseUrl() + '/msalConfig');
       if (!response.ok) throw new Error('Microsoft SSO is not configured.');
-      const client = new PublicClientApplication(await response.json());
+      const client = new PublicClientApplication(msalConfigForLocation(await response.json()));
       await client.initialize();
       client.addEventCallback(event => {
         if ([EventType.LOGIN_START, EventType.ACQUIRE_TOKEN_START, EventType.LOGOUT_START].includes(event.eventType)) {
