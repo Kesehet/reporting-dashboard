@@ -1,3 +1,4 @@
+import apiBaseUrl from '../../Services/apiBaseUrl';
 import React, { useEffect, useMemo, useState } from 'react';
 import { MultiSelect } from 'primereact/multiselect';
 import FNBDataTable from './FNBDataTable';
@@ -190,7 +191,7 @@ const MultiFilterTable = ({
       <h4>Create Your Own Graph</h4>
       <MultiFilterChart
         key={refreshKey+"-C"}
-        serverUrl={(process.env.NODE_ENV ==='production'? (window.location.href+"api"):"http://localhost:5000")+"/chart_builder"}
+        serverUrl={apiBaseUrl() + "/chart_builder"}
         data={'All Filters Table'}
         extraParams={extraParams}
         title="Sample Chart"
