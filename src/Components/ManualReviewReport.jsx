@@ -7,10 +7,7 @@ import '../Styles/manualReviewReport.css';
 import { Column } from 'primereact/column';
 import sessionHeaders from '../Services/sessionHeaders';
 
-const endpoint = process.env.REACT_APP_API_SERVER_BASE_URL?.replace(/\/$/, '') ||
-    (process.env.NODE_ENV === 'production'
-        ? new URL('api', new URL('.', window.location.href)).href
-        : 'http://localhost:5000');
+import apiBaseUrl from '../Services/apiBaseUrl';
 
 function localDate(date) {
     const local = new Date(date.getTime() - date.getTimezoneOffset() * 60000);
@@ -47,7 +44,7 @@ export default function ManualReviewReport() {
         const params = new URLSearchParams({ start_date: query.start, end_date: query.end });
         async function load() {
             try {
-                const response = await fetch(`${endpoint}/reports/manual-review?${params}`, {
+                const response = await fetch(`${apiBaseUrl()}/reports/manual-review?${params}`, {
                     headers: sessionHeaders(),
                     cache: 'no-store',
                     signal: controller.signal,
