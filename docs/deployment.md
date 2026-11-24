@@ -168,7 +168,7 @@ SQL_USER=eStoreApp
 SQL_PASSWORD=StrongPassword123!
 
 # API Configuration
-REACT_APP_API_SERVER_BASE_URL=https://api.estore.domain.com
+# Browser API URL is automatic; expose /api on the dashboard origin.
 RELAY_SERVER_SECRET=your-jwt-secret-key
 
 # Authentication
