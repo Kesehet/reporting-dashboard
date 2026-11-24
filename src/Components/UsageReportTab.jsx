@@ -23,7 +23,7 @@ function ReportTable({ title, rows, tab = false, chart = false }) {
             <DataTable value={rows} paginator rows={10} rowsPerPageOptions={[10, 25, 50]}
                 sortField="count" sortOrder={-1} stripedRows showGridlines scrollable emptyMessage="No records">
                 <Column field="name" header={tab ? 'Tab' : chart ? 'Chart' : 'API'} sortable />
-                {!tab && <Column field="method" header="Method" sortable />}
+                {!tab && !chart && <Column field="method" header="Method" sortable />}
                 <Column field="count" header={tab ? 'Visits' : 'Requests'} sortable />
                 {!tab && <Column field="avg_ms" header="Average (ms)" sortable />}
                 {!tab && <Column field="max_ms" header="Maximum (ms)" sortable />}
@@ -68,6 +68,11 @@ export default function UsageReportTab() {
         ['Cache warming requests', report.cache_warm_requests],
     ];
     const slowest = [...report.chart].sort((a, b) => b.avg_ms - a.avg_ms).slice(0, 10);
+    const hourly = Object.values(report.hourly.reduce((hours, row) => {
+        if (!hours[row.hour]) hours[row.hour] = { hour: row.hour, api: 0, chart: 0, tab: 0 };
+        hours[row.hour][row.kind] = row.count;
+        return hours;
+    }, {})).sort((a, b) => b.hour - a.hour);
     return (
         <div className="w3-container w3-card-4" style={{ padding: '24px' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -90,13 +95,21 @@ export default function UsageReportTab() {
                 <h3>Slowest charts</h3>
                 <DataTable value={slowest} sortField="avg_ms" sortOrder={-1} stripedRows showGridlines emptyMessage="No records">
                     <Column field="name" header="Chart" sortable />
-                    <Column field="method" header="Method" sortable />
                     <Column field="avg_ms" header="Average (ms)" sortable />
                     <Column field="max_ms" header="Maximum (ms)" sortable />
                     <Column field="count" header="Requests" sortable />
                 </DataTable>
             </section>
             <ReportTable title="APIs" rows={report.api} />
+            <section style={{ marginTop: '24px' }}>
+                <h3>Hourly activity</h3>
+                <DataTable value={hourly} paginator rows={12} stripedRows showGridlines emptyMessage="No records">
+                    <Column field="hour" header="Hour" body={row => new Date(row.hour * 1000).toLocaleString()} sortable />
+                    <Column field="api" header="API requests" sortable />
+                    <Column field="chart" header="Chart requests" sortable />
+                    <Column field="tab" header="Tab visits" sortable />
+                </DataTable>
+            </section>
         </div>
     );
 }

@@ -143,9 +143,9 @@ function App() {
     const loggedIn = new AuthorizationService('', '').isLoggedIn();
     const previousUsageTab = React.useRef(null);
     useEffect(() => {
-        if (!loggedIn || showPage === 'loading' || showPage === 'Usage Report' || previousUsageTab.current === showPage) return;
+        if (!loggedIn || showPage === 'loading' || previousUsageTab.current === showPage) return;
         previousUsageTab.current = showPage;
-        recordTabVisit(showPage);
+        if (showPage !== 'Usage Report') recordTabVisit(showPage);
     }, [loggedIn, showPage]);
     if (!loggedIn) return <ReportLoginComponent />;
 

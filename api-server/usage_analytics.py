@@ -3,7 +3,6 @@ from contextlib import closing, contextmanager
 from datetime import date
 from pathlib import Path
 import sqlite3
-import sys
 import time
 from threading import Lock
 from urllib.parse import urlencode, quote
@@ -76,9 +75,10 @@ class UsageStore:
     @contextmanager
     def connection(self):
         self.path.parent.mkdir(parents=True, exist_ok=True)
+        missing = not self.path.exists()
         with closing(sqlite3.connect(self.path, timeout=0.15)) as db, db:
             db.row_factory = sqlite3.Row
-            if not self._ready or not self.path.exists():
+            if not self._ready or missing:
                 with self._lock:
                     db.execute("PRAGMA journal_mode=WAL")
                     db.executescript("""
@@ -114,13 +114,13 @@ class UsageStore:
         args = (now - DAY, now)
         with self.connection() as db:
             rows = db.execute(
-                f"""SELECT kind,name,method,COUNT(*) AS count,
+                f"""SELECT kind,name,CASE WHEN kind = 'api' THEN method ELSE '' END AS method,COUNT(*) AS count,
                     ROUND(AVG(duration_ms),1) AS avg_ms, ROUND(MAX(duration_ms),1) AS max_ms,
                     SUM(CASE WHEN status >= 400 THEN 1 ELSE 0 END) AS errors,
                     SUM(CASE WHEN cache_state IN ('hit','wait_hit') THEN 1 ELSE 0 END) AS cache_hits,
                     SUM(CASE WHEN cache_state = 'miss' THEN 1 ELSE 0 END) AS cache_misses
                     FROM usage_events WHERE {where}
-                    GROUP BY kind,name,method ORDER BY count DESC,name,method""", args
+                    GROUP BY kind,name,CASE WHEN kind = 'api' THEN method ELSE '' END ORDER BY count DESC,name,method""", args
             ).fetchall()
             series = db.execute(
                 f"""SELECT CAST(at / 3600 AS INTEGER)*3600 AS hour,kind,COUNT(*) AS count
@@ -211,7 +211,8 @@ def install_usage_analytics(app):
         if (rule is None or request.blueprint == "usage_analytics"
                 or request.method in ("OPTIONS", "HEAD") or rule.endpoint == "static"):
             return response
-        duration = round((time.perf_counter() - g.usage_started) * 1000, 2)
+        duration = round((time.perf_counter() - getattr(g, 'usage_started', time.perf_counter())) * 1000, 2)
+        duration = max(0, duration)
         identity = getattr(g, "usage_identity", None)
         source = "dashboard"
         if identity == "api_key":

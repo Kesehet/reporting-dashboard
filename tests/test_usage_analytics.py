@@ -32,6 +32,15 @@ class UsageTests(unittest.TestCase):
         self.assertEqual(other.ranked_cache_urls(now)[0]["count"], 2)
         self.assertEqual(other.ranked_cache_urls(now)[0]["url"], url)
 
+    def test_retention_and_chart_method_aggregation(self):
+        now = time.time()
+        self.store.record("chart", "Monthly In Branch Report", "GET", now=now-8*DAY)
+        self.store.record("chart", "Monthly In Branch Report", "GET", now=now)
+        self.store.record("chart", "Monthly In Branch Report", "POST", now=now)
+        self.assertEqual(self.store.summary(now)["chart"][0]["count"], 2)
+        with self.store.connection() as db:
+            self.assertEqual(db.execute("SELECT COUNT(*) FROM usage_events").fetchone()[0], 2)
+
     def test_http_routes_and_fail_open(self):
         app = Flask(__name__)
         app.config["USAGE_ANALYTICS_DB"] = self.path
@@ -53,6 +62,7 @@ class UsageTests(unittest.TestCase):
             self.assertEqual(data["chart"][0]["cache_misses"], 1)
             self.assertEqual(data["api"][0]["name"], "/charts/<name>")
             self.assertEqual(data["tab"][0]["count"], 1)
+            self.assertEqual(client.post("/usage-report/tab", json={"tab": "private customer"}).status_code, 400)
         with patch("usage_analytics.UsageStore.record", side_effect=OSError):
             self.assertEqual(client.get(url).status_code, 200)
 
