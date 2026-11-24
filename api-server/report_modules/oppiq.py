@@ -129,7 +129,7 @@ def get_oppiq_csv_path():
             base = base.parent
     else:
         base = Path(__file__).resolve().parents[2]
-    return base / "OPPIQ Report" / CSV_FILENAME
+    return base / "OPPIQ_Report" / CSV_FILENAME
 
 
 def save_oppiq_csv(destination=None):
