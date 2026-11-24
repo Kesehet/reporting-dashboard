@@ -32,11 +32,13 @@ for (const key of ['Total-Started', 'Total-Submitted', 'Total-Opened/Approved', 
 }
 
 async function mockBackend(page) {
-  await page.route('**/api/**', route => {
+  const corsHeaders = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'GET, POST, OPTIONS', 'Access-Control-Allow-Headers': '*' };
+  await page.route('http://127.0.0.1:5000/**', route => {
+    if (route.request().method() === 'OPTIONS') return route.fulfill({ status: 204, headers: corsHeaders });
     const pathname = decodeURIComponent(new URL(route.request().url()).pathname);
     let payload = [];
     if (pathname.endsWith('/query')) {
-      return route.fulfill({ contentType: 'text/plain', body: String(route.request().postDataJSON().query) });
+      return route.fulfill({ headers: corsHeaders, contentType: 'text/plain', body: String(route.request().postDataJSON().query) });
     }
     if (pathname.includes('/charts/')) {
       const name = pathname.split('/charts/')[1];
@@ -48,7 +50,7 @@ async function mockBackend(page) {
         payload = { headers: Object.keys(reportRow), rows: [reportRow] };
       } else payload = { headers: ['Month', 'Total'], rows: [], labels: [], list: [], datasetMap: {} };
     } else if (pathname.includes('metrics')) payload = {};
-    return route.fulfill({ contentType: 'application/json', body: JSON.stringify(payload) });
+    return route.fulfill({ headers: corsHeaders, contentType: 'application/json', body: JSON.stringify(payload) });
   });
 }
 
