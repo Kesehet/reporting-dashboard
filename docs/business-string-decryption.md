@@ -6,7 +6,7 @@ The Business String Decryption page is currently hidden from dashboard navigatio
 
 The tool uses server-side keys from the encryption keyring, including existing `enc.key` and `old_enc.key` files when present. Supported AES keys are 16, 24, or 32 bytes. Key material must never be configured through `REACT_APP_*` variables.
 
-The frontend uses `REACT_APP_API_SERVER_BASE_URL` if configured, otherwise `http://localhost:5000` in development and `/api` in production.
+The frontend uses the shared API URL resolver: loopback hosts connect directly to port 5000; deployed hosts use `/api` on the current origin.
 
 The decryption endpoint does not require a separate token. Only expose this backend to a trusted network; anyone able to call the endpoint can decrypt values when the server has a matching key.
 
