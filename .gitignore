@@ -91,6 +91,8 @@ crypto-state/
 
 # OPPIQ CSV is generated locally at API startup; do not commit customer data
 /OPPIQ Report/*.csv
+/OPPIQ_Report/*.csv
+/OPPIQ_Report/.oppiq_*.tmp
 
 /post-processing-history.sqlite3*
 

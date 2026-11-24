@@ -124,7 +124,7 @@ class OppiqReportTests(unittest.TestCase):
 
     def test_save_oppiq_csv_overwrites_one_file(self):
         with tempfile.TemporaryDirectory() as directory:
-            output = Path(directory) / "OPPIQ Report" / "OPPIQ_Report.csv"
+            output = Path(directory) / "OPPIQ_Report" / "OPPIQ_Report.csv"
             output.parent.mkdir()
             output.write_text("previous data", encoding="utf-8")
 
@@ -141,7 +141,7 @@ class OppiqReportTests(unittest.TestCase):
 
     def test_save_oppiq_csv_creates_missing_folder(self):
         with tempfile.TemporaryDirectory() as directory:
-            output = Path(directory) / "OPPIQ Report" / "OPPIQ_Report.csv"
+            output = Path(directory) / "OPPIQ_Report" / "OPPIQ_Report.csv"
             self.assertFalse(output.parent.exists())
 
             saved_path, row_count = oppiq.save_oppiq_csv(output)
@@ -151,6 +151,13 @@ class OppiqReportTests(unittest.TestCase):
             self.assertTrue(output.is_file())
             self.assertEqual([p.name for p in output.parent.iterdir()], ["OPPIQ_Report.csv"])
 
+    def test_source_writes_at_project_root(self):
+        with patch.object(oppiq.sys, "frozen", False, create=True):
+            self.assertEqual(
+                oppiq.get_oppiq_csv_path(),
+                Path(oppiq.__file__).resolve().parents[2] / "OPPIQ_Report" / "OPPIQ_Report.csv",
+            )
+
     def test_frozen_exe_dist_writes_at_project_root(self):
         with tempfile.TemporaryDirectory() as directory:
             project = Path(directory)
@@ -159,12 +166,12 @@ class OppiqReportTests(unittest.TestCase):
                 with patch.object(oppiq.sys, "executable", str(executable)):
                     self.assertEqual(
                         oppiq.get_oppiq_csv_path(),
-                        (project / "OPPIQ Report" / "OPPIQ_Report.csv").resolve(),
+                        (project / "OPPIQ_Report" / "OPPIQ_Report.csv").resolve(),
                     )
 
     def test_failed_csv_refresh_preserves_old_file(self):
         with tempfile.TemporaryDirectory() as directory:
-            output = Path(directory) / "OPPIQ Report" / "OPPIQ_Report.csv"
+            output = Path(directory) / "OPPIQ_Report" / "OPPIQ_Report.csv"
             output.parent.mkdir()
             output.write_text("previous data", encoding="utf-8")
 
