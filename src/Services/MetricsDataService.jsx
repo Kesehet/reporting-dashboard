@@ -1,6 +1,8 @@
+import apiBaseUrl from './apiBaseUrl';
+
 class MetricsDataService {
     constructor(extraParams = {}) {
-        let base = process.env.NODE_ENV === 'production' ? (window.location.href + "api") : "http://localhost:5000";
+        const base = apiBaseUrl();
         this.url = base + "/show_metrics";
         this.extraParams = extraParams;
     }

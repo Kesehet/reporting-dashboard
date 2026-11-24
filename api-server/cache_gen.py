@@ -10,7 +10,7 @@ from daily_api_key import make_daily_api_key
 update_metrics("cache_gen", f"started {datetime.now().isoformat()}")
 # Load environment variables from .env file
 load_dotenv()
-BASE_URL = os.getenv("REACT_APP_API_SERVER_BASE_URL")
+BASE_URL = "http://127.0.0.1:5000"  # Cache generation runs on the API server.
 API_KEY_SECRET = os.getenv("ALL_FILTERS_CHART_API_KEY")
 
 # Function to resolve __OFFSET_N__ placeholders in URLs

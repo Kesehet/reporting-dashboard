@@ -1,14 +1,7 @@
-const baseUrl = () => {
-  if (process.env.REACT_APP_API_SERVER_BASE_URL) {
-    return process.env.REACT_APP_API_SERVER_BASE_URL.replace(/\/$/, '');
-  }
-  if (process.env.NODE_ENV !== 'production') return 'http://localhost:5000';
-  // Resolve relative to the deployed dashboard directory, not its query or hash.
-  return new URL('api', new URL('.', window.location.href)).href.replace(/\/$/, '');
-};
+import apiBaseUrl from './apiBaseUrl';
 
 export async function cryptoRequest(path, body, signal) {
-  const response = await fetch(baseUrl() + '/crypto' + path, {
+  const response = await fetch(apiBaseUrl() + '/crypto' + path, {
     method: body === undefined ? 'GET' : 'POST',
     headers: {
       'Content-Type': 'application/json',

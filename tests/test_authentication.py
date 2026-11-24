@@ -102,6 +102,8 @@ class AuthenticationTests(unittest.TestCase):
         resp = self.client.get('/msalConfig')
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(resp.json['auth']['authority'], 'https://login.microsoftonline.com/tenant-id')
+        self.assertNotIn('redirectUri', resp.json['auth'])
+        self.assertNotIn('postLogoutRedirectUri', resp.json['auth'])
 
 
 

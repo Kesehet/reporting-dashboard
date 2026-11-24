@@ -1,11 +1,9 @@
+import apiBaseUrl from './apiBaseUrl';
+
 /** Server-side decrypt tool client. Never store or log keys or sensitive strings. */
 export default class DecryptionService {
   constructor() {
-    const base = process.env.REACT_APP_API_SERVER_BASE_URL ||
-      (process.env.NODE_ENV === 'production'
-        ? new URL('api', new URL('.', window.location.href)).toString()
-        : 'http://localhost:5000');
-    this.baseUrl = base.replace(/\/$/, '');
+    this.baseUrl = apiBaseUrl();
   }
 
   async decrypt(ciphertext) {

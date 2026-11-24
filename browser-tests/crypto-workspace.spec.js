@@ -23,7 +23,9 @@ const fakeStatus = {
 };
 
 async function mockBackend(page, job = fakeStatus.job) {
-  await page.route('**/api/crypto/**', async route => {
+  const corsHeaders = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'GET, POST, OPTIONS', 'Access-Control-Allow-Headers': '*' };
+  await page.route('http://127.0.0.1:5000/crypto/**', async route => {
+    if (route.request().method() === 'OPTIONS') return route.fulfill({ status: 204, headers: corsHeaders });
     const path = new URL(route.request().url()).pathname;
     let payload;
     if (path.endsWith('/status')) payload = { ...fakeStatus, job };
@@ -34,7 +36,7 @@ async function mockBackend(page, job = fakeStatus.job) {
     else if (path.endsWith('/start')) payload = { state: 'starting', run_id: 'a'.repeat(32) };
     else if (path.endsWith('/rollback')) payload = { state: 'starting', run_id: 'a'.repeat(32) };
     else payload = { error: 'Unknown mock request' };
-    return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(payload) });
+    return route.fulfill({ headers: corsHeaders, status: 200, contentType: 'application/json', body: JSON.stringify(payload) });
   });
 }
 

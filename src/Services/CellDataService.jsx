@@ -1,3 +1,4 @@
+import apiBaseUrl from './apiBaseUrl';
 import React, { useEffect, useState } from 'react';
 
 const CellDataService = ({ query, extraParams = {}, children }) => {
@@ -6,9 +7,7 @@ const CellDataService = ({ query, extraParams = {}, children }) => {
 
     useEffect(() => {
     const fetchData = async () => {
-        let base = process.env.NODE_ENV === 'production'
-            ? (window.location.href + "api")
-            : "http://localhost:5000";
+        const base = apiBaseUrl();
 
         const url = `${base}/query`;
 

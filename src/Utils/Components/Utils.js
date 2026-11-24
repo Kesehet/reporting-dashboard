@@ -1,3 +1,4 @@
+import apiBaseUrl from '../../Services/apiBaseUrl';
 import { Column } from "primereact/column";
 import { ColumnGroup } from "primereact/columngroup";
 import { Row } from "primereact/row";
@@ -351,9 +352,7 @@ export function dataParser(data){
 
 
 const getCellData = async (query, extraParams = {}) => {
-    let base = process.env.NODE_ENV === 'production'
-        ? (window.location.href + "api")
-        : "http://localhost:5000";
+    const base = apiBaseUrl();
     
 
     const url = `${base}/query`;

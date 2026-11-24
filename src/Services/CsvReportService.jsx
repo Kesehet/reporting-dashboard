@@ -1,6 +1,8 @@
+import apiBaseUrl from './apiBaseUrl';
+
 class CsvReportService {
     constructor() {
-        this.baseUrl = process.env.NODE_ENV === 'production' ? (window.location.href + 'api') : 'http://localhost:5000';
+        this.baseUrl = apiBaseUrl();
     }
 
     async getReportStatus(filters = {}) {
