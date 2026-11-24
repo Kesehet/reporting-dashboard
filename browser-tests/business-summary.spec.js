@@ -15,14 +15,16 @@ const fixture = require('./fixtures/business-summary.json');
 
 test('business summary shows whole application counts and unique product codes', async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 1000 });
-  await page.route('**/api/**', route => {
+  const corsHeaders = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'GET, POST, OPTIONS', 'Access-Control-Allow-Headers': '*' };
+  await page.route('http://127.0.0.1:5000/**', route => {
+    if (route.request().method() === 'OPTIONS') return route.fulfill({ status: 204, headers: corsHeaders });
     const pathname = decodeURIComponent(new URL(route.request().url()).pathname);
     let payload = [];
     if (pathname.endsWith('/Business Account Summary Number Of Apps Table')) payload = fixture.apps;
     else if (pathname.endsWith('/Business Account Summary Top 10 Products Table')) payload = fixture.products;
     else if (pathname.includes('/charts/')) payload = { headers: ['-', 'Total'], rows: [['No data', 0]] };
     else if (pathname.endsWith('/metrics')) payload = {};
-    return route.fulfill({ contentType: 'application/json', body: JSON.stringify(payload) });
+    return route.fulfill({ headers: corsHeaders, contentType: 'application/json', body: JSON.stringify(payload) });
   });
   await page.goto('/');
   await page.waitForTimeout(1300);
