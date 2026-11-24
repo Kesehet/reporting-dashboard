@@ -36,6 +36,7 @@ import ChartDataService from './Services/ChartDataService';
 import PostProcessingTab from './Components/PostProcessingTab';
 import CsvLoaderReportsTab from './Components/CsvLoaderReportsTab';
 import OppiqReportTab from './Components/OppiqReportTab';
+import UsageReportTab, { recordTabVisit } from './Components/UsageReportTab';
 import ManualReviewReport from './Components/ManualReviewReport';
 import CryptoRotationTab from './Components/CryptoRotationTab';
 
@@ -139,7 +140,14 @@ function App() {
 
     
 
-    if (!new AuthorizationService('', '').isLoggedIn()) return <ReportLoginComponent />;
+    const loggedIn = new AuthorizationService('', '').isLoggedIn();
+    const previousUsageTab = React.useRef(null);
+    useEffect(() => {
+        if (!loggedIn || showPage === 'loading' || showPage === 'Usage Report' || previousUsageTab.current === showPage) return;
+        previousUsageTab.current = showPage;
+        recordTabVisit(showPage);
+    }, [loggedIn, showPage]);
+    if (!loggedIn) return <ReportLoginComponent />;
 
 
     const getPage = (page) => {
@@ -728,6 +736,9 @@ function App() {
             }
             else if (page === "Manual Review Report") {
                 return <ManualReviewReport />;
+            }
+            else if (page === "Usage Report") {
+                return <UsageReportTab />;
             }
             else if (page === "OPPIQ Report") {
                 return <OppiqReportTab />;

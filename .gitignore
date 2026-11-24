@@ -93,3 +93,6 @@ crypto-state/
 /OPPIQ Report/*.csv
 
 /post-processing-history.sqlite3*
+
+# Local usage history (including SQLite WAL/SHM files)
+**/usage-analytics.sqlite3*
