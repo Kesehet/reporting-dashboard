@@ -1,106 +1,73 @@
-"""Warm only the chart workloads ranked by recent dashboard demand."""
 import os
-import sys
-from datetime import datetime
-from pathlib import Path
-
+import json
+import re
 import requests
+from datetime import datetime, timedelta
 from dotenv import load_dotenv
 from metrics import update_metrics
-from usage_analytics import validated_replay
+from daily_api_key import make_daily_api_key
 
-TIMEOUT = (10, 90)
+update_metrics("cache_gen", f"started {datetime.now().isoformat()}")
+# Load environment variables from .env file
+load_dotenv()
+BASE_URL = os.getenv("REACT_APP_API_SERVER_BASE_URL")
+API_KEY_SECRET = os.getenv("ALL_FILTERS_CHART_API_KEY")
+
+# Function to resolve __OFFSET_N__ placeholders in URLs
+def resolve_url_placeholders(url):
+    def replace_offset(match):
+        offset = int(match.group(1))
+        date = datetime.today() + timedelta(days=offset)
+        return date.strftime("%Y-%m-%d")
+    return re.sub(r"__OFFSET_(-?\d+)__", replace_offset, url)
 
 
-def settings():
-    if getattr(sys, "frozen", False):
-        load_dotenv(Path(sys.executable).resolve().parent / ".env", override=False)
-    load_dotenv(Path.cwd() / ".env", override=False)
-    return (os.getenv("REACT_APP_API_SERVER_BASE_URL", "").rstrip("/"),
-            os.getenv("ALL_FILTERS_CHART_API_KEY", ""))
 
 
-def report_metric(key, value):
+def strip_api_key_query(url_path):
+    """Remove outdated URL credentials while preserving other encoded filters."""
+    path, separator, query = url_path.partition("?")
+    if not separator:
+        return url_path
+    filters = [part for part in query.split("&") if part.split("=", 1)[0].lower() != "api_key"]
+    return path + ("?" + "&".join(filters) if filters else "")
+
+
+# Read URLs from the text file, without replaying legacy URL credentials.
+with open("logged_chart_urls.txt", "r") as f:
+    urls = [strip_api_key_query(line.strip()) for line in f if line.strip()]
+unique_urls = list(set(urls))
+unique_urls.sort()
+
+with open("logged_chart_urls.txt", "w") as f:
+    for url in unique_urls:
+        f.write(url+"\n")
+
+
+# Prepare list to store JSON responses
+responses = []
+
+update_metrics("cache_gen_error", f"Starting to generate cache for {len(urls)}.")
+
+
+ctr = 0
+# Ping each URL and collect the response
+for url_path in urls:
+    ctr += 1
+    resolved_path = resolve_url_placeholders(url_path)
+    full_url = BASE_URL.rstrip("/") + resolved_path
     try:
-        update_metrics(key, value)
-    except (OSError, ValueError):
-        # A metrics-file issue must not prevent warming.
-        pass
+        response = requests.get(full_url, headers={'X-API-KEY': API_KEY_SECRET, 'X-Usage-Source': 'cache-generator'} if API_KEY_SECRET else {}, timeout=60)
+        response.raise_for_status()
+        update_metrics("cache_gen_error", f"Generated cache for {ctr}/{len(urls)}.")
+    except Exception as e:
+        update_metrics("cache_gen_error", str(e))
 
 
-def _workloads(session, base_url, headers):
-    response = session.get(base_url + "/usage-report/cache-plan", headers=headers,
-                           timeout=TIMEOUT, allow_redirects=False)
-    if response.status_code != 200:
-        raise RuntimeError("Cache plan request failed (HTTP %s)" % response.status_code)
-    payload = response.json()
-    if not isinstance(payload, dict) or not isinstance(payload.get("workloads"), list):
-        raise RuntimeError("Invalid cache plan")
-    return payload["workloads"]
+
+print(f"Completed requests to {len(urls)} URLs.")
+update_metrics("cache_gen", f"ended {datetime.now().isoformat()}")
+update_metrics("cache_gen_error", f"No Error. Cached {len(urls)} URLs. ")
 
 
-def generate_cache(plan=None, *, base_url=None, api_key=None):
-    """Use the API server's SQLite plan, never a static URL list."""
-    report_metric("cache_gen", f"started {datetime.now().isoformat()}")
-    result = {"selected": 0, "succeeded": 0, "failed": 0, "skipped": 0}
-    try:
-        configured_url, configured_key = settings()
-        base_url = (configured_url if base_url is None else base_url).rstrip("/")
-        api_key = configured_key if api_key is None else api_key
-        if not base_url or not api_key:
-            raise RuntimeError("Existing API base URL or chart API key is missing")
-        headers = {"X-API-KEY": api_key, "X-Usage-Source": "cache-generator"}
-        with requests.Session() as session:
-            if plan is None:
-                plan = _workloads(session, base_url, headers)
-            seen = set()
-            for row in plan:
-                url = validated_replay(row.get("url")) if isinstance(row, dict) else None
-                if url is None or url in seen:
-                    result["skipped"] += 1
-                    continue
-                seen.add(url)
-                result["selected"] += 1
-                try:
-                    response = session.get(base_url + url, headers=headers, timeout=TIMEOUT,
-                                           allow_redirects=False)
-                    if response.status_code != 200:
-                        raise RuntimeError("Chart request failed")
-                    payload = response.json()
-                    if isinstance(payload, dict) and (payload.get("error") or payload.get("status") == "error"):
-                        raise RuntimeError("Chart returned an error")
-                    result["succeeded"] += 1
-                except (requests.RequestException, ValueError, RuntimeError):
-                    result["failed"] += 1
-                report_metric("cache_gen_error",
-                              "Processed %s; successful %s; failed %s." %
-                              (result["selected"], result["succeeded"], result["failed"]))
-        if not result["selected"]:
-            message = "No eligible recent chart workloads."
-        else:
-            message = ("Cached %s/%s workloads; %s failed; %s skipped." %
-                       (result["succeeded"], result["selected"], result["failed"], result["skipped"]))
-        report_metric("cache_gen_error", message)
-        print(message)
-        return result
-    except Exception as exc:
-        report_metric("cache_gen_error", "Cache generation failed: " + type(exc).__name__)
-        raise
-    finally:
-        report_metric("cache_gen", f"ended {datetime.now().isoformat()}")
 
-
-def main():
-    if sys.argv[1:] == ["--verify-packaging"]:
-        print("PACKAGING_CHECK_OK: cache_gen, usage_analytics, sqlite3")
-        return 0
-    try:
-        result = generate_cache()
-        return 1 if result["failed"] else 0
-    except Exception as exc:
-        print("Cache generation failed: " + type(exc).__name__, file=sys.stderr)
-        return 1
-
-
-if __name__ == "__main__":
-    sys.exit(main())

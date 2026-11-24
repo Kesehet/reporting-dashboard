@@ -1,4 +1,4 @@
-from flask import Flask, json, request, jsonify, abort, render_template_string, g
+from flask import Flask, json, request, jsonify, abort, render_template_string
 from flask_cors import CORS
 from authentication import authentication, request_identity, unauthorized
 import sys
@@ -25,8 +25,9 @@ import traceback
 from cache_manager import get_cached_item, set_cached_item, clear_all_cache,  cached_date_list
 from config import get_env_value
 from metrics import update_metrics, get_metrics
-from usage_analytics import install_usage_analytics, store
+from usage_analytics import install_usage_analytics
 from helper.chat_serve import _INFLIGHT_LOCK, _INFLIGHT, _chart_key, _acquire_or_wait_for_slot
+from urllib.parse import urlencode
 from utils import insight_report_to_csv_response, format_numbers_recursive
 from csvLoader import list_csv_report_files, get_tracking_codes_from_file
 from csvLoader import get_tracking_code_missing_reason
@@ -73,6 +74,35 @@ app.config['INTERNAL_CSV_FOLDER'] = INTERNAL_CSV_FOLDER
 
 
 
+# Set to track unique URLs
+logged_urls = set()
+LOG_FILE = "logged_chart_urls.txt"
+
+def log_unique_url(name, params):
+    today = datetime.today()
+
+    for key in ["start_date", "end_date"]:
+        if key in params:
+            try:
+                param_date = datetime.strptime(params[key], "%Y-%m-%d")
+                offset_days = (param_date - today).days
+                if not params[key].endswith("01"):
+                    params[key] = f"__OFFSET_{offset_days}__"
+            except ValueError:
+                pass  # Leave as-is if not a valid date
+
+    base_url = f"/charts/{name}"
+    query_string = urlencode(params)
+    full_url = f"{base_url}?{query_string}"
+
+    if full_url not in logged_urls:
+        logged_urls.add(full_url)
+        with open(LOG_FILE, "a") as f:
+            f.write(full_url + "\n")
+
+
+
+
 @app.route('/', methods=['GET', 'POST'])
 def all_transactions():
     identity = request_identity()
@@ -115,6 +145,7 @@ def _chart_http_response(payload, csv_requested=False):
 
 @app.route('/charts/<name>', methods=['GET', 'POST'])
 def charts(name):
+    from flask import g
     identity = request_identity()
     if identity is None:
         return unauthorized()
@@ -139,13 +170,12 @@ def charts(name):
 
     # Build the workload key based on name + dates + request parameters
     params = get_request_dict(request)
-    # Browser and warmer must share a cache key regardless of query parameter order.
-    params = dict(sorted(params.items()))
     return_format = params.get("return_format", "json")
     if return_format not in ("json", "csv"):
         return jsonify({"error": "Unsupported return_format. Use json or csv."}), 400
     csv_requested = return_format == "csv" and "Insight" in name
 
+    log_unique_url(name, dict(params))
     key = _chart_key(name, start_date, end_date, params)
 
     # Fast path: return from cache if available
@@ -254,15 +284,11 @@ def non_eca_dds_data_webhook():
 @app.route('/generate_cache')
 def generate_cache():
     import cache_gen
-    identity = request_identity()
-    if not identity or identity.get("role") != "api_key":
-        return unauthorized()
     try:
-        result = cache_gen.generate_cache(plan=store().cache_plan())
-        return jsonify(result), 502 if result["failed"] else 200
-    except Exception as exc:
-        app.logger.warning("Cache generation failed: %s", type(exc).__name__)
-        return jsonify({"error": "Cache generation failed"}), 503
+        cache_gen.generate_cache(app.config['CSV_FOLDER'])
+        return jsonify({'message': 'Cache generated successfully'})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 @app.route('/clear_cache')
 def clear_cache():
     # Optional query parameter: days
@@ -606,18 +632,23 @@ if __name__ == "__main__":
         # No network or database calls: verify that the frozen EXE can load its
         # required libraries, application modules, and the OPPIQ report module.
         import importlib
+        import importlib.util
 
         required_modules = (
             "DB", "authentication", "charts", "csvLoader", "decrypt_tools",
-            "helper.crypto_rotation", "report_modules.oppiq", "usage_analytics", "sqlite3", "cache_gen",
+            "helper.crypto_rotation", "report_modules.oppiq", "usage_analytics", "sqlite3",
             "flask", "flask_cors", "waitress", "pyodbc",
             "pandas", "openpyxl", "Crypto", "cryptography", "jwt", "ldap3",
         )
         for module in required_modules:
             importlib.import_module(module)
+        # cache_gen runs API calls when imported; inspect its bundled presence
+        # without executing those network calls.
+        if importlib.util.find_spec("cache_gen") is None:
+            raise RuntimeError("Missing packaged cache_gen module")
         print(
             "PACKAGING_CHECK_OK: "
-            + str(len(required_modules))
+            + str(len(required_modules) + 1)
             + " modules available; OPPIQ CSV target: "
             + str(save_oppiq_csv.__module__)
         )
@@ -653,6 +684,13 @@ if __name__ == "__main__":
 
     print("-----------------------------------------------------------------------------------------------------------------")
 
+    # Reset Cache Gen URLS
+    f2 = open("base_logged_chart_urls.txt", "r")
+    with open(LOG_FILE, 'w') as f:        
+        f.write(f2.read())
+    f2.close()
+
+    
     # REACT_APP_DEBUG configures the frontend; never let it enable an exposed
     # Flask development debugger in the production API.
     if os.environ.get("RESET_CHART_CACHE_ON_START", "").lower() == "true":

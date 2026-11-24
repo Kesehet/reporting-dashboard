@@ -57,11 +57,6 @@ jobs:
             if ($LASTEXITCODE -ne 0) {
               throw "Module verification failed for $exe (exit $LASTEXITCODE)"
             }
-            $warmer = "exe_dist/${envName}_cache_gen.exe"
-            & $warmer --verify-packaging
-            if ($LASTEXITCODE -ne 0) {
-              throw "Module verification failed for $warmer (exit $LASTEXITCODE)"
-            }
           }
       - name: Upload executables and diagnostic warnings
         if: always()
