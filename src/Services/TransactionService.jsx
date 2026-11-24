@@ -71,15 +71,9 @@ class TransactionService {
     const month = String(date.getMonth() + 1).padStart(2, "0");
     const day = String(date.getDate()).padStart(2, "0");
 
-    let hours = parseInt(String(date.getHours()).padStart(2, "0"));
-    let amPm;
-    if (hours > 12) {
-      hours = hours - 12;
-      hours = String(hours).padStart(2, "0");
-      amPm = 'PM';
-    } else {
-      amPm = 'AM';
-    }
+    const hour = date.getHours();
+    const hours = String(hour % 12 || 12).padStart(2, "0");
+    const amPm = hour >= 12 ? 'PM' : 'AM';
     const minutes = String(date.getMinutes()).padStart(2, "0");
     const seconds = String(date.getSeconds()).padStart(2, "0");
 
