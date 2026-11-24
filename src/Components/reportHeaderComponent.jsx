@@ -241,6 +241,12 @@ const ReportHeaderComponent = ( dates, setDates, CorBFilter, setCorBFilter, setP
                 },
         
                 {
+                    label: 'Usage Report',
+                    icon: 'pi pi-chart-bar',
+                    command: () => setPage('Usage Report'),
+                    section: 'Administration',
+                },
+                {
                     label: 'Key Rotation',
                     icon: 'pi pi-lock',
                     command: () => setPage('Key Rotation'),

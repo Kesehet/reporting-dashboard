@@ -25,6 +25,7 @@ import traceback
 from cache_manager import get_cached_item, set_cached_item, clear_all_cache,  cached_date_list
 from config import get_env_value
 from metrics import update_metrics, get_metrics
+from usage_analytics import install_usage_analytics
 from helper.chat_serve import _INFLIGHT_LOCK, _INFLIGHT, _chart_key, _acquire_or_wait_for_slot
 from urllib.parse import urlencode
 from utils import insight_report_to_csv_response, format_numbers_recursive
@@ -50,6 +51,7 @@ app.register_blueprint(authentication)
 app.register_blueprint(oppiq_api)
 app.register_blueprint(manual_review_api)
 app.register_blueprint(post_processing)
+install_usage_analytics(app)
 CSV_FOLDER_REPORT = 'uploads/report'
 CSV_FOLDER_REPORTS = 'uploads/reports'
 
@@ -143,8 +145,11 @@ def _chart_http_response(payload, csv_requested=False):
 
 @app.route('/charts/<name>', methods=['GET', 'POST'])
 def charts(name):
-    if request_identity() is None:
+    from flask import g
+    identity = request_identity()
+    if identity is None:
         return unauthorized()
+    g.usage_identity = identity.get('role', 'session')
     if request.method == 'POST':
         start_date = request.json.get("start_date")
         end_date = request.json.get("end_date")
@@ -170,12 +175,13 @@ def charts(name):
         return jsonify({"error": "Unsupported return_format. Use json or csv."}), 400
     csv_requested = return_format == "csv" and "Insight" in name
 
-    log_unique_url(name, params)
+    log_unique_url(name, dict(params))
     key = _chart_key(name, start_date, end_date, params)
 
     # Fast path: return from cache if available
     cached_data = get_cached_item(name, start_date, end_date, params)
     if cached_data is not None:
+        g.usage_cache = 'hit'
         return _chart_http_response(cached_data, csv_requested)
 
     # Coordination: either become the owner (compute) or wait for the owner to finish
@@ -185,6 +191,7 @@ def charts(name):
         # Not the owner; re-check cache after waiting
         cached_after_wait = get_cached_item(name, start_date, end_date, params)
         if cached_after_wait is not None:
+            g.usage_cache = 'wait_hit'
             return _chart_http_response(cached_after_wait, csv_requested)
 
         # If still missing and the role indicates failure/timeout upstream,
@@ -200,6 +207,7 @@ def charts(name):
         }), 503
 
     # At this point, this request is the owner and must compute and signal completion.
+    g.usage_cache = 'miss'
     sql = SQLConn()
     try:
         sql.connect()
@@ -628,7 +636,7 @@ if __name__ == "__main__":
 
         required_modules = (
             "DB", "authentication", "charts", "csvLoader", "decrypt_tools",
-            "helper.crypto_rotation", "report_modules.oppiq",
+            "helper.crypto_rotation", "report_modules.oppiq", "usage_analytics", "sqlite3",
             "flask", "flask_cors", "waitress", "pyodbc",
             "pandas", "openpyxl", "Crypto", "cryptography", "jwt", "ldap3",
         )
