@@ -1,24 +1,26 @@
 """Local, aggregate dashboard usage history. Never persist credentials or raw payloads."""
 from contextlib import closing, contextmanager
-from datetime import date
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 import sqlite3
 import time
 from threading import Lock
-from urllib.parse import urlencode, quote
+from urllib.parse import urlencode, quote, unquote, urlsplit, parse_qsl
 
 from flask import Blueprint, current_app, g, jsonify, request
-from authentication import verify_token, unauthorized
+from authentication import verify_token, unauthorized, request_identity
 
 DAY = 86400
 RETENTION = 7 * DAY
+CACHE_PLAN_LIMIT = 100
+CACHE_PLAN_MIN_REQUESTS = 2
 CHARTS = frozenset(["Abandonment Report","Abandonment Report by Month Pie","Abandonment Report by Types of Abandonment Pie","Abandonment Report by Week Bar","Abandonment Report by Year Pie","All Bot Deduped Data Monthly Insights","All Branch Ids","All Filters Table","All Transactions","Application Volume By Product (All Opened Or Approved Apps) Line","Application Volume By Product (All Opened Or Approved Apps) Line Table","Application Volume By Product (All Opened Or Approved Apps) Pie - Year to Date","Application Volume By Product (All Opened Or Approved Apps) Pie Table - Year to Date","Application Volume By Product (All Started Apps) Line","Application Volume By Product (All Started Apps) Line Table","Application Volume By Product (All Started Apps) Pie - Year to Date","Application Volume By Product (All Started Apps) Pie Table - Year to Date","Application Volume By Product (All Submitted Apps) Line","Application Volume By Product (All Submitted Apps) Line Table","Application Volume By Product (All Submitted Apps) Pie - Year to Date","Application Volume By Product (All Submitted Apps) Pie Table - Year to Date","Application Volume By Product Quarterly (All Opened Or Approved Apps) Line","Application Volume By Product Quarterly (All Opened Or Approved Apps) Pie","Application Volume By Product Quarterly (All Opened Or Approved Apps) Table","Application Volume By Product Quarterly (All Started Apps) Line","Application Volume By Product Quarterly (All Started Apps) Pie","Application Volume By Product Quarterly (All Started Apps) Table","Application Volume By Product Quarterly (All Submitted Apps) Line","Application Volume By Product Quarterly (All Submitted Apps) Pie","Application Volume By Product Quarterly (All Submitted Apps) Table","Application Volume by Product Current Quarter (All Approved Apps) Pie","Application Volume by Product Current Quarter (All Approved Apps) Table","Application Volume by Product Current Quarter (All Started Apps) Pie","Application Volume by Product Current Quarter (All Started Apps) Table","Application Volume by Product Current Quarter (All Submitted Apps) Pie","Application Volume by Product Current Quarter (All Submitted Apps) Table","Bot Generated Reports Insights","Bot Generated Reports Monthly Insights","Branch Originated Reports","Branch Originated Reports Monthly Analytics Line","Business Account Summary Current Balance and Initial Deposit Table","Business Account Summary Number Of Apps Table","Business Account Summary Top 10 Branches Table","Business Account Summary Top 10 Products Table","Business Deposit Reports","Business Deposit Reports Monthly Analytics Line","Common App In Branch and Consumer Facing Report","Cross Sell Products Presented and Accepted Line","Cross Sell Products Presented and Accepted Table","Cross Sell Products Table","Current Total DDS Amount and Switches Insights","Custom Quarterly Analytics Common App Table","Custom Quarterly Analytics Customer eCA Table","Custom Quarterly Analytics InBranch Common App Table","Declined Report Line","Declined Report Table","Direct Deposit Switch Reports Insights","Direct Deposit Switch Reports Table","Document Center Insigths","Document Center Monthly Insigths","Document Center Monthly Insigths Line","E Delivery Report LOB Table","E-Delivery Report Insights","Funding Type Report","Funding Type Report Line","Lending And Deposit Reports","Loan Commitment Bar And Line","Loan Commitment Insights","Loan Commitment Stacked Bar","Loan Commitment Stacked Table","Monthly BPM and CRIF Report","Monthly Business Deposits And Loans Report","Monthly Consumer Facing Report","Monthly In Branch Report","Monthly In Branch vs BPM and CRIF Report","Monthly Multi Product Reports Line","Monthly Opening And Current Balance Table","Multi Products Cross Sell Bar","Multi Products Cross Sell Table","Multi Products Daily Product Set Id Insights","Multi Products Product Set Id Bar","Multi Products Product Set Id Table","New vs Exisitng Customers","New vs Existing Customers Table","Payment Switch Insights","PennState Branch Report Insights","PennState Student Banking Reports Insights","PennState Student Banking Reports Line","Shot Clock Application Reports Insights","Spot And Current Balance Account Insights","Spot And Current Balance Account Stacked Chart","Spot And Current Balance Account Table","Student Checking Monthly Report Table","Student Checking Report Insights","Top 10 Single product with Cross Sell Products Bar","Top 10 Single product with Cross Sell Products Table","Transaction Logger","Transaction Logger Recent Txns","Type Of Decline Reasons Bar","Type Of Decline Reasons Table","Zero Product Applications Bar","Zero Product Applications Table"])
 TABS = frozenset(["Abandonment Report","All Filters Table","All Transactions","BOR","Bot Generated Reports","Business Accounts Summary","Business Deposit Reports","CSV Loader Reports","Cross Sell Reports","Customer Document Center","Declined Report","Direct Deposit Switch","E Delivery Report LOB","E-Delivery Report","Funding Type Report","Graphs","Key Rotation","Lending & Deposit Control Report","Loan Commitments","Manual Review Report","Monthly Report","Multi Product Reports","New vs Exisitng Customers","OPPIQ Report","Payment Switch Reports","PennState University Banking Reports","Post Processing","Spot And Current Balance Amounts","Student Checking Report","Transaction Logger"])
 # Only exact, non-customer filter values may be replayed by a future warmer.
 # Unknown filters make the entire request ineligible, rather than changing its meaning.
 SAFE_VALUES = {
-    "application_type": {"All", "Consumer", "Business", "Common App", "In Branch"},
-    "eCATrackingCode": {"%25", "%", "All", "Consumer", "Business"},
+    "application_type": {"All", "Consumer", "Business", "Common App", "In Branch", "Online", "Banker Assisted"},
+    "eCATrackingCode": {"%25", "%", "All", "Consumer", "Business", "C", "B"},
     "monthlyReportProductTypeSelector": {"All"},
     "showComma": {"true", "false"},
     "return_format": {"json"},
@@ -30,6 +32,10 @@ SAFE_VALUES = {
     "variant": {"Started", "Submitted", "Opened/Approved"},
     "type": {"all", "submitted", "opened/approved"},
     "BranchID": {"All"},
+    "what_column_to_add": {"Initial_Deposit", "Current_Balance"},
+    "stat_type": {"Started", "Submitted", "Opened / Approved"},
+    "format": {"json"},
+    "requestMethod": {"GET"},
 }
 DATE_FIELDS = {"start_date", "end_date", "start_date_for_left_graph",
                "end_date_for_left_graph", "start_date_for_right_graph",
@@ -63,6 +69,44 @@ def replay_url(chart, params):
             return None
         clean[key] = value
     return "/charts/" + quote(chart, safe="") + "?" + urlencode(sorted(clean.items()))
+
+
+def validated_replay(url):
+    """Revalidate stored URLs before issuing requests; reject external/unknown URLs."""
+    if not isinstance(url, str) or len(url) > 4096 or not url.startswith("/charts/"):
+        return None
+    try:
+        parts = urlsplit(url)
+        if parts.scheme or parts.netloc or parts.fragment:
+            return None
+        chart = unquote(parts.path[len("/charts/"):])
+        pairs = parse_qsl(parts.query, keep_blank_values=True, strict_parsing=True)
+        params = dict(pairs)
+        if len(params) != len(pairs):
+            return None
+        canonical = replay_url(chart, params)
+        if canonical is None:
+            return None
+        if date.fromisoformat(params["start_date"]) > date.fromisoformat(params["end_date"]):
+            return None
+        return canonical
+    except (ValueError, TypeError):
+        return None
+
+
+def roll_default_range(url, observed_day, today):
+    """Move only the recognized 90-day rolling default across UTC midnight."""
+    canonical = validated_replay(url)
+    if canonical is None:
+        return None
+    parts = urlsplit(canonical)
+    params = dict(parse_qsl(parts.query))
+    start = date.fromisoformat(params["start_date"])
+    end = date.fromisoformat(params["end_date"])
+    if end == observed_day and (end-start).days == 90 and today > observed_day:
+        params["end_date"] = today.isoformat()
+        params["start_date"] = (today-timedelta(days=90)).isoformat()
+    return replay_url(unquote(parts.path[len("/charts/"):]), params)
 
 
 class UsageStore:
@@ -137,7 +181,7 @@ class UsageStore:
         return result
 
     def ranked_cache_urls(self, now=None, limit=100):
-        """Future cache generator input: exact safe GET workloads, ranked by real demand."""
+        """Exact safe GET workloads, ranked by real demand."""
         now = time.time() if now is None else now
         with self.connection() as db:
             rows = db.execute(
@@ -149,6 +193,30 @@ class UsageStore:
                 (now-DAY, now, max(1, min(int(limit), 1000))),
             ).fetchall()
         return [dict(row) for row in rows]
+
+    def cache_plan(self, now=None, limit=CACHE_PLAN_LIMIT, min_requests=CACHE_PLAN_MIN_REQUESTS):
+        """Rank only recently repeated, successful dashboard GETs; merge rolling date variants."""
+        now = time.time() if now is None else now
+        today = datetime.fromtimestamp(now, timezone.utc).date()
+        with self.connection() as db:
+            rows = db.execute(
+                """SELECT replay_url AS url,date(at,'unixepoch') AS observed_day,
+                          COUNT(*) AS count,MAX(at) AS last_used
+                   FROM usage_events WHERE at >= ? AND at <= ? AND kind='chart'
+                   AND method='GET' AND source='dashboard' AND status BETWEEN 200 AND 299
+                   AND replay_url IS NOT NULL GROUP BY replay_url,observed_day""",
+                (now-DAY, now),
+            ).fetchall()
+        grouped = {}
+        for row in rows:
+            url = roll_default_range(row["url"], date.fromisoformat(row["observed_day"]), today)
+            if url is None:
+                continue
+            item = grouped.setdefault(url, {"url": url, "count": 0, "last_used": 0})
+            item["count"] += row["count"]
+            item["last_used"] = max(item["last_used"], row["last_used"])
+        ranked = sorted(grouped.values(), key=lambda row: (-row["count"], -row["last_used"], row["url"]))
+        return [row for row in ranked if row["count"] >= min_requests][:max(1, min(int(limit), 1000))]
 
 
 def store():
@@ -170,6 +238,11 @@ def safe_record(*args, **kwargs):
 
 @usage_api.before_request
 def require_session():
+    if request.endpoint == "usage_analytics.cache_plan":
+        identity = request_identity()
+        if not identity or identity.get("role") != "api_key":
+            return unauthorized()
+        return None
     if not verify_token(request.headers.get("X-MSAL-ID-Token") or request.headers.get("Authorization")):
         return unauthorized()
 
@@ -196,6 +269,14 @@ def usage_summary():
         return jsonify(store().summary())
     except (OSError, sqlite3.Error):
         return jsonify({"error": "Report unavailable"}), 503
+
+
+@usage_api.get("/cache-plan")
+def cache_plan():
+    try:
+        return jsonify({"workloads": store().cache_plan()})
+    except (OSError, sqlite3.Error):
+        return jsonify({"error": "Usage history unavailable"}), 503
 
 
 def install_usage_analytics(app):

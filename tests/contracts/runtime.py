@@ -180,7 +180,6 @@ def runtime():
         stack.enter_context(patch('requests.sessions.Session.request', jm_response))
         stack.enter_context(patch.object(server, 'get_cached_item', return_value=None))
         stack.enter_context(patch.object(server, 'set_cached_item'))
-        stack.enter_context(patch.object(server, 'log_unique_url'))
         yield server, DB
 
 
