@@ -109,13 +109,10 @@ def msal_config():
     tenant = setting('REACT_APP_AZURE_TENANT_ID')
     if not client_id or not tenant:
         return jsonify({'error': 'Microsoft SSO is not configured.'}), 503
-    frontend = setting('REACT_APP_FE_SERVER_BASE_URL', request.host_url)
     return jsonify({
         'auth': {
             'clientId': client_id,
             'authority': f'https://login.microsoftonline.com/{tenant}',
-            'redirectUri': frontend,
-            'postLogoutRedirectUri': frontend,
         },
         'cache': {'cacheLocation': 'localStorage', 'storeAuthStateInCookie': False},
     })
