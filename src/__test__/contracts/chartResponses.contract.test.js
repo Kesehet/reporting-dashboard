@@ -89,7 +89,7 @@ for (const entry of manifest.cases) {
         expect(body.start_date).toBe('2026-01-01');
         expect(body.eCATrackingCode).toBe('C');
       } else {
-        expect(new URL(url).searchParams.get('start_date')).toBe('2026-01-01');
+        expect(new URL(url, window.location.href).searchParams.get('start_date')).toBe('2026-01-01');
       }
     }
     // Deferred SQL is sent by the existing table resolver to the real /query
