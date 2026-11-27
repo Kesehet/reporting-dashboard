@@ -4,6 +4,7 @@ import sessionHeaders from '../../Services/sessionHeaders';
 
 function dateLabel(value) {
     if (!value) return '';
+    if (!/(Z|[+-]\d{2}:?\d{2})$/i.test(value)) return value;
     const date = new Date(value);
     return Number.isNaN(date.getTime()) ? value : new Intl.DateTimeFormat('en-US', {
         dateStyle: 'medium', timeStyle: 'short', timeZone: 'America/New_York'
@@ -14,6 +15,7 @@ function Comments({ items = [] }) {
     return items.map((comment, index) => (
         <div className="application-timeline__comment" key={index}>
             <small>{[comment.author, dateLabel(comment.time)].filter(Boolean).join(' | ')}</small>
+            {comment.header && <strong>{comment.header}</strong>}
             <div>{comment.message}</div>
             <Comments items={comment.replies} />
         </div>

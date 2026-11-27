@@ -32,9 +32,11 @@ def comments(items):
         if message:
             result.append({
                 "message": message,
+                "header": text_value(item.get("header")),
+                "parent": text_value(item.get("parent")),
                 "author": text_value(item.get("userLoginName") or item.get("loginName")
                                      or item.get("author") or item.get("userName")),
-                "time": text_value(item.get("timeCreated") or item.get("time")),
+                "time": text_value(item.get("timeAdded") or item.get("timeCreated") or item.get("time")),
                 "replies": comments(item.get("replies") or item.get("comments")),
             })
     return result
@@ -55,7 +57,7 @@ def task_view(txn):
         "status": text_value(txn.get("formStatus")),
         "group": text_value(txn.get("groupName")),
         "user": text_value(txn.get("userLoginName")),
-        "created": text_value(txn.get("timeCreated") or txn.get("timeRequest")),
+        "created": text_value(txn.get("timeCreated") or txn.get("timeRequest") or txn.get("timeRequested")),
         "updated": text_value(txn.get("timeUserLastModified") or txn.get("timeCompleted")),
         "comments": comments(txn.get("comments")),
     }
@@ -102,7 +104,7 @@ def build_timeline(job):
     result = []
     for i, step in enumerate(steps):
         actions = records(step.get("jobActions"))
-        outcome = step.get("result") or step.get("stepResult") or next(
+        outcome = step.get("result") or step.get("stepResult") or step.get("route") or next(
             (a.get("result") or a.get("actionResult") or a.get("route")
              for a in reversed(actions) if a.get("result") or a.get("actionResult") or a.get("route")), None)
         time = step.get("timeCreated") or next(
@@ -128,12 +130,16 @@ def build_timeline(job):
     }
 
 
-def lookup_txns(workspace, code):
+def lookup_txns(workspace, code, linked=False):
     # Exact tracking code query avoids the default open-transaction status filter.
+    criteria = ["trackingCode = {0}"]
+    if linked:
+        criteria = ["properties['Link.FnbDashboardTrackingCode'] = {0}",
+                    "formStatus IN ('Assigned','Completed','In Progress','Opened','Saved','Submitted','Abandoned','Expired')"]
     response = workspace.session.post(
         workspace.base_url.rstrip("/") + "/secure/api/v1/txn/query",
-        json={"scope": "Form", "attributes": TXN_ATTRIBUTES, "fetchLimit": 10,
-              "filters": [{"operator": "and", "criteria": ["trackingCode = {0}"], "params": [code]}]},
+        json={"scope": "Form", "attributes": TXN_ATTRIBUTES, "fetchLimit": 1000,
+              "filters": [{"operator": "and", "criteria": criteria, "params": [code]}]},
         timeout=(10, 60), allow_redirects=False,
     )
     if response.status_code != 200:
@@ -141,7 +147,9 @@ def lookup_txns(workspace, code):
     body = response.json()
     if not isinstance(body, dict) or not isinstance(body.get("result"), list):
         raise WorkspaceReportError("Journey Manager did not return transaction details.")
-    return [t for t in records(body["result"]) if t.get("trackingCode") == code]
+    if isinstance(body.get("totalCount"), int) and body["totalCount"] > len(body["result"]):
+        raise WorkspaceReportError("Journey Manager returned incomplete related transactions.")
+    return records(body["result"]) if linked else [t for t in records(body["result"]) if t.get("trackingCode") == code]
 
 
 def load_timeline(workspace, code):
@@ -156,6 +164,16 @@ def load_timeline(workspace, code):
         ref = job.get("jobRefNumber") if isinstance(job, dict) else None
         if isinstance(ref, str) and CODE.fullmatch(ref):
             refs.add(ref)
+    if refs == {code} and not any(isinstance(t.get("job"), dict) and t["job"].get("jobRefNumber") == code for t in txns):
+        # Some FNB forms identify the parent application using this existing link property.
+        linked = lookup_txns(workspace, code, linked=True)
+        for txn in linked:
+            job = txn.get("job")
+            ref = job.get("jobRefNumber") if isinstance(job, dict) else None
+            if isinstance(ref, str) and CODE.fullmatch(ref):
+                refs.add(ref)
+        seen = {t.get("trackingCode") for t in txns}
+        txns.extend(t for t in linked if t.get("trackingCode") not in seen)
     reference_list = ", ".join("'" + ref + "'" for ref in sorted(refs))
     jobs = list(query_jobs(workspace, {
         "attributes": JOB_ATTRIBUTES,
@@ -170,7 +188,11 @@ def load_timeline(workspace, code):
     if len(jobs) > 1:
         raise WorkspaceReportError("More than one workflow matched this tracking code.")
     if jobs:
-        return build_timeline(jobs[0])
+        job = jobs[0]
+        timeline = build_timeline(job)
+        known = {t.get("trackingCode") for t in records(job.get("txns"))}
+        timeline["unassigned_tasks"].extend(task_view(t) for t in txns if t.get("trackingCode") not in known)
+        return timeline
     if actual_refs:
         raise WorkspaceReportError("The related workflow was not returned by Journey Manager.")
     return {
