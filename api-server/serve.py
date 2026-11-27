@@ -152,6 +152,22 @@ def charts(name):
     if identity is None:
         return unauthorized()
     g.usage_identity = identity.get('role', 'session')
+    # Exact-code lookup is a live Journey Manager operation, not a dated SQL chart.
+    # Bypass date validation, SQL connection and the generic chart cache.
+    if name in ("Transaction Logger", "Transaction Logger Recent Txns"):
+        params = get_request_dict(request)
+        if any(code.strip() for code in str(params.get("tracking_codes") or "").split(",")):
+            from report_modules.search_txn import search_txn
+            g.usage_cache = 'miss'
+            try:
+                result = search_txn(params, None, None, name == "Transaction Logger Recent Txns")
+                response = jsonify(result)
+                response.headers["Cache-Control"] = "private, no-store"
+                return response
+            except Exception as exc:
+                app.logger.warning("Transaction lookup failed: %s", type(exc).__name__)
+                return jsonify(error="Journey Manager transaction lookup failed. Please retry."), 502
+
     if request.method == 'POST':
         start_date = request.json.get("start_date")
         end_date = request.json.get("end_date")
