@@ -71,3 +71,54 @@ class TransactionTimelineTests(unittest.TestCase):
         result = build_timeline({"steps": [{"name": "Review", "jobActions": [{"submission": "a"}]}],
             "txns": [{"submitKey": "a", "comments": [{"message": "Note", "timeAdded": "2026-11-23T09:00:00-05:00"}]}]})
         self.assertEqual(result["steps"][0]["tasks"][0]["comments"][0]["time"], "2026-11-23T09:00:00-05:00")
+
+    def test_live_shape_without_submission_links(self):
+        job = {
+            "jobRefNumber": "C-ROOT",
+            "steps": [
+                {"name": "Start", "status": "Completed"},
+                {"name": "Review Application", "status": "Completed"},
+                {"name": "Decline Application", "status": "Completed"},
+                {"name": "Decline Application Complete", "status": "Completed"},
+            ],
+            "txns": [
+                {"trackingCode": "C-ROOT", "formName": "Consumer Loans"},
+                {"trackingCode": "C-TASK", "groupName": "Manual Review", "comments": [{"message": "Synthetic note"}]},
+            ],
+        }
+        result = build_timeline(job)
+        start, review, decline, complete = result["steps"]
+        self.assertEqual(start["tasks"][0]["tracking_code"], "C-ROOT")
+        self.assertEqual(review["tasks"][0]["tracking_code"], "C-TASK")
+        self.assertEqual(review["tasks"][0]["comments"][0]["message"], "Synthetic note")
+        self.assertEqual(review["result"], "Deny (inferred)")
+        self.assertEqual(start["result"], "Review Application (inferred)")
+        self.assertFalse(decline["tasks"])
+        self.assertFalse(complete["tasks"])
+        self.assertFalse(result["unassigned_tasks"])
+
+    def test_owner_action_wins_over_reused_submission(self):
+        result = build_timeline({
+            "steps": [
+                {"name": "Review Application", "jobActions": [
+                    {"type": "Job Task Assign", "submission": {"submitKey": "a"}},
+                    {"type": "Job Task Wait", "routeResult": "Deny"},
+                ]},
+                {"name": "Decline Application", "jobActions": [
+                    {"type": "Job Task Wait", "submission": "a"},
+                ]},
+            ],
+            "txns": [{"submitKey": "a", "trackingCode": "C-TASK"}],
+        })
+        self.assertEqual(result["steps"][0]["tasks"][0]["tracking_code"], "C-TASK")
+        self.assertEqual(result["steps"][0]["result"], "Deny")
+        self.assertFalse(result["steps"][1]["tasks"])
+
+    def test_multiple_review_tasks_or_steps_remain_unassigned(self):
+        job = {"steps": [{"name": "Review Application", "status": "Completed"}],
+               "txns": [{"groupName": "Manual Review", "trackingCode": "C-A"},
+                        {"groupName": "Manual Review", "trackingCode": "C-B"}]}
+        self.assertEqual(len(build_timeline(job)["unassigned_tasks"]), 2)
+        job["steps"].append({"name": "Review Application", "status": "Completed"})
+        job["txns"].pop()
+        self.assertEqual(len(build_timeline(job)["unassigned_tasks"]), 1)

@@ -6,7 +6,9 @@ from requests import RequestException, Timeout
 
 from authentication import unauthorized, verify_microsoft_token, verify_token
 from role_filter import all_groups
-from report_modules.manual_review import WorkspaceReportError, query_jobs
+from report_modules.manual_review import (
+    REVIEW_STEPS, WorkspaceReportError, normalized, query_jobs, workflow_decision,
+)
 
 timeline_api = Blueprint("transaction_timeline", __name__)
 CODE = re.compile(r"[A-Za-z0-9_-]{1,128}")
@@ -67,27 +69,70 @@ def identifiers(txn):
     return {value for key in ("submitKey", "trackingCode") if (value := txn.get(key))}
 
 
+def action_matches(txn, actions):
+    ids = identifiers(txn)
+    for action in actions:
+        submission = action.get("submission")
+        if isinstance(submission, dict):
+            submission_ids = identifiers(submission)
+        else:
+            submission_ids = {submission} if isinstance(submission, str) else set()
+        if ids & submission_ids or (
+            txn.get("jobActionKey") and txn["jobActionKey"] == action.get("jobActionKey")
+        ):
+            return True
+    return False
+
+
+def resolve_task_steps(job, steps, txns):
+    """Prefer the task-owning action; later actions may reference the same submission."""
+    actions = [records(step.get("jobActions") or step.get("actions")) for step in steps]
+    matches = []
+    for txn in txns:
+        owners = [
+            i for i, group in enumerate(actions) if action_matches(txn, [
+                a for a in group if normalized(a.get("type")) in {"job form start", "job task assign"}
+            ])
+        ]
+        direct = [i for i, group in enumerate(actions) if action_matches(txn, group)]
+        matches.append(owners or direct)
+
+    # Workspace versions may omit submission identifiers or repeat them in wait actions.
+    # Only resolve a fallback when both the workflow step and the task are unique.
+    starts = [i for i, s in enumerate(steps)
+              if normalized(s.get("type")) == "start" or normalized(s.get("name")) in {"start", "application start"}]
+    reviews = [i for i, s in enumerate(steps) if normalized(s.get("name")) in REVIEW_STEPS]
+    reference = job.get("jobRefNumber")
+    primary = [i for i, t in enumerate(txns) if reference and t.get("trackingCode") == reference]
+    review = [i for i, t in enumerate(txns) if i not in primary and (
+        normalized(t.get("groupName")) == "manual review" or normalized(t.get("taskType")) == "review"
+    )]
+    for candidates, targets in ((primary, starts), (review, reviews)):
+        if len(candidates) != 1 or len(targets) != 1:
+            continue
+        task, step = candidates[0], targets[0]
+        if len(matches[task]) != 1 and (not matches[task] or step in matches[task]):
+            if not any(m == [step] for i, m in enumerate(matches) if i != task):
+                matches[task] = [step]
+    return matches
+
+
 def build_timeline(job):
     """Keep source step order, including repeated names and zero-task steps.
 
-    Match tasks by explicit submission/action identifiers, never by name or timestamp.
-    Ambiguous or unmatched tasks and job comments remain visible separately.
+    Prefer explicit submission/action identifiers, then unique application/review
+    ownership evidence. Ambiguous tasks and comments remain separately visible.
     """
     steps = records(job.get("steps"))
     txns = records(job.get("txns"))
     job_comments = records(job.get("comments"))
     links = []
     for step in steps:
-        actions = records(step.get("jobActions"))
-        submissions = {a["submission"] for a in actions if isinstance(a.get("submission"), str)}
+        actions = records(step.get("jobActions") or step.get("actions"))
         keys = {a["jobActionKey"] for a in actions if a.get("jobActionKey")}
-        links.append((submissions, keys))
+        links.append(keys)
 
-    matches = [
-        [i for i, (subs, keys) in enumerate(links)
-         if identifiers(txn) & subs or (txn.get("jobActionKey") and txn["jobActionKey"] in keys)]
-        for txn in txns
-    ]
+    matches = resolve_task_steps(job, steps, txns)
     mapped = [[txn for txn, indices in zip(txns, matches) if indices == [i]]
               for i in range(len(steps))]
     comment_matches = []
@@ -96,17 +141,33 @@ def build_timeline(job):
         found = []
         for i, step in enumerate(steps):
             task_ids = set().union(*(identifiers(t) for t in mapped[i]))
-            if (note.get("jobActionKey") in links[i][1] or note_ids & task_ids
+            if (note.get("jobActionKey") in links[i] or note_ids & task_ids
                     or (note.get("jobStep") and note["jobStep"] == step.get("name"))):
                 found.append(i)
         comment_matches.append(found)
 
     result = []
     for i, step in enumerate(steps):
-        actions = records(step.get("jobActions"))
-        outcome = step.get("result") or step.get("stepResult") or step.get("route") or next(
-            (a.get("result") or a.get("actionResult") or a.get("route")
-             for a in reversed(actions) if a.get("result") or a.get("actionResult") or a.get("route")), None)
+        actions = records(step.get("jobActions") or step.get("actions"))
+        def route(record):
+            return next((record[k] for k in ("routeResult", "result", "stepResult", "actionResult", "route")
+                         if isinstance(record.get(k), str) and record[k].strip()), None)
+
+        outcome = route(step) or next((route(a) for a in reversed(actions) if route(a)), None)
+        if not outcome and normalized(step.get("status")) == "completed":
+            if normalized(step.get("name")) in REVIEW_STEPS:
+                inferred = workflow_decision(steps, i)
+                if inferred:
+                    outcome = {"Approved": "Approve", "Denied": "Deny"}[inferred] + " (inferred)"
+            elif (normalized(step.get("type")) == "start" or
+                  normalized(step.get("name")) in {"start", "application start"}):
+                next_step = step.get("nextStep")
+                if isinstance(next_step, str) and next_step.strip():
+                    outcome = next_step + " (next step)"
+                elif i + 1 < len(steps) and normalized(steps[i + 1].get("status")) in {"completed", "in progress"}:
+                    next_name = text_value(steps[i + 1].get("name"))
+                    if next_name:
+                        outcome = next_name + " (inferred)"
         time = step.get("timeCreated") or next(
             (a.get("timeActionExecuted") for a in actions if a.get("timeActionExecuted")), None)
         tasks = [task_view(t) for t in mapped[i]]
