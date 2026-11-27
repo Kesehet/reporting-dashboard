@@ -8,7 +8,7 @@ import 'primereact/resources/primereact.min.css';
 import 'primeicons/primeicons.css';
 import { Button } from 'primereact/button';
 
-const FNBDataTable = ({ data, extraParams = {}, styleNow = {} }) => {
+const FNBDataTable = ({ data, extraParams = {}, styleNow = {}, rowDetails = null }) => {
 
     data = dataParser(data);
 
@@ -16,6 +16,7 @@ const FNBDataTable = ({ data, extraParams = {}, styleNow = {} }) => {
     if (!styleNow.color) styleNow.color = 'black';
 
     const [TableData, setTableData] = useState({ headers: [], rows: [] });
+    const [expandedRows, setExpandedRows] = useState(null);
 
     const getChartData = async () => {
         let chart = new ChartDataService(data, extraParams);
@@ -213,6 +214,8 @@ const FNBDataTable = ({ data, extraParams = {}, styleNow = {} }) => {
 
             <DataTable
                 value={formattedRows}
+                {...(rowDetails ? { dataKey: 'tracking_code', expandedRows,
+                    onRowToggle: event => setExpandedRows(event.data), rowExpansionTemplate: rowDetails } : {})}
                 className="p-datatable-striped"
                 paginator
                 rows={10}
@@ -223,6 +226,7 @@ const FNBDataTable = ({ data, extraParams = {}, styleNow = {} }) => {
                 filterDisplay="menu"
                 globalFilterFields={TableData.headers}
             >
+                {rowDetails && <Column expander={row => Boolean(row.tracking_code)} style={{ width: '3rem' }} />}
                 {dynamicColumns.map((column) =>
                     React.cloneElement(column, {
                         sortable: true,
