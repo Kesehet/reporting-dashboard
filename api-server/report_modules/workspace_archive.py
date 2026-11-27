@@ -129,30 +129,36 @@ def save_snapshot(connection, ref, job, *, captured_at=None):
     codes = sorted(set(txns) | {anchor})
     cursor = connection.cursor()
     try:
-        inserted = False
+        locked = {}
         for code in codes:
             cursor.execute(f"SELECT dump,jobRefNumber FROM {TABLE} WITH (UPDLOCK,HOLDLOCK) WHERE trackingCode=?", (code,))
             row = cursor.fetchone()
             old, snapshots = decode_dump(row[0] if row else None)
             if row and row[1] and row[1] not in (ref, code):
                 raise ValueError("Workspace tracking code belongs to a different job")
+            locked[code] = (row, old, snapshots)
+        if any(s.get("hash") == digest for s in locked[anchor][2]):
+            connection.commit()
+            return False
+        for code in codes:
+            row, old, snapshots = locked[code]
             current = txns.get(code, {})
             if current:
-                old = merge_raw_rows(old, [current])
-            if code == anchor and not any(s.get("hash") == digest for s in snapshots):
+                # Migration of an old snapshot must not overwrite current raw fields.
+                old = merge_raw_rows([current], old) if captured_at else merge_raw_rows(old, [current])
+            if code == anchor:
                 snapshots.append({"hash": digest, "capturedAt": captured, "job": job})
-                inserted = True
             dump = encode_dump(old, snapshots)
             fields = (current.get("formStatus"), current.get("userLoginName"),
                       current.get("formName"), _local_datetime(current.get("timeCreated")), ref, dump)
             if row:
+                # Backfilled snapshots fill missing columns but do not roll
+                # current status or assignment back to an earlier date.
+                columns = ("currentQueue", "assignedTo", "formName", "timeCreated")
+                updates = ",".join(f"{col}=COALESCE({col},?)" if captured_at
+                                   else f"{col}=COALESCE(?,{col})" for col in columns)
                 cursor.execute(f"""
-                    UPDATE {TABLE} SET
-                        currentQueue=COALESCE(?,currentQueue),
-                        assignedTo=COALESCE(?,assignedTo),
-                        formName=COALESCE(?,formName),
-                        timeCreated=COALESCE(?,timeCreated),
-                        jobRefNumber=?,dump=?
+                    UPDATE {TABLE} SET {updates},jobRefNumber=?,dump=?
                     WHERE trackingCode=?
                 """, fields + (code,))
             else:
@@ -161,7 +167,7 @@ def save_snapshot(connection, ref, job, *, captured_at=None):
                     VALUES (?,?,?,?,?,?,?)
                 """, fields + (code,))
         connection.commit()
-        return inserted
+        return True
     except Exception:
         connection.rollback()
         raise

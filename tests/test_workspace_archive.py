@@ -35,7 +35,9 @@ class WorkspaceArchiveTests(unittest.TestCase):
         dump = cursor.execute.call_args_list[1].args[1][5]
         cursor.fetchone.return_value = (dump, "C-ROOT")
         self.assertFalse(save_snapshot(connection, "C-ROOT", job))
-        _, snapshots = decode_dump(cursor.execute.call_args.args[1][5])
+        self.assertIn("SELECT dump", cursor.execute.call_args.args[0])
+        self.assertEqual(cursor.execute.call_count, 3)
+        _, snapshots = decode_dump(dump)
         self.assertEqual(len(snapshots), 1)
 
     def test_legacy_writer_preserves_archive_xml_and_notes(self):
