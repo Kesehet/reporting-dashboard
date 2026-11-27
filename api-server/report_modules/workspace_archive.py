@@ -1,4 +1,4 @@
-"""Durable encrypted Workspace application snapshots in DigitalReport SQL Server.
+"""Durable JSON Workspace application snapshots in DigitalReport SQL Server.
 
 No CSV dependency, no on-screen access required. Never delete snapshots on a
 source miss or replace an earlier snapshot with an empty response.
@@ -8,7 +8,6 @@ from datetime import datetime, timedelta, timezone
 import hashlib
 import json
 
-from helper.encryption_helper import encrypt_string, decrypt_string
 from jm_endpoints import JM_RETENTION_DAYS
 from metrics import update_metrics
 from report_modules.manual_review import query_jobs, WorkspaceReportError
@@ -78,9 +77,8 @@ def save_snapshot(connection, ref, job):
                        (ref, digest))
         inserted = cursor.fetchone() is None
         if inserted:
-            encrypted = encrypt_string(payload)
             cursor.execute(f"INSERT INTO {ARCHIVE} (jobRefNumber,snapshotHash,payload) VALUES (?,?,?)",
-                           (ref, digest, encrypted))
+                           (ref, digest, payload))
         for code in sorted(aliases):
             cursor.execute(f"""
                 INSERT INTO {INDEX} (trackingCode,jobRefNumber)
@@ -243,8 +241,8 @@ def read_archive(connection, code):
         job = {"jobRefNumber": ref, "txns": [], "comments": [], "steps": []}
         transactions = {}
         notes = []
-        for captured, encrypted in rows:
-            snapshot = json.loads(decrypt_string(encrypted))
+        for captured, payload in rows:
+            snapshot = json.loads(payload)
             if snapshot.get("status"):
                 job["status"] = snapshot["status"]
             if snapshot.get("steps"):
@@ -283,3 +281,45 @@ def archived_history(code):
         return read_archive(sql.connection, code)
     finally:
         sql.disconnect()
+
+
+def supplement_exact_search(result, tracking_codes):
+    """Find archived tracking codes that are no longer returned by Journey Manager."""
+    if not isinstance(result, dict) or not isinstance(result.get("headers"), list):
+        return result
+    headers = result["headers"]
+    rows = result.get("rows", [])
+    found = ({str(row[headers.index("tracking_code")]).upper()
+              for row in rows if len(row) > headers.index("tracking_code")}
+             if "tracking_code" in headers else set())
+    archived_rows = []
+    for code in dict.fromkeys(tracking_codes):
+        if not valid_code(code) or code.upper() in found:
+            continue
+        history = archived_history(code)
+        if not history:
+            continue
+        item = next((t for t in history["transactions"]
+                     if (t.get("tracking_code") or "").upper() == code.upper()), None)
+        if not item:
+            continue
+        archived_rows.append({
+            "tracking_code": item["tracking_code"],
+            "Start Date": item.get("created"),
+            "Form Name": item.get("name"),
+            "Form Status": item.get("status"),
+            "Associated Tracking Codes": ", ".join(
+                t["tracking_code"] for t in history["transactions"] if t.get("tracking_code")),
+            "Source": "Archived SQL",
+        })
+        found.add(code.upper())
+    if not archived_rows:
+        return result
+    if "tracking_code" not in headers:
+        headers = ["isBankerAssisted", "Start Date", "Associated Tracking Codes", "Form Name",
+                   "CurrentPage", "is_error", "error", "tracking_code", "submissionGroupNames", "Form Status"]
+        rows = []
+    new_headers = headers if "Source" in headers else headers + ["Source"]
+    live_rows = [row if "Source" in headers else row + ["Live Journey Manager"] for row in rows]
+    return {"headers": new_headers,
+            "rows": live_rows + [[row.get(key) for key in new_headers] for row in archived_rows]}
