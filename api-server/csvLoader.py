@@ -1,4 +1,6 @@
 import pandas as pd
+import csv
+import logging
 
 from DB import Transaction, SQLConn
 from application import update_JMExtract
@@ -16,6 +18,33 @@ import os
 import sys
 import time
 import json
+
+def validate_csv_shape(file_path, encoding):
+    """Reject malformed records without logging customer field values."""
+    with open(file_path, "r", encoding=encoding, errors="strict", newline="") as source:
+        reader = csv.reader(source, strict=True)
+        expected = None
+        bad_count = 0
+        first_error = None
+        log = logging.getLogger(__name__)
+        try:
+            for row in reader:
+                if not row or (len(row) == 1 and not row[0].strip()):
+                    continue
+                if expected is None:
+                    expected = len(row)
+                elif len(row) != expected:
+                    bad_count += 1
+                    message = f"CSV record ending at line {reader.line_num}: expected {expected} fields, saw {len(row)}"
+                    if first_error is None:
+                        first_error = message
+                    if bad_count <= 20:
+                        log.warning("%s: %s", os.path.basename(file_path), message)
+        except csv.Error:
+            raise ValueError(f"Malformed CSV quoting near line {reader.line_num}") from None
+        if bad_count:
+            raise ValueError(f"{first_error}; {bad_count} malformed record(s); entire import rejected")
+
 
 def read_file(file_path):
     """Read uploaded CSVs without guessing ASCII from a short file prefix.
@@ -55,6 +84,7 @@ def read_file(file_path):
                 try:
                     # read_csv decodes the complete input, including bytes
                     # beyond the first 10 KB; no fallback to chardet/ascii.
+                    validate_csv_shape(file_path, encoding)
                     return pd.read_csv(file_path, encoding=encoding,
                                        encoding_errors='strict')
                 except UnicodeDecodeError as error:
@@ -70,7 +100,9 @@ def read_file(file_path):
         # Preserve the historical DataFrame return contract: callers skip
         # unreadable files instead of importing partial or garbled rows.
         print(f"Error reading file {file_path}: {error}")
-        return pd.DataFrame()
+        frame = pd.DataFrame()
+        frame.attrs["read_error"] = str(error)
+        return frame
 
 def list_csv_report_files(folder_path="uploads/reports", processed_files=None, status_filter="all", date_filter="all"):
     if processed_files is None:
@@ -207,6 +239,8 @@ def get_tracking_code_missing_reason(file_name, tracking_code, folder_path="uplo
 def prepare_rows(file_path):
     
     df = read_file(file_path)
+    if df.attrs.get('read_error'):
+        raise ValueError(df.attrs['read_error'])
     if df.empty:
         return []
     rows = list(df.iterrows())
@@ -246,7 +280,10 @@ def load_single_csv_file(file_name, folder_path="uploads/reports"):
             "message": "AUTO_UPDATE_CSV is not enabled for csv loader.",
         }
 
-    rows = prepare_rows(file_path)
+    try:
+        rows = prepare_rows(file_path)
+    except ValueError as exc:
+        return {"success": False, "status": "invalid", "message": str(exc), "loaded": False}
     if len(rows) == 0:
         return {
             "success": False,
@@ -278,15 +315,8 @@ def load_single_csv_file(file_name, folder_path="uploads/reports"):
             elif code.startswith("C"):
                 rows_starting_with_C.append(row)
 
-        ret = ""
-        try:
-            ret += core_process(rows_starting_with_B, sql, txn)
-        except Exception as exc:
-            ret += f"Error processing B tracking codes: {exc}<br>"
-        try:
-            ret += core_process(rows_starting_with_C, sql, txn)
-        except Exception as exc:
-            ret += f"Error processing C tracking codes: {exc}<br>"
+        ret = core_process(rows_starting_with_B, sql, txn)
+        ret += core_process(rows_starting_with_C, sql, txn)
 
         update_conf(file_name, folder_path)
         post_process_txns(sql, txn, tracking_codes_added_this_run=all_tracking_codes_updated_this_run)
@@ -323,6 +353,7 @@ def get_csv(folder_path = "uploads/reports", run_jm=True):
     csv_files = [file for file in os.listdir(folder_path) if file.endswith('.csv') or file.endswith('.xlsx') or file.endswith('.xls')]
     all_tracking_codes_updated_this_run = set()
     ctr = 0
+    failed_files = []
     for csv_file in csv_files:
         if get_env_value("AUTO_UPDATE_CSV") == "true" or get_env_value("AUTO_UPDATE_CSV") == "True" or get_env_value("AUTO_UPDATE_CSV") == "1":
             pass
@@ -339,7 +370,13 @@ def get_csv(folder_path = "uploads/reports", run_jm=True):
             ret += f"File not found:  <b style='color:red;'>{file_path}</b><br>"
             continue
 
-        rows = prepare_rows(file_path)
+        try:
+            rows = prepare_rows(file_path)
+        except ValueError as exc:
+            failed_files.append(csv_file)
+            update_metrics("csv_loader_errors", f"Rejected {csv_file}: {exc}")
+            print(f"CSV import rejected: {csv_file}: {exc}")
+            continue
         if len(rows) == 0:
             ret += f"No rows found in file:  <b style='color:orange;'>{file_path}</b><br>"
             continue
@@ -361,6 +398,7 @@ def get_csv(folder_path = "uploads/reports", run_jm=True):
             elif code.startswith("C"):
                 rows_starting_with_C.append(row)
 
+        file_failed = False
         try:
             print("\nPre processing B Tracking code")
             update_metrics("csv_loader_logs", f"Processing B tracking code for {csv_file} with {len(rows_starting_with_B)} rows.")
@@ -368,6 +406,7 @@ def get_csv(folder_path = "uploads/reports", run_jm=True):
         except Exception as e:
             update_metrics("csv_loader_errors", f"Processing B tracking code for {csv_file} failed with {e}")
             print(f"Pre Processing B Txn failed: {e}")
+            file_failed = True
         try:
             print("\nPre processing C Tracking code")
             update_metrics("csv_loader_logs", f"Processing C tracking code for {csv_file} with {len(rows_starting_with_C)} rows.")
@@ -375,14 +414,20 @@ def get_csv(folder_path = "uploads/reports", run_jm=True):
         except Exception as e:
             update_metrics("csv_loader_errors", f"Processing C tracking code for {csv_file} failed with {e}")
             print(f"Pre Processing C Txn failed: {e}")
+            file_failed = True
 
-        update_conf(csv_file, folder_path)
+        if file_failed:
+            failed_files.append(csv_file)
+        else:
+            update_conf(csv_file, folder_path)
 
     if all_tracking_codes_updated_this_run:
         post_process_txns(sql,txn, tracking_codes_added_this_run=all_tracking_codes_updated_this_run)
     log_file(ret,f"{datetime.now().isoformat()} run", folder_path)
     if run_jm:
         update_JMExtracts(sql,txn)
+    if failed_files:
+        raise RuntimeError(f"CSV imports incomplete: {len(failed_files)} file(s) remain pending")
     return ret
 
 
@@ -430,7 +475,10 @@ def core_process(all_rows,sql,txn):
         for start in range(0,len(all_rows), batch):
             print(f"    Batch: {ctr}/{speed}")
             end = min(start+batch,len(all_rows))
-            ret += txn.set_transaction_from_list_of_dicts(sql, all_rows[start:end])
+            batch_result = txn.set_transaction_from_list_of_dicts(sql, all_rows[start:end])
+            if "Error running query =>" in batch_result:
+                raise RuntimeError("CSV SQL batch failed; file remains pending")
+            ret += batch_result
             ctr += 1
     return ret
     

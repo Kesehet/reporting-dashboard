@@ -1,6 +1,38 @@
+import ast
+import json
+
 from DB import Q
 from report_modules.condition_utils import *
 from utils import *
+
+def parse_quarters(value):
+    """Accept POST arrays and GET/cache-replay serialized arrays."""
+    if isinstance(value, str):
+        if len(value) > 8192:
+            raise ValueError("quarters parameter is too long")
+        try:
+            value = json.loads(value)
+        except ValueError:
+            # Older logged URLs contain Python's list representation.
+            try:
+                value = ast.literal_eval(value)
+            except (ValueError, SyntaxError, RecursionError):
+                raise ValueError("quarters must be a list of year/quarter objects") from None
+    if not isinstance(value, list):
+        raise ValueError("quarters must be a list of year/quarter objects")
+    result = []
+    for item in value:
+        if not isinstance(item, dict):
+            raise ValueError("Invalid quarter entry")
+        year, quarter = item.get("year"), item.get("quarter")
+        if isinstance(year, bool) or not (isinstance(year, int) or isinstance(year, str) and year.isdigit() and len(year) == 4):
+            raise ValueError("Invalid quarter year")
+        year = int(year)
+        if not 1 <= year <= 9998 or quarter not in ("Q1", "Q2", "Q3", "Q4"):
+            raise ValueError("Invalid quarter year or quarter")
+        result.append({"year": year, "quarter": quarter})
+    return sorted(result, key=lambda x: (x["year"], x["quarter"]))
+
 
 def application_volume_by_product_current_quarter_all_submitted_apps_pie(start_date,end_date,params):
     ecaTrackingCodeFilter = CorBFilter(params.get("eCATrackingCode", "All"))
@@ -19,10 +51,7 @@ def application_volume_by_product_current_quarter_all_submitted_apps_pie(start_d
         }
 
 def get_custom_quarterly_analytics_common_app_table(start_date, end_date, params):
-    quarters = params.get("quarters", [])
-    
-    # Sort quarters by year and quarter
-    quarters.sort(key=lambda x: (x['year'], x['quarter']))
+    quarters = parse_quarters(params.get("quarters", []))
 
 
     productColumn = " SUM(NumLendingProducts + NumDepositProducts) as data"
@@ -138,10 +167,7 @@ def get_custom_quarterly_analytics_common_app_table(start_date, end_date, params
 
 
 def get_custom_quarterly_analytics_customer_eCA_table(start_date, end_date, params):
-    quarters = params.get("quarters", [])
-    
-    # Sort quarters by year and quarter
-    quarters.sort(key=lambda x: (x['year'], x['quarter']))
+    quarters = parse_quarters(params.get("quarters", []))
 
     ecaTrackingCodeFilter = CorBFilter(params.get("eCATrackingCode", "All"))
     common_filters = [excludeBotData, startedApps, ecaTrackingCodeFilter, application_type_filter("Online") ]
@@ -177,10 +203,7 @@ def get_custom_quarterly_analytics_customer_eCA_table(start_date, end_date, para
     return resp
 
 def get_custom_quarterly_analytics_inBranch_common_app_table(start_date, end_date, params):
-    quarters = params.get("quarters", [])
-    
-    # Sort quarters by year and quarter
-    quarters.sort(key=lambda x: (x['year'], x['quarter']))
+    quarters = parse_quarters(params.get("quarters", []))
 
     ecaTrackingCodeFilter = CorBFilter(params.get("eCATrackingCode", "All"))
     common_filters = [excludeBotData, startedApps, ecaTrackingCodeFilter, application_type_filter("Banker Assisted") ]

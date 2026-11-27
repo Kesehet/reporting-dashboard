@@ -94,7 +94,7 @@ def log_unique_url(name, params):
                 pass  # Leave as-is if not a valid date
 
     base_url = f"/charts/{name}"
-    query_string = urlencode(params)
+    query_string = urlencode({k: _pyjson.dumps(v) if isinstance(v, (list, dict)) else v for k, v in params.items()})
     full_url = f"{base_url}?{query_string}"
 
     if full_url not in logged_urls:
@@ -245,6 +245,14 @@ def charts(name):
 
         # Get chart data from the database
         resp = getChartData(name, transactions, start_date, end_date, params=params)
+        if isinstance(resp, dict) and (resp.get("status") == "error" or resp.get("error")):
+            # Keep the historical unknown-chart response contract, without caching errors.
+            app.logger.warning("Chart returned an error (chart=%s)", name)
+            if resp.get("message") == "No Charts specified.":
+                return jsonify(resp), 200
+            return jsonify(resp), 502
+        if resp is None or isinstance(resp, str):
+            raise TypeError("Invalid chart response type: " + type(resp).__name__)
         if csv_requested:
             # Export raw values: showComma display formatting corrupts numeric CSV.
             try:
@@ -266,6 +274,7 @@ def charts(name):
             "chartName": name,
             "stackTrace": traceback.format_exc()
         }
+        app.logger.exception("Error while fetching chart data (chart=%s, path=%s)", name, request.path)
         print(f"Error while fetching chart data: {str(e)}")
         return jsonify(resp), 500
 
@@ -663,7 +672,7 @@ if __name__ == "__main__":
             "DB", "authentication", "charts", "csvLoader", "decrypt_tools",
             "helper.crypto_rotation", "report_modules.oppiq", "usage_analytics", "sqlite3",
             "flask", "flask_cors", "waitress", "pyodbc",
-            "pandas", "openpyxl", "Crypto", "cryptography", "jwt", "ldap3",
+            "pandas", "openpyxl", "Crypto", "cryptography", "jwt", "ldap3", "typing_extensions",
         )
         for module in required_modules:
             importlib.import_module(module)

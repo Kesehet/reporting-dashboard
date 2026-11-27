@@ -51,6 +51,7 @@ update_metrics("cache_gen_error", f"Starting to generate cache for {len(urls)}."
 
 
 ctr = 0
+failed = 0
 # Ping each URL and collect the response
 for url_path in urls:
     ctr += 1
@@ -59,15 +60,22 @@ for url_path in urls:
     try:
         response = requests.get(full_url, headers={'X-API-KEY': API_KEY_SECRET, 'X-Usage-Source': 'cache-generator'} if API_KEY_SECRET else {}, timeout=60)
         response.raise_for_status()
+        if "application/json" in response.headers.get("Content-Type", ""):
+            payload = response.json()
+            if isinstance(payload, dict) and (payload.get("error") or payload.get("status") == "error"):
+                raise ValueError("Chart returned an error response")
         update_metrics("cache_gen_error", f"Generated cache for {ctr}/{len(urls)}.")
     except Exception as e:
+        failed += 1
         update_metrics("cache_gen_error", str(e))
 
 
 
 print(f"Completed requests to {len(urls)} URLs.")
 update_metrics("cache_gen", f"ended {datetime.now().isoformat()}")
-update_metrics("cache_gen_error", f"No Error. Cached {len(urls)} URLs. ")
+update_metrics("cache_gen_error", f"Cached {len(urls) - failed}/{len(urls)} URLs; {failed} failed.")
+if failed:
+    raise SystemExit(1)
 
 
 
