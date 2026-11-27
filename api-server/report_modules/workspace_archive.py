@@ -16,42 +16,83 @@ from report_modules.transaction_timeline import (
     merge_job_transactions, build_timeline,
 )
 
-ARCHIVE = "[DigitalReport].[dbo].[WorkspaceTimelineArchive]"
-INDEX = "[DigitalReport].[dbo].[WorkspaceTimelineIndex]"
+TABLE = "[DigitalReport].[dbo].[WorkspaceExtract]"
+LEGACY_ARCHIVE = "[DigitalReport].[dbo].[WorkspaceTimelineArchive]"
+ARCHIVE_KEY = "_reportingTimelineArchive"
 JOB_FIELDS = list(dict.fromkeys(JOB_ATTRIBUTES + ["timeCreated", "timeFinished", "properties", "txns.properties"]))
 TXN_FIELDS = list(dict.fromkeys(TXN_ATTRIBUTES + ["properties"]))
 PAGE_SIZE = 100
 
 
 def ensure_archive(connection):
+    """Validate the existing table only; no new tables or columns are required."""
     cursor = connection.cursor()
     try:
-        cursor.execute(f"""
-            IF OBJECT_ID('{ARCHIVE}', 'U') IS NULL
-            BEGIN
-                CREATE TABLE {ARCHIVE} (
-                    jobRefNumber NVARCHAR(128) NOT NULL,
-                    snapshotHash CHAR(64) NOT NULL,
-                    capturedAt DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME(),
-                    payload NVARCHAR(MAX) NOT NULL,
-                    PRIMARY KEY (jobRefNumber, snapshotHash)
-                );
-            END;
-            IF OBJECT_ID('{INDEX}', 'U') IS NULL
-            BEGIN
-                CREATE TABLE {INDEX} (
-                    trackingCode NVARCHAR(128) NOT NULL,
-                    jobRefNumber NVARCHAR(128) NOT NULL,
-                    PRIMARY KEY (trackingCode, jobRefNumber)
-                );
-            END;
-        """)
-        connection.commit()
-    except Exception:
-        connection.rollback()
-        raise
+        cursor.execute(f"SELECT TOP 0 trackingCode,currentQueue,assignedTo,formName,timeCreated,jobRefNumber,dump FROM {TABLE}")
     finally:
         cursor.close()
+
+
+def decode_dump(value):
+    if value is None or value == "":
+        return [], []
+    data = json.loads(value) if isinstance(value, str) else value
+    if not isinstance(data, list) or any(not isinstance(item, dict) for item in data):
+        raise ValueError("Workspace dump is not a JSON transaction array")
+    rows, snapshots = [], []
+    for item in data:
+        item = dict(item)
+        metadata = item.pop(ARCHIVE_KEY, [])
+        if not isinstance(metadata, list):
+            raise ValueError("Invalid Workspace archive metadata")
+        snapshots.extend(metadata)
+        if item:
+            rows.append(item)
+    return rows, snapshots
+
+
+def encode_dump(rows, snapshots):
+    data = [dict(row) for row in rows]
+    if snapshots:
+        if not data:
+            data.append({})
+        data[0][ARCHIVE_KEY] = snapshots
+    return json.dumps(data, ensure_ascii=False, separators=(",", ":"))
+
+
+def merge_raw_rows(old, new):
+    """Keep existing XML/properties; update returned values and accumulate notes."""
+    rows = [dict(item) for item in old]
+    for item in new:
+        item = dict(item)
+        item.pop(ARCHIVE_KEY, None)
+        code = item.get("trackingCode")
+        key = item.get("submitKey")
+        candidates = [row for row in rows if
+                      (code and row.get("trackingCode") == code) or
+                      (key and row.get("submitKey") == key and
+                       (not code or not row.get("trackingCode") or row["trackingCode"] == code))]
+        if len(candidates) != 1:
+            if item not in rows:
+                rows.append(item)
+            continue
+        target = candidates[0]
+        for field, value in item.items():
+            if field == "comments":
+                existing = records(target.get(field))
+                target[field] = existing + [n for n in records(value) if n not in existing]
+            elif isinstance(value, dict) and isinstance(target.get(field), dict):
+                target[field] = {**target[field], **{k: v for k, v in value.items() if v is not None}}
+            elif value is not None and value != "" and value != []:
+                target[field] = value
+    return rows
+
+
+def merge_workspace_dump(existing, incoming):
+    """Used by the old WorkspaceExtract writer so it cannot erase archive data."""
+    old, snapshots = decode_dump(existing)
+    new, _ = decode_dump(incoming)
+    return encode_dump(merge_raw_rows(old, new), snapshots)
 
 
 def valid_code(value):
@@ -64,36 +105,105 @@ def linked_ref(txn):
     return ref if valid_code(ref) else None
 
 
-def save_snapshot(connection, ref, job):
+def _local_datetime(value):
+    if not isinstance(value, str):
+        return None
+    try:
+        return datetime.fromisoformat(value.replace("Z", "+00:00")).replace(tzinfo=None)
+    except ValueError:
+        return None
+
+
+def save_snapshot(connection, ref, job, *, captured_at=None):
     if not valid_code(ref):
         raise ValueError("Invalid archive reference")
+    job = dict(job)
+    job["jobRefNumber"] = ref
     payload = json.dumps(job, sort_keys=True, ensure_ascii=False, separators=(",", ":"))
     digest = hashlib.sha256(payload.encode("utf-8")).hexdigest()
-    aliases = {ref} | {t["trackingCode"] for t in records(job.get("txns")) if valid_code(t.get("trackingCode"))}
+    captured = captured_at or datetime.now(timezone.utc).isoformat()
+    txns = {t["trackingCode"]: t for t in records(job.get("txns")) if valid_code(t.get("trackingCode"))}
+    # A job reference need not be an actual transaction. Anchor on a real
+    # transaction whenever possible; job-only records use the reference.
+    anchor = ref if ref in txns or not txns else min(txns)
+    codes = sorted(set(txns) | {anchor})
     cursor = connection.cursor()
     try:
-        # Key-range locks make concurrent daily/manual archive runs idempotent.
-        cursor.execute(f"SELECT 1 FROM {ARCHIVE} WITH (UPDLOCK,HOLDLOCK) WHERE jobRefNumber=? AND snapshotHash=?",
-                       (ref, digest))
-        inserted = cursor.fetchone() is None
-        if inserted:
-            cursor.execute(f"INSERT INTO {ARCHIVE} (jobRefNumber,snapshotHash,payload) VALUES (?,?,?)",
-                           (ref, digest, payload))
-        for code in sorted(aliases):
-            cursor.execute(f"""
-                INSERT INTO {INDEX} (trackingCode,jobRefNumber)
-                SELECT ?,? WHERE NOT EXISTS (
-                    SELECT 1 FROM {INDEX} WITH (UPDLOCK,HOLDLOCK)
-                    WHERE trackingCode=? AND jobRefNumber=?
-                )
-            """, (code, ref, code, ref))
+        locked = {}
+        for code in codes:
+            cursor.execute(f"SELECT dump,jobRefNumber FROM {TABLE} WITH (UPDLOCK,HOLDLOCK) WHERE trackingCode=?", (code,))
+            row = cursor.fetchone()
+            old, snapshots = decode_dump(row[0] if row else None)
+            if row and row[1] and row[1] not in (ref, code):
+                raise ValueError("Workspace tracking code belongs to a different job")
+            locked[code] = (row, old, snapshots)
+        if any(s.get("hash") == digest for s in locked[anchor][2]):
+            connection.commit()
+            return False
+        for code in codes:
+            row, old, snapshots = locked[code]
+            current = txns.get(code, {})
+            if current:
+                # Migration of an old snapshot must not overwrite current raw fields.
+                old = merge_raw_rows([current], old) if captured_at else merge_raw_rows(old, [current])
+            if code == anchor:
+                snapshots.append({"hash": digest, "capturedAt": captured, "job": job})
+            dump = encode_dump(old, snapshots)
+            fields = (current.get("formStatus"), current.get("userLoginName"),
+                      current.get("formName"), _local_datetime(current.get("timeCreated")), ref, dump)
+            if row:
+                # Backfilled snapshots fill missing columns but do not roll
+                # current status or assignment back to an earlier date.
+                columns = ("currentQueue", "assignedTo", "formName", "timeCreated")
+                updates = ",".join(f"{col}=COALESCE({col},?)" if captured_at
+                                   else f"{col}=COALESCE(?,{col})" for col in columns)
+                cursor.execute(f"""
+                    UPDATE {TABLE} SET {updates},jobRefNumber=?,dump=?
+                    WHERE trackingCode=?
+                """, fields + (code,))
+            else:
+                cursor.execute(f"""
+                    INSERT INTO {TABLE} (currentQueue,assignedTo,formName,timeCreated,jobRefNumber,dump,trackingCode)
+                    VALUES (?,?,?,?,?,?,?)
+                """, fields + (code,))
         connection.commit()
-        return inserted
+        return True
     except Exception:
         connection.rollback()
         raise
     finally:
         cursor.close()
+
+
+def migrate_previous_archive(connection):
+    """Copy any snapshots written by the previous release; never drop old tables."""
+    cursor = connection.cursor()
+    try:
+        cursor.execute(f"SELECT OBJECT_ID('{LEGACY_ARCHIVE}', 'U')")
+        exists = cursor.fetchone()
+    finally:
+        cursor.close()
+    if not exists or exists[0] is None:
+        return
+    last_ref, last_hash = "", ""
+    while True:
+        cursor = connection.cursor()
+        try:
+            cursor.execute(f"""
+                SELECT TOP 100 jobRefNumber,snapshotHash,capturedAt,payload
+                FROM {LEGACY_ARCHIVE}
+                WHERE jobRefNumber > ? OR (jobRefNumber = ? AND snapshotHash > ?)
+                ORDER BY jobRefNumber,snapshotHash
+            """, (last_ref, last_ref, last_hash))
+            rows = cursor.fetchall()
+        finally:
+            cursor.close()
+        if not rows:
+            return
+        for ref, digest, captured, payload in rows:
+            save_snapshot(connection, ref, json.loads(payload),
+                          captured_at=captured.isoformat() + "Z")
+        last_ref, last_hash = rows[-1][0], rows[-1][1]
 
 
 def scan_txns(workspace, start, end):
@@ -182,6 +292,7 @@ def archive_workspace_history(sql, txn=None, *, report_error=None):
         if not sql.connection:
             raise RuntimeError("Reporting database connection unavailable.")
         ensure_archive(sql.connection)
+        migrate_previous_archive(sql.connection)
         workspace = WorkspaceExtract(setup_table=False)
         if not workspace.login():
             raise WorkspaceReportError("Workspace archive sign-in failed.")
@@ -222,50 +333,45 @@ def archive_workspace_history(sql, txn=None, *, report_error=None):
 
 
 def read_archive(connection, code):
-    """Return a merged history across retained snapshots, even after source purge."""
+    """Resolve related tracking codes using the existing jobRefNumber column."""
     cursor = connection.cursor()
     try:
-        cursor.execute(f"IF OBJECT_ID('{INDEX}', 'U') IS NULL SELECT 0 ELSE SELECT 1")
-        if not cursor.fetchone()[0]:
-            return None
-        cursor.execute(f"SELECT jobRefNumber FROM {INDEX} WHERE trackingCode=?", (code,))
-        refs = [row[0] for row in cursor.fetchall()]
-        if len(refs) != 1:
-            return None
-        ref = refs[0]
-        cursor.execute(f"SELECT capturedAt,payload FROM {ARCHIVE} WHERE jobRefNumber=? ORDER BY capturedAt ASC,snapshotHash ASC",
-                       (ref,))
+        cursor.execute(f"SELECT jobRefNumber FROM {TABLE} WHERE trackingCode=?", (code,))
+        direct = cursor.fetchone()
+        ref = direct[0] if direct and valid_code(direct[0]) else code
+        cursor.execute(f"SELECT trackingCode,dump FROM {TABLE} WHERE jobRefNumber=? OR trackingCode=?", (ref, ref))
         rows = cursor.fetchall()
         if not rows:
             return None
         job = {"jobRefNumber": ref, "txns": [], "comments": [], "steps": []}
-        transactions = {}
-        notes = []
-        for captured, payload in rows:
-            snapshot = json.loads(payload)
+        snapshots = {}
+        for row_code, dump in rows:
+            raw, saved = decode_dump(dump)
+            # Legacy dumps can contain several related forms. Include only
+            # proven members of the selected application.
+            related = [t for t in raw if t.get("trackingCode") == row_code
+                       or transaction_ref(t) == ref or t.get("trackingCode") == ref]
+            job["txns"] = merge_raw_rows(job["txns"], related)
+            for entry in saved:
+                if isinstance(entry, dict) and isinstance(entry.get("job"), dict):
+                    if entry["job"].get("jobRefNumber") == ref:
+                        snapshots.setdefault(entry["hash"], entry)
+        ordered = sorted(snapshots.values(), key=lambda s: s.get("capturedAt") or "")
+        for entry in ordered:
+            snapshot = entry["job"]
             if snapshot.get("status"):
                 job["status"] = snapshot["status"]
             if snapshot.get("steps"):
                 job["steps"] = snapshot["steps"]
             for note in records(snapshot.get("comments")):
-                if note not in notes:
-                    notes.append(note)
-            for txn in records(snapshot.get("txns")):
-                key = txn.get("trackingCode") or txn.get("submitKey")
-                if not key:
-                    continue
-                previous = transactions.setdefault(key, {})
-                combined_notes = records(previous.get("comments"))
-                for note in records(txn.get("comments")):
-                    if note not in combined_notes:
-                        combined_notes.append(note)
-                previous.update({k: v for k, v in txn.items() if v is not None and v != "" and v != []})
-                previous["comments"] = combined_notes
-        job["txns"] = list(transactions.values())
-        job["comments"] = notes
+                if note not in job["comments"]:
+                    job["comments"].append(note)
+            job["txns"] = merge_raw_rows(job["txns"], records(snapshot.get("txns")))
         result = build_timeline(job)
+        if not result["transactions"] and not result["application_comments"]:
+            return None
         result["source"] = "archive"
-        result["archived_at"] = rows[-1][0].isoformat() + "Z"
+        result["archived_at"] = ordered[-1].get("capturedAt") if ordered else None
         return result
     finally:
         cursor.close()

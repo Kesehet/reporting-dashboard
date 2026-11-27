@@ -930,43 +930,56 @@ class WorkspaceExtract:
             print("SQL Error: ", e)
     
     def save_to_db(self, all_data, raw_data):
+        from report_modules.workspace_archive import merge_workspace_dump
         print("Saving workspace data to DB...")
-        for data in all_data:
+        sql = SQLConn()
+        try:
+            sql.connect()
+            if not sql.connection:
+                raise RuntimeError("Workspace database connection unavailable")
+            cursor = sql.connection.cursor()
             try:
-                sql = SQLConn()
-                sql.connect()
-                txn = Transaction(sql)
-                query = """
-                    MERGE INTO WorkspaceExtract AS target
-                    USING (VALUES (?, ?, ?, ?, ?, ?, ?)) AS source (trackingCode, currentQueue, assignedTo, formName, timeCreated, jobRefNumber, dump)
-                    ON (target.trackingCode = source.trackingCode)
-                    WHEN MATCHED THEN
-                        UPDATE SET
-                            currentQueue = source.currentQueue,
-                            assignedTo = source.assignedTo,
-                            formName = source.formName,
-                            timeCreated = source.timeCreated,
-                            jobRefNumber = source.jobRefNumber,
-                            dump = source.dump
-                    WHEN NOT MATCHED THEN
-                        INSERT (trackingCode, currentQueue, assignedTo, formName, timeCreated, jobRefNumber, dump)
-                        VALUES (source.trackingCode, source.currentQueue, source.assignedTo, source.formName, source.timeCreated, source.jobRefNumber, source.dump);
-                """
-                txn.sql_conn.connection.execute(query, 
-                                                (
-                                                    data.get("tracking_code"), 
-                                                    data.get("current_queue"), 
-                                                    data.get("assigned_to"), 
-                                                    data.get("form_name"), 
-                                                    data.get("time_created"), 
-                                                    data.get("job_ref_number"),
-                                                    json.dumps(raw_data)
-                                                    )
-                                                )
-                txn.sql_conn.connection.commit()
-                sql.disconnect()
-            except Exception as e:
-                print("SQL Error: ", e)
+                for data in sorted(all_data, key=lambda item: item.get("tracking_code") or ""):
+                    code = data.get("tracking_code")
+                    if not code:
+                        continue
+                    cursor.execute("""
+                        SELECT dump,jobRefNumber FROM [DigitalReport].[dbo].[WorkspaceExtract]
+                        WITH (UPDLOCK,HOLDLOCK) WHERE trackingCode=?
+                    """, (code,))
+                    existing = cursor.fetchone()
+                    dump = merge_workspace_dump(existing[0] if existing else None, raw_data)
+                    ref = data.get("job_ref_number")
+                    if existing and existing[1] and (not ref or ref == code):
+                        ref = existing[1]
+                    fields = (data.get("current_queue"), data.get("assigned_to"),
+                              data.get("form_name"), data.get("time_created"), ref, dump, code)
+                    if existing:
+                        cursor.execute("""
+                            UPDATE [DigitalReport].[dbo].[WorkspaceExtract] SET
+                                currentQueue=COALESCE(?,currentQueue),
+                                assignedTo=COALESCE(?,assignedTo),
+                                formName=COALESCE(?,formName),
+                                timeCreated=COALESCE(?,timeCreated),
+                                jobRefNumber=COALESCE(?,jobRefNumber),dump=?
+                            WHERE trackingCode=?
+                        """, fields)
+                    else:
+                        cursor.execute("""
+                            INSERT INTO [DigitalReport].[dbo].[WorkspaceExtract]
+                            (currentQueue,assignedTo,formName,timeCreated,jobRefNumber,dump,trackingCode)
+                            VALUES (?,?,?,?,?,?,?)
+                        """, fields)
+                sql.connection.commit()
+            except Exception:
+                sql.connection.rollback()
+                raise
+            finally:
+                cursor.close()
+        except Exception as exc:
+            logger.warning("Workspace SQL save failed: %s", type(exc).__name__)
+        finally:
+            sql.disconnect()
 
     def get_value(self, tracking_code: str) -> list:
         sql = SQLConn()
