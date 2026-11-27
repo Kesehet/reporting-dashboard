@@ -15,18 +15,11 @@
 .application-timeline { background: #f6f8fc; border: 1px solid #dce4ee; border-radius: 8px; padding: 1rem; text-align: left; white-space: normal; color: #24364a; }
 .application-timeline h3 { color: #003975; margin: 0 0 .75rem; }
 .application-timeline__meta { color: #52657a; }
-.application-timeline__steps { list-style: none; margin: 0; padding: 0 0 0 1rem; border-left: 2px solid #cbd8e8; }
-.application-timeline__step { margin: .5rem 0; }
-.application-timeline__step details { background: #fff; border: 1px solid #dce4ee; border-radius: 6px; padding: .65rem; }
-.application-timeline__step summary { display: flex; gap: .75rem; align-items: center; cursor: pointer; flex-wrap: wrap; }
-.application-timeline__step summary::before { content: '▸'; color: #003975; }
-.application-timeline__step details[open] summary::before { content: '▾'; }
-.application-timeline__number, .application-timeline__code { color: #fff; background: #003975; padding: .25rem .6rem; border-radius: 1rem; font-size: .75rem; white-space: nowrap; }
-.application-timeline__number.is-complete { background: #4b7e24; }
-.application-timeline__heading { display: grid; gap: .25rem; flex: 1 1 12rem; }
+.application-timeline__code { color: #fff; background: #003975; padding: .25rem .6rem; border-radius: 1rem; font-size: .75rem; white-space: nowrap; }
 .application-timeline small { color: #536477; font-size: .75rem; }
-.application-timeline__counts { margin-left: auto; white-space: nowrap; }
-.application-timeline__task { margin: .65rem 0 .25rem 1rem; background: #f3f6fa; border: 1px solid #dce4ee; border-radius: 6px; padding: .75rem; display: flex; gap: .5rem; align-items: center; flex-wrap: wrap; }
+.application-timeline__task { margin: .65rem 0 .25rem; background: #f3f6fa; border: 1px solid #dce4ee; border-radius: 6px; padding: .75rem; display: flex; gap: .5rem; align-items: center; flex-wrap: wrap; }
 .application-timeline__task > small, .application-timeline__task > .application-timeline__comment { flex: 1 1 100%; }
 .application-timeline__comment { margin: .4rem 0; padding: .5rem .6rem; border-left: 2px solid #cbd8e8; overflow-wrap: anywhere; white-space: pre-wrap; }
 .application-timeline__comment > small { display: block; margin-bottom: .25rem; }
+
+.application-timeline__history { display: grid; gap: .25rem; }

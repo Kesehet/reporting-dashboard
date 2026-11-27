@@ -1,14 +1,13 @@
 """Read-only, on-demand application timeline from Journey Manager Workspaces."""
 import re
+from datetime import datetime, timezone
 
 from flask import Blueprint, current_app, jsonify, request
 from requests import RequestException, Timeout
 
 from authentication import unauthorized, verify_microsoft_token, verify_token
 from role_filter import all_groups
-from report_modules.manual_review import (
-    REVIEW_STEPS, WorkspaceReportError, normalized, query_jobs, workflow_decision,
-)
+from report_modules.manual_review import WorkspaceReportError, query_jobs
 
 timeline_api = Blueprint("transaction_timeline", __name__)
 CODE = re.compile(r"[A-Za-z0-9_-]{1,128}")
@@ -84,110 +83,55 @@ def action_matches(txn, actions):
     return False
 
 
-def resolve_task_steps(job, steps, txns):
-    """Prefer the task-owning action; later actions may reference the same submission."""
-    actions = [records(step.get("jobActions") or step.get("actions")) for step in steps]
-    matches = []
-    for txn in txns:
-        owners = [
-            i for i, group in enumerate(actions) if action_matches(txn, [
-                a for a in group if normalized(a.get("type")) in {"job form start", "job task assign"}
-            ])
-        ]
-        direct = [i for i, group in enumerate(actions) if action_matches(txn, group)]
-        matches.append(owners or direct)
-
-    # Workspace versions may omit submission identifiers or repeat them in wait actions.
-    # Only resolve a fallback when both the workflow step and the task are unique.
-    starts = [i for i, s in enumerate(steps)
-              if normalized(s.get("type")) == "start" or normalized(s.get("name")) in {"start", "application start"}]
-    reviews = [i for i, s in enumerate(steps) if normalized(s.get("name")) in REVIEW_STEPS]
-    reference = job.get("jobRefNumber")
-    primary = [i for i, t in enumerate(txns) if reference and t.get("trackingCode") == reference]
-    review = [i for i, t in enumerate(txns) if i not in primary and (
-        normalized(t.get("groupName")) == "manual review" or normalized(t.get("taskType")) == "review"
-    )]
-    for candidates, targets in ((primary, starts), (review, reviews)):
-        if len(candidates) != 1 or len(targets) != 1:
-            continue
-        task, step = candidates[0], targets[0]
-        if len(matches[task]) != 1 and (not matches[task] or step in matches[task]):
-            if not any(m == [step] for i, m in enumerate(matches) if i != task):
-                matches[task] = [step]
-    return matches
+def event_time(value):
+    if not isinstance(value, str):
+        return datetime.min.replace(tzinfo=timezone.utc)
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        return parsed.astimezone(timezone.utc) if parsed.tzinfo else datetime.min.replace(tzinfo=timezone.utc)
+    except ValueError:
+        return datetime.min.replace(tzinfo=timezone.utc)
 
 
 def build_timeline(job):
-    """Keep source step order, including repeated names and zero-task steps.
+    """One entry per related transaction, with its actual comments.
 
-    Prefer explicit submission/action identifiers, then unique application/review
-    ownership evidence. Ambiguous tasks and comments remain separately visible.
+    Workflow steps are not displayed or inferred. Use explicit comment identifiers
+    only; comments without a proven transaction owner remain application notes.
     """
-    steps = records(job.get("steps"))
-    txns = records(job.get("txns"))
-    job_comments = records(job.get("comments"))
-    links = []
-    for step in steps:
-        actions = records(step.get("jobActions") or step.get("actions"))
-        keys = {a["jobActionKey"] for a in actions if a.get("jobActionKey")}
-        links.append(keys)
+    txns = [dict(t) for t in records(job.get("txns"))]
+    notes = records(job.get("comments"))
+    actions = [a for step in records(job.get("steps"))
+               for a in records(step.get("jobActions") or step.get("actions"))]
+    for step in records(job.get("steps")):
+        notes.extend(records(step.get("comments")))
+    application_notes = []
+    for note in notes:
+        ids = identifiers(note)
+        key = note.get("jobActionKey")
+        matching_actions = [a for a in actions if key and a.get("jobActionKey") == key]
+        owners = [t for t in txns if ids & identifiers(t)
+                  or (key and key == t.get("jobActionKey"))
+                  or action_matches(t, matching_actions)]
+        if len(owners) == 1:
+            txn = owners[0]
+            txn["comments"] = unique_comments(records(txn.get("comments")) + [note])
+        else:
+            application_notes.append(note)
 
-    matches = resolve_task_steps(job, steps, txns)
-    mapped = [[txn for txn, indices in zip(txns, matches) if indices == [i]]
-              for i in range(len(steps))]
-    comment_matches = []
-    for note in job_comments:
-        note_ids = {note[k] for k in ("trackingCode", "submitKey") if note.get(k)}
-        found = []
-        for i, step in enumerate(steps):
-            task_ids = set().union(*(identifiers(t) for t in mapped[i]))
-            if (note.get("jobActionKey") in links[i] or note_ids & task_ids
-                    or (note.get("jobStep") and note["jobStep"] == step.get("name"))):
-                found.append(i)
-        comment_matches.append(found)
-
-    result = []
-    for i, step in enumerate(steps):
-        actions = records(step.get("jobActions") or step.get("actions"))
-        def route(record):
-            return next((record[k] for k in ("routeResult", "result", "stepResult", "actionResult", "route")
-                         if isinstance(record.get(k), str) and record[k].strip()), None)
-
-        outcome = route(step) or next((route(a) for a in reversed(actions) if route(a)), None)
-        if not outcome and normalized(step.get("status")) == "completed":
-            if normalized(step.get("name")) in REVIEW_STEPS:
-                inferred = workflow_decision(steps, i)
-                if inferred:
-                    outcome = {"Approved": "Approve", "Denied": "Deny"}[inferred] + " (inferred)"
-            elif (normalized(step.get("type")) == "start" or
-                  normalized(step.get("name")) in {"start", "application start"}):
-                next_step = step.get("nextStep")
-                if isinstance(next_step, str) and next_step.strip():
-                    outcome = next_step + " (next step)"
-                elif i + 1 < len(steps) and normalized(steps[i + 1].get("status")) in {"completed", "in progress"}:
-                    next_name = text_value(steps[i + 1].get("name"))
-                    if next_name:
-                        outcome = next_name + " (inferred)"
-        time = step.get("timeCreated") or next(
-            (a.get("timeActionExecuted") for a in actions if a.get("timeActionExecuted")), None)
-        tasks = [task_view(t) for t in mapped[i]]
-        notes = comments(step.get("comments")) + comments(
-            [n for n, indices in zip(job_comments, comment_matches) if indices == [i]])
-        # Some deployments repeat task comments at job level.
-        task_notes = [n for task in tasks for n in task["comments"]]
-        notes = [n for n in unique_comments(notes) if n not in task_notes]
-        result.append({
-            "sequence": i + 1, "name": text_value(step.get("name")),
-            "status": text_value(step.get("status")), "time": text_value(time),
-            "result": text_value(outcome), "tasks": tasks, "comments": notes,
-        })
+    transactions = [task_view(t) for t in txns]
+    for txn in transactions:
+        txn["comments"] = unique_comments(txn["comments"])
+        txn["comments"].sort(key=lambda n: event_time(n["time"]), reverse=True)
+    transactions.sort(key=lambda t: event_time(t["created"] or t["updated"]), reverse=True)
+    existing_notes = [n for txn in transactions for n in txn["comments"]]
+    application_notes = [n for n in unique_comments(comments(application_notes)) if n not in existing_notes]
+    application_notes.sort(key=lambda n: event_time(n["time"]), reverse=True)
     return {
         "job_reference": text_value(job.get("jobRefNumber")),
         "status": text_value(job.get("status")),
-        "steps": result,
-        "unassigned_tasks": [task_view(t) for t, indices in zip(txns, matches) if len(indices) != 1],
-        "unassigned_comments": unique_comments(comments(
-            [n for n, indices in zip(job_comments, comment_matches) if len(indices) != 1])),
+        "transactions": transactions,
+        "application_comments": application_notes,
     }
 
 
@@ -197,7 +141,7 @@ def transaction_ref(txn):
 
 
 def merge_job_transactions(job, additional, action_records=()):
-    """Combine proven members before resolving steps, preserving comments and keys."""
+    """Combine proven job members, preserving comments and identifiers."""
     ref = job.get("jobRefNumber")
     txns = [dict(t) for t in records(job.get("txns"))]
     for txn in additional:
@@ -322,24 +266,10 @@ def load_timeline(workspace, code):
         if missing:
             resolved = lookup_submissions(workspace, missing)
             job["txns"] = merge_job_transactions(job, resolved, actions)
-        timeline = build_timeline(job)
-        # Counts only: no applicant data, comments, tracking codes or submission keys in logs.
-        timeline["mapping_diagnostics"] = {
-            "version": 3,
-            "steps": len(timeline["steps"]),
-            "transactions": len(job["txns"]),
-            "transactions_with_submit_key": sum(bool(t.get("submitKey")) for t in job["txns"]),
-            "missing_action_submissions": len(missing_submission_keys(job, job["txns"])),
-            "mapped_tasks": sum(len(s["tasks"]) for s in timeline["steps"]),
-            "unassigned_tasks": len(timeline["unassigned_tasks"]),
-        }
-        return timeline
+        return build_timeline(job)
     if actual_refs:
         raise WorkspaceReportError("The related workflow was not returned by Journey Manager.")
-    return {
-        "job_reference": None, "status": None, "steps": [],
-        "unassigned_tasks": [task_view(t) for t in txns], "unassigned_comments": [],
-    }
+    return build_timeline({"txns": txns})
 
 
 @timeline_api.after_request
