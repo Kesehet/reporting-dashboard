@@ -295,7 +295,13 @@ def transaction_timeline():
     from DB import WorkspaceExtract
     workspace = WorkspaceExtract(setup_table=False)
     try:
-        return jsonify(load_timeline(workspace, code))
+        live = load_timeline(workspace, code)
+        if not live["transactions"] and not live["application_comments"]:
+            from report_modules.workspace_archive import archived_history
+            saved = archived_history(code)
+            if saved:
+                return jsonify(saved)
+        return jsonify(live)
     except Timeout:
         return jsonify(error="Journey Manager timed out. Retry the timeline."), 504
     except WorkspaceReportError as exc:

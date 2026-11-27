@@ -13,6 +13,7 @@ from authentication import unauthorized, verify_token
 from csvLoader import update_JMExtracts
 from DB import SQLConn, Transaction
 from post_process import ensure_properties_table, process_dds_amounts
+from report_modules.workspace_archive import archive_workspace_history
 
 post_processing = Blueprint("post_processing", __name__, url_prefix="/post-processing")
 _run_lock = Lock()
@@ -24,7 +25,7 @@ def _dds(sql, txn, report_error):
     process_dds_amounts(sql, txn, report_error=report_error)
 
 
-_TASKS = {"dds-amount": _dds, "jm-extract": update_JMExtracts}
+_TASKS = {"dds-amount": _dds, "jm-extract": update_JMExtracts, "workspace-archive": archive_workspace_history}
 
 
 def _now():

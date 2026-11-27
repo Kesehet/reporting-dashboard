@@ -87,6 +87,7 @@ export default function ApplicationTimeline({ trackingCode }) {
             : !data ? <p role="status">Loading application timeline...</p>
             : <>
                 {data.job_reference && <p className="application-timeline__meta">Job: {data.job_reference} | {data.status || 'Status unavailable'}</p>}
+                {data.source === "archive" && <p className="application-timeline__meta">Archived SQL history · Last captured {dateLabel(data.archived_at)}</p>}
                 {!entries.length && <p>No related transactions or comments were returned.</p>}
                 <div className="application-timeline__history">
                     {entries.map((entry, index) => entry.task

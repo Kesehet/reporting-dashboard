@@ -116,8 +116,8 @@ class ExtractTests(unittest.TestCase):
             frozen_datetime.now.return_value = fixed_now
             self.assertTrue(application.update_JMExtract(FakeSql(), "B-42"))
         payload = request.call_args.kwargs["data"]
-        self.assertEqual(JM_RETENTION_DAYS, 15)
-        self.assertEqual(payload["setStartDate"], "2026-10-08T12:00:00 MDT")
+        self.assertEqual(JM_RETENTION_DAYS, 7)
+        self.assertEqual(payload["setStartDate"], "2026-10-16T12:00:00 MDT")
         self.assertEqual(payload["setEndDate"], "2026-10-23T12:00:00 MDT")
 
     @patch.object(application, "get_env_value")
@@ -303,6 +303,7 @@ class BatchExtractorTests(unittest.TestCase):
             "SQLConn": FakeConnection,
             "Transaction": lambda sql: object(),
             "update_JMExtracts": lambda sql, txn: ["B"],
+            "archive_workspace_history": lambda sql, txn: None,
             "get_metrics": lambda: {"manual_xml_pull_summary": status},
             "update_metrics": lambda k, v: markers.__setitem__(k, v),
         })
