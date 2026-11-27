@@ -5,6 +5,7 @@ import { Button } from 'primereact/button';
 import '../../Styles/transactionLogger.css';
 import ChartCard from './ChartCard';
 import FNBDataTable from './FNBDataTable';
+import ApplicationTimeline from './ApplicationTimeline';
 
 const TransactionLogger = ({ dates, requestedTransactions = [] }) => {
     const [requestedTxnInput, setRequestedTxnInput] = useState(
@@ -87,7 +88,8 @@ const TransactionLogger = ({ dates, requestedTransactions = [] }) => {
                         </h2>
                         <p>{startDate} through {endDate}</p>
                         <FNBDataTable key={JSON.stringify(tableParams)} data="Transaction Logger"
-                            extraParams={tableParams} styleNow={{ width: '100%' }} />
+                            extraParams={tableParams} styleNow={{ width: '100%' }}
+                            rowDetails={row => <ApplicationTimeline trackingCode={row.tracking_code} />} />
                     </section>
                 </div>
             }

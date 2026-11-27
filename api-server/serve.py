@@ -17,6 +17,7 @@ import os
 from DB import SQLConn, Transaction
 from report_modules.oppiq import oppiq_api, save_oppiq_csv
 from report_modules.manual_review import manual_review_api
+from report_modules.transaction_timeline import timeline_api
 from waitress import serve
 import sched
 import time
@@ -50,6 +51,7 @@ app.register_blueprint(crypto_api)
 app.register_blueprint(authentication)
 app.register_blueprint(oppiq_api)
 app.register_blueprint(manual_review_api)
+app.register_blueprint(timeline_api)
 app.register_blueprint(post_processing)
 install_usage_analytics(app)
 CSV_FOLDER_REPORT = 'uploads/report'
