@@ -8,6 +8,7 @@ from datetime import datetime, timedelta
 from report_modules.condition_utils import get_date_filter
 from collections import defaultdict
 from post_process import post_process_txns
+from report_modules.workspace_archive import archive_workspace_history
 from metrics import update_metrics, get_metrics
 from utils import process_account_number
 import random
@@ -615,12 +616,24 @@ def run_scheduled_job():
     update_metrics("scheduled_csv_push", f"started {datetime.now().isoformat()}")
     csv_error = None
     jm_error = None
+    workspace_error = None
     try:
         # JM must still run if CSV loading or post-processing fails.
         get_csv(run_jm=False)
     except Exception as exc:
         csv_error = exc
         print(f"Scheduled CSV load failed: {type(exc).__name__}: {exc}")
+
+    # Run the Workspace archive independently even if CSV loading failed.
+    sql = SQLConn()
+    try:
+        sql.connect()
+        archive_workspace_history(sql, Transaction(sql))
+    except Exception as exc:
+        workspace_error = exc
+        print(f"Scheduled Workspace archive failed: {type(exc).__name__}")
+    finally:
+        sql.disconnect()
 
     sql = SQLConn()
     try:
@@ -637,14 +650,14 @@ def run_scheduled_job():
     finally:
         sql.disconnect()
 
-    if csv_error or jm_error:
+    if csv_error or jm_error or workspace_error:
         update_metrics("scheduled_csv_push", f"failed {datetime.now().isoformat()}")
         print("Daily run incomplete; no completion marker written. Next invocation may retry.")
         return 1
 
     # This marker must never be written before RawData extraction completes.
     with open(today_file, "w", encoding="utf-8") as marker:
-        marker.write(f"CSV and JM extraction completed at {datetime.now().isoformat()}\n")
+        marker.write(f"CSV, JM and Workspace extraction completed at {datetime.now().isoformat()}\n")
     update_metrics("scheduled_csv_push", f"ended {datetime.now().isoformat()}")
     print(f"Daily CSV and JM extract completed: {today_file}")
     return 0

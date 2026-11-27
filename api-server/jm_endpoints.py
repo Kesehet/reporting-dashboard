@@ -12,9 +12,8 @@ from config import get_env_value
 _FLUENT_PATH = "/secure/rest/fluentapi"
 _MANAGER_FLUENT_PATH = "/manager" + _FLUENT_PATH
 
-# Journey Manager purges transactions after 15 days. Keep request and
-# candidate windows aligned with the source retention limit.
-JM_RETENTION_DAYS = 15
+# Source retention is seven days in this deployment.
+JM_RETENTION_DAYS = 7
 
 
 def _configured_url(base_url=None):

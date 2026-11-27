@@ -5,6 +5,7 @@ import sessionHeaders from '../Services/sessionHeaders';
 const tasks = {
     'dds-amount': 'DDS Amount',
     'jm-extract': 'JM Extract Table',
+    'workspace-archive': 'Workspace Archive',
 };
 
 const statuses = {
@@ -82,7 +83,7 @@ export default function PostProcessingTab() {
                     </button>
                 ))}
             </div>
-            <p>DDS Amount uses the existing DDS eligibility rules. JM Extract Table fills missing extracts within the Journey Manager retention window. These jobs use their own scope.</p>
+            <p>DDS Amount uses the existing DDS eligibility rules. JM Extract Table fills missing extracts within the Journey Manager retention window. Workspace Archive preserves related transactions and comments before source expiry. These jobs use their own scope.</p>
             {loadingError && <p role="alert">{loadingError}</p>}
             {startError && <p role="alert">{startError}</p>}
             <h3>Recent runs</h3>

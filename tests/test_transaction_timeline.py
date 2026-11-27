@@ -1,4 +1,4 @@
-"""Synthetic workflow fixtures; no Journey Manager credentials or network needed."""
+"""Synthetic transaction history fixtures; no Journey Manager credentials or network needed."""
 from pathlib import Path
 import sys
 import unittest
@@ -9,53 +9,56 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "api-server"))
 from report_modules.transaction_timeline import build_timeline, load_timeline, merge_job_transactions
 
 
-
 class TransactionTimelineTests(unittest.TestCase):
-    def test_timeline_preserves_steps_and_links_comments(self):
+    def test_all_transactions_are_shown_with_their_comments_in_time_order(self):
         job = {
-            "jobRefNumber": "C-ROOT", "status": "Completed",
-            "steps": [
-                {"name": "Start", "status": "Completed", "jobActions": [{"submission": "s1"}]},
-                {"name": "Review Application", "status": "Completed", "jobActions": [
-                    {"submission": "s2", "jobActionKey": "a2", "result": "Deny"}]},
-                {"name": "Decline Application", "status": "Completed"},
-                {"name": "Decline Application Complete", "status": "Completed"},
-            ],
+            "jobRefNumber": "C-ROOT", "status": "In Progress",
+            "steps": [{"name": "Start"}, {"name": "Approve Application"}, {"name": "LOS Submitted"}],
             "txns": [
-                {"submitKey": "s2", "trackingCode": "C-REVIEW", "comments": [{"message": "Review note"}]},
-                {"submitKey": "s1", "trackingCode": "C-ROOT"},
-                {"submitKey": "unknown", "trackingCode": "C-OTHER"},
+                {"trackingCode": "C-ROOT", "timeCreated": "2026-11-23T21:03:00-05:00"},
+                {"trackingCode": "C-REVIEW", "groupName": "Loans Approved",
+                 "timeCreated": "2026-11-27T15:24:00-05:00",
+                 "comments": [{"message": "Review note", "timeAdded": "2026-11-27T16:17:00-05:00"}]},
+                {"trackingCode": "C-LOS", "groupName": "LOS Submitted",
+                 "formStatus": "Assigned", "timeCreated": "2026-11-27T16:17:00-05:00"},
+                {"trackingCode": "C-ADDRESS", "timeCreated": "2026-11-27T15:24:00-05:00"},
             ],
-            "comments": [{"jobActionKey": "a2", "message": "Step note"}, {"message": "General note"}],
         }
         result = build_timeline(job)
-        assert [s["sequence"] for s in result["steps"]] == [1, 2, 3, 4]
-        review = result["steps"][1]
-        assert review["result"] == "Deny"
-        assert review["tasks"][0]["tracking_code"] == "C-REVIEW"
-        assert review["tasks"][0]["comments"][0]["message"] == "Review note"
-        assert review["comments"][0]["message"] == "Step note"
-        assert result["steps"][2]["tasks"] == []
-        assert result["unassigned_tasks"][0]["tracking_code"] == "C-OTHER"
-        assert result["unassigned_comments"][0]["message"] == "General note"
+        self.assertNotIn("steps", result)
+        self.assertNotIn("unassigned_tasks", result)
+        self.assertEqual([t["tracking_code"] for t in result["transactions"]],
+                         ["C-LOS", "C-REVIEW", "C-ADDRESS", "C-ROOT"])
+        self.assertEqual(result["transactions"][1]["comments"][0]["message"], "Review note")
+        self.assertEqual(result["transactions"][1]["comments"][0]["time"], "2026-11-27T16:17:00-05:00")
 
-
-    def test_repeated_step_does_not_guess_task_or_comment(self):
-        job = {"steps": [
-            {"name": "Review", "jobActions": [{"submission": "same"}]},
-            {"name": "Review", "jobActions": [{"submission": "same"}]},
-        ], "txns": [{"submitKey": "same", "trackingCode": "C-TASK"}],
-            "comments": [{"jobStep": "Review", "message": "Ambiguous"}]}
+    def test_comments_are_attached_only_to_explicit_owner(self):
+        job = {
+            "steps": [{"jobActions": [{"jobActionKey": "a", "submission": "s2"}]}],
+            "txns": [{"trackingCode": "C-ROOT", "submitKey": "s1"},
+                     {"trackingCode": "C-TASK", "submitKey": "s2", "comments": [{"message": "Task note"}]}],
+            "comments": [{"jobActionKey": "a", "message": "Action note"},
+                         {"trackingCode": "C-ROOT", "message": "Root note"},
+                         {"message": "Application note"}],
+        }
         result = build_timeline(job)
-        assert all(not step["tasks"] and not step["comments"] for step in result["steps"])
-        assert result["unassigned_tasks"][0]["tracking_code"] == "C-TASK"
-        assert result["unassigned_comments"][0]["message"] == "Ambiguous"
+        root, task = result["transactions"]
+        self.assertEqual([n["message"] for n in root["comments"]], ["Root note"])
+        self.assertEqual([n["message"] for n in task["comments"]], ["Task note", "Action note"])
+        self.assertEqual([n["message"] for n in result["application_comments"]], ["Application note"])
+
+    def test_duplicate_application_copy_does_not_repeat_task_note(self):
+        note = {"message": "Same note", "timeAdded": "2026-11-23T09:00:00-05:00"}
+        result = build_timeline({"txns": [{"trackingCode": "C-TASK", "comments": [note, note]}],
+                                 "comments": [note]})
+        self.assertEqual(len(result["transactions"][0]["comments"]), 1)
+        self.assertEqual(result["application_comments"], [])
 
     def test_task_code_resolves_parent_job_and_requests_comments(self):
         workspace = Mock(base_url="https://workspace.example")
         responses = [
             {"result": [{"trackingCode": "C-TASK", "job": {"jobRefNumber": "C-ROOT"}}], "totalCount": 1},
-            {"result": [{"jobRefNumber": "C-ROOT", "steps": [{"name": "Start"}]}], "totalCount": 1},
+            {"result": [{"jobRefNumber": "C-ROOT", "txns": [{"trackingCode": "C-ROOT"}]}], "totalCount": 1},
         ]
         workspace.session.post.side_effect = [
             SimpleNamespace(status_code=200, json=lambda payload=payload: payload)
@@ -63,86 +66,29 @@ class TransactionTimelineTests(unittest.TestCase):
         ]
         result = load_timeline(workspace, "C-TASK")
         self.assertEqual(result["job_reference"], "C-ROOT")
+        self.assertEqual({t["tracking_code"] for t in result["transactions"]}, {"C-TASK", "C-ROOT"})
         query = workspace.session.post.call_args_list[-1].kwargs["json"]
         self.assertIn("txns.comments", query["attributes"])
         self.assertIn("'C-ROOT'", query["filters"][0]["criteria"][0])
 
-    def test_comment_timestamp_uses_workspace_time_added(self):
-        result = build_timeline({"steps": [{"name": "Review", "jobActions": [{"submission": "a"}]}],
-            "txns": [{"submitKey": "a", "comments": [{"message": "Note", "timeAdded": "2026-11-23T09:00:00-05:00"}]}]})
-        self.assertEqual(result["steps"][0]["tasks"][0]["comments"][0]["time"], "2026-11-23T09:00:00-05:00")
-
-    def test_live_shape_without_submission_links(self):
-        job = {
-            "jobRefNumber": "C-ROOT",
-            "steps": [
-                {"name": "Start", "status": "Completed"},
-                {"name": "Review Application", "status": "Completed"},
-                {"name": "Decline Application", "status": "Completed"},
-                {"name": "Decline Application Complete", "status": "Completed"},
-            ],
-            "txns": [
-                {"trackingCode": "C-ROOT", "formName": "Consumer Loans"},
-                {"trackingCode": "C-TASK", "groupName": "Manual Review", "comments": [{"message": "Synthetic note"}]},
-            ],
-        }
-        result = build_timeline(job)
-        start, review, decline, complete = result["steps"]
-        self.assertEqual(start["tasks"][0]["tracking_code"], "C-ROOT")
-        self.assertEqual(review["tasks"][0]["tracking_code"], "C-TASK")
-        self.assertEqual(review["tasks"][0]["comments"][0]["message"], "Synthetic note")
-        self.assertEqual(review["result"], "Deny (inferred)")
-        self.assertEqual(start["result"], "Review Application (inferred)")
-        self.assertFalse(decline["tasks"])
-        self.assertFalse(complete["tasks"])
-        self.assertFalse(result["unassigned_tasks"])
-
-    def test_owner_action_wins_over_reused_submission(self):
-        result = build_timeline({
-            "steps": [
-                {"name": "Review Application", "jobActions": [
-                    {"type": "Job Task Assign", "submission": {"submitKey": "a"}},
-                    {"type": "Job Task Wait", "routeResult": "Deny"},
-                ]},
-                {"name": "Decline Application", "jobActions": [
-                    {"type": "Job Task Wait", "submission": "a"},
-                ]},
-            ],
-            "txns": [{"submitKey": "a", "trackingCode": "C-TASK"}],
-        })
-        self.assertEqual(result["steps"][0]["tasks"][0]["tracking_code"], "C-TASK")
-        self.assertEqual(result["steps"][0]["result"], "Deny")
-        self.assertFalse(result["steps"][1]["tasks"])
-
-    def test_multiple_review_tasks_or_steps_remain_unassigned(self):
-        job = {"steps": [{"name": "Review Application", "status": "Completed"}],
-               "txns": [{"groupName": "Manual Review", "trackingCode": "C-A"},
-                        {"groupName": "Manual Review", "trackingCode": "C-B"}]}
-        self.assertEqual(len(build_timeline(job)["unassigned_tasks"]), 2)
-        job["steps"].append({"name": "Review Application", "status": "Completed"})
-        job["txns"].pop()
-        self.assertEqual(len(build_timeline(job)["unassigned_tasks"]), 1)
-
-    def test_merge_before_mapping_preserves_submission_key_and_notes(self):
+    def test_merge_preserves_keys_and_notes_and_excludes_other_jobs(self):
         job = {"jobRefNumber": "C-ROOT",
-               "steps": [{"name": "Review", "jobActions": [{"submission": "review-key"}]}],
                "txns": [{"trackingCode": "C-TASK", "comments": [{"message": "Note"}]}]}
         job["txns"] = merge_job_transactions(job, [
             {"trackingCode": "C-TASK", "submitKey": "review-key", "job": {"jobRefNumber": "C-ROOT"}},
             {"trackingCode": "C-OTHER", "job": {"jobRefNumber": "C-OTHER"}},
         ])
         result = build_timeline(job)
-        self.assertEqual(result["steps"][0]["tasks"][0]["tracking_code"], "C-TASK")
-        self.assertEqual(result["steps"][0]["tasks"][0]["comments"][0]["message"], "Note")
-        self.assertFalse(result["unassigned_tasks"])
+        self.assertEqual(len(result["transactions"]), 1)
+        self.assertEqual(result["transactions"][0]["tracking_code"], "C-TASK")
+        self.assertEqual(result["transactions"][0]["comments"][0]["message"], "Note")
 
-    def test_missing_submission_resolved_from_action_before_mapping(self):
+    def test_missing_submission_is_retained_without_step_mapping(self):
         workspace = Mock(base_url="https://workspace.example")
         responses = [
             {"result": [{"trackingCode": "C-ROOT", "job": {"jobRefNumber": "C-ROOT"}}], "totalCount": 1},
             {"result": [{"jobRefNumber": "C-ROOT", "steps": [
-                {"name": "Start"},
-                {"name": "Other Review", "jobActions": [{"submission": "review-key"}]},
+                {"name": "Review", "jobActions": [{"submission": "review-key"}]},
             ]}], "totalCount": 1},
             {"result": [{"trackingCode": "C-TASK", "submitKey": "review-key",
                          "comments": [{"message": "Note"}]}], "totalCount": 1},
@@ -152,9 +98,6 @@ class TransactionTimelineTests(unittest.TestCase):
             for payload in responses
         ]
         result = load_timeline(workspace, "C-ROOT")
-        self.assertEqual(result["steps"][0]["tasks"][0]["tracking_code"], "C-ROOT")
-        self.assertEqual(result["steps"][1]["tasks"][0]["tracking_code"], "C-TASK")
-        self.assertEqual(result["mapping_diagnostics"]["mapped_tasks"], 2)
-        self.assertFalse(result["unassigned_tasks"])
+        self.assertEqual({t["tracking_code"] for t in result["transactions"]}, {"C-ROOT", "C-TASK"})
         query = workspace.session.post.call_args_list[-1].kwargs["json"]
         self.assertEqual(query["filters"][0]["criteria"], ["submitKey IN ('review-key')"])

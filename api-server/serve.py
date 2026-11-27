@@ -161,6 +161,13 @@ def charts(name):
             g.usage_cache = 'miss'
             try:
                 result = search_txn(params, None, None, name == "Transaction Logger Recent Txns")
+                if name == "Transaction Logger":
+                    from report_modules.workspace_archive import supplement_exact_search
+                    codes = [code.strip() for code in str(params.get("tracking_codes") or "").split(",") if code.strip()]
+                    try:
+                        result = supplement_exact_search(result, codes)
+                    except Exception as exc:
+                        app.logger.warning("Workspace archive lookup failed: %s", type(exc).__name__)
                 response = jsonify(result)
                 response.headers["Cache-Control"] = "private, no-store"
                 return response
