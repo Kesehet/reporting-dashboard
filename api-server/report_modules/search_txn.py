@@ -6,7 +6,7 @@ from cache_manager import get_cached_item, set_cached_item, clear_all_cache,  ca
 from utils import *
 import json
 import os
-from time import time
+import time
 from typing import Any, Dict, Optional
 import hashlib
 import requests
@@ -37,19 +37,20 @@ class FluentAPIBase:
 
 
 
-    def make_request(self, url, data, retries=3, delay=2, debug = False, method="POST", is_fluent_api=True):
+    def make_request(self, url, data, retries=3, delay=2, debug = False, method="POST", is_fluent_api=True, use_cache=True):
         
         url = self.base_url + url
         if not is_fluent_api:
             url = url.replace("/fluentapi","")
 
         cache_dir = "jm_cache"     
-        os.makedirs(cache_dir, exist_ok=True)
+        if use_cache:
+            os.makedirs(cache_dir, exist_ok=True)
         
         cache_key = json.dumps([method, url, self.username, data], sort_keys=True)
         filepath = os.path.join(cache_dir, hashlib.sha256(cache_key.encode("utf-8")).hexdigest() + ".json")
 
-        if os.path.exists(filepath):         
+        if use_cache and os.path.exists(filepath):         
             if debug:             
                 print(f"Loading cached response: {filepath}")         
 
@@ -75,8 +76,9 @@ class FluentAPIBase:
 
                 r = json.loads(r)
 
-                with open(filepath, "w", encoding="utf-8") as f:               
-                    json.dump(r, f, indent=2)
+                if use_cache:
+                    with open(filepath, "w", encoding="utf-8") as f:
+                        json.dump(r, f, indent=2)
                 
                 return r
                 
@@ -114,38 +116,35 @@ class FluentAPITransactionSearch:
         all_possible_results = []
         tracking_codes = {}
         seen_ids = set()
-        intervals = get_list_of_days_between(start_date, end_date)
+        # Exact tracking codes are independent of form, status and date filters.
+        # Do not even construct date intervals for this search.
+        intervals = [None] if tracking_code else get_list_of_days_between(start_date, end_date)
         for interval in intervals:
-            if isinstance(interval['start_date'], datetime):
-                start_dt = interval['start_date']
-            else:
-                start_dt = datetime.strptime(interval['start_date'], "%Y-%m-%d") if interval['start_date'] else datetime.now()
-
-            if isinstance(interval['end_date'], datetime):
-                end_dt = interval['end_date']
-            else:
-                end_dt = datetime.strptime(interval['end_date'], "%Y-%m-%d") if interval['end_date'] else datetime.now()
-
-            startDate = start_dt.replace(hour=0, minute=0, second=0, microsecond=0)
-            endDate = end_dt.replace(hour=23, minute=59, second=59, microsecond=0)
-
-
-
-            base_payload = {
-                "setStartDate": startDate.isoformat().split(".")[0] + " MDT",
-                "setEndDate": endDate.isoformat().split(".")[0] + " MDT",
-                "withFormXml": "false" if just_tracking_code else "true",
-            }
-            if tracking_code:            
+            base_payload = {"withFormXml": "false" if just_tracking_code else "true"}
+            if tracking_code:
                 base_payload["setTrackingCode"] = tracking_code
                 base_payload["setFetchLimit"] = "1"
             else:
-                base_payload["setFormCode"] = form_code
-                base_payload["setFetchLimit"] = "100"
-                base_payload["hasProperty"] = "Fatal Error"
+                def parse_date(value):
+                    if isinstance(value, datetime):
+                        return value
+                    return datetime.strptime(value, "%Y-%m-%d") if value else datetime.now()
+
+                start_dt = parse_date(interval["start_date"])
+                end_dt = parse_date(interval["end_date"])
+                startDate = start_dt.replace(hour=0, minute=0, second=0, microsecond=0)
+                endDate = end_dt.replace(hour=23, minute=59, second=59, microsecond=0)
+                base_payload.update({
+                    "setStartDate": startDate.isoformat().split(".")[0] + " MDT",
+                    "setEndDate": endDate.isoformat().split(".")[0] + " MDT",
+                    "setFormCode": form_code,
+                    "setFetchLimit": "100",
+                    "hasProperty": "Fatal Error",
+                })
+            request_options = {"use_cache": False} if tracking_code else {}
 
             direct_payloads = self.client.make_request(
-                '/txnquery/listValues', data =base_payload , retries=1, delay=2
+                '/txnquery/listValues', data=base_payload, retries=1, delay=2, **request_options
                 )
 
             payloads = [direct_payloads]
@@ -172,6 +171,8 @@ class FluentAPITransactionSearch:
                 for txn in payload:
                     if not isinstance(txn, dict):
                         raise TransactionSearchError("Journey Manager returned an invalid transaction")
+                    if tracking_code and str(txn.get("trackingCode", "")).upper() != tracking_code.upper():
+                        continue
                     txn_id = txn.get("id")
                     if not txn_id:
                         raise TransactionSearchError("Transaction payload did not include an id")
@@ -196,7 +197,7 @@ class FluentAPITransactionSearch:
                 
                 property_response = self.client.make_request(
                     '/txnquery/firstValue', 
-                    data = {"setId": str(txn_id), "withPropertyMap": True}, retries=1, delay=2)
+                    data = {"setId": str(txn_id), "withPropertyMap": True}, retries=1, delay=2, **request_options)
                 
                 result["properties"] = property_response.get("propertyMap",{})
 
@@ -234,7 +235,7 @@ class FluentAPITransactionSearch:
                 
 
                 result["aa_call"] = self.client.make_request(
-                        f'/transactions/v1/{txn_id}', method="GET", retries=1, delay=2, data={}, debug=False, is_fluent_api=False
+                        f'/transactions/v1/{txn_id}', method="GET", retries=1, delay=2, data={}, debug=False, is_fluent_api=False, **request_options
                     )
                 
                 result["submissionGroupNames"] = result["aa_call"].get("submissionGroupNames", "")
@@ -248,7 +249,7 @@ class FluentAPITransactionSearch:
                     }
                     job_response = self.client.make_request(
                             '/jobquery/listValues',
-                            data =job_payload, retries=1, delay=2)
+                            data =job_payload, retries=1, delay=2, **request_options)
                     result["job_query"] = job_response
                         
                 
@@ -269,9 +270,7 @@ class FluentAPITransactionSearch:
 
 def search_txn(params: Dict, start_date: str, end_date: str, just_tracking_code:bool) -> Dict[str, Any]:
     searcher = FluentAPITransactionSearch()
-    tracking_codes = params.get("tracking_codes","").replace(" ", "").split(",")
-    if not tracking_codes or tracking_codes == "":
-        tracking_codes = ['']
+    tracking_codes = list(dict.fromkeys(code.strip() for code in str(params.get("tracking_codes") or "").split(",") if code.strip())) or [""]
     form_code = params.get("form_code", "fnb-consumer")
     full_response = params.get("full_response", False)
     result = []

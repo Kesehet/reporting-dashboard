@@ -45,14 +45,10 @@ const TransactionLogger = ({ dates, requestedTransactions = [] }) => {
 
     const startDate = dates?.[0]?.toISOString().split('T')[0] ?? localStorage.getItem('start_date');
     const endDate = dates?.[1]?.toISOString().split('T')[0] ?? localStorage.getItem('end_date');
-    const tableParams = {
-        start_date: startDate,
-        end_date: endDate,
-        form_code: selectedFormCode,
-        ...(requestedTransactionFilter.length
-            ? { tracking_codes: requestedTransactionFilter.join(',') }
-            : {}),
-    };
+    const exactSearch = requestedTransactionFilter.length > 0;
+    const tableParams = exactSearch
+        ? { tracking_codes: requestedTransactionFilter.join(',') }
+        : { start_date: startDate, end_date: endDate, form_code: selectedFormCode };
 
     function loadTransactions(event) {
         event.preventDefault();
@@ -69,16 +65,14 @@ const TransactionLogger = ({ dates, requestedTransactions = [] }) => {
                             Transaction IDs
                             <InputText id="logger-tracking-codes" value={requestedTxnInput}
                                 onChange={event => setRequestedTxnInput(event.target.value)}
-                                placeholder="Comma-separated IDs" />
+                                placeholder="Tracking codes (comma-separated)" />
                         </label>
                         <label htmlFor="logger-form">
                             Journey Manager form
                             <Dropdown inputId="logger-form" value={selectedFormCode}
                                 options={formCodeOptions} onChange={event => {
                                     setSelectedFormCode(event.value);
-                                    setRequestedTransactionFilter([]);
-                                    setRequestedTxnInput('');
-                                }} />
+                                }} disabled={exactSearch || Boolean(requestedTxnInput.trim())} />
                         </label>
                         <Button type="submit" label="Load transactions" icon="pi pi-search" />
                     </form>
@@ -86,7 +80,7 @@ const TransactionLogger = ({ dates, requestedTransactions = [] }) => {
                         <h2 id="logger-results-title">
                             {requestedTransactionFilter.length ? 'Transaction search results' : 'Recent transactions'}
                         </h2>
-                        <p>{startDate} through {endDate}</p>
+                        <p>{exactSearch ? "All forms and available dates" : startDate + " through " + endDate}</p>
                         <FNBDataTable key={JSON.stringify(tableParams)} data="Transaction Logger"
                             extraParams={tableParams} styleNow={{ width: '100%' }}
                             rowDetails={row => <ApplicationTimeline trackingCode={row.tracking_code} />} />
