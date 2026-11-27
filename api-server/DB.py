@@ -1,6 +1,7 @@
 import pyodbc
 import requests
 import logging
+import re
 pyodbc.pooling = False
 from datetime import datetime
 from dateutil import parser
@@ -84,6 +85,23 @@ def safe_parse_date(value):
         return None
 
 
+def _sqlstate(error):
+    return str(error.args[0]) if error.args else ""
+
+
+def _is_deadlock(error):
+    # SQL Server explicitly rolled back the victim transaction.
+    return _sqlstate(error) == "40001" and bool(re.search(r"\b1205\b", str(error)))
+
+
+def _safe_read_query(query):
+    # Never automatically replay writes or mixed SQL batches after a lost connection.
+    return bool(re.match(r"^\s*;?\s*(SELECT|WITH)\b", query, re.I)) and not re.search(
+        r"\b(INSERT|UPDATE|DELETE|MERGE|EXEC(?:UTE)?|INTO|DROP|ALTER|CREATE|TRUNCATE|BEGIN|COMMIT|ROLLBACK)\b",
+        query, re.I
+    )
+
+
 class SQLConn:
     def __init__(self, kind="", connection_string=None ):
         self.kind = kind
@@ -105,7 +123,6 @@ class SQLConn:
                     f"DATABASE={self.database};"
                     f"Encrypt=yes;"
                     f"TrustServerCertificate=yes;"
-                    f"Connection Timeout=10;"
                 )
                 if self.user and self.password:
                     connection_string += f"UID={self.user};PWD={self.password};"
@@ -113,16 +130,62 @@ class SQLConn:
                     connection_string += "Trusted_Connection=Yes;"
             else:
                 connection_string = self.connection_string
-            self.connection = pyodbc.connect(connection_string)
+            if self.connection_string is None and not self.host:
+                logger.error("SQL configuration missing SQL_HOST (connection kind=%s)", self.kind or "default")
+                return
+            # pyodbc's timeout keyword sets SQL_ATTR_LOGIN_TIMEOUT. The
+            # previous connection-string attribute is not portable to Driver 17.
+            self.connection = pyodbc.connect(connection_string, timeout=10)
         except pyodbc.Error as e:
-            print(f"    {e}")
+            logger.error("SQL connection failed (kind=%s, SQLSTATE=%s)", self.kind or "default", _sqlstate(e))
             self.connection = None
             return
 
     def disconnect(self):
-        if self.connection:
-            self.connection.close()
-            # print("SQL Connection closed")
+        connection, self.connection = self.connection, None
+        if connection is not None:
+            try:
+                connection.close()
+            except pyodbc.Error:
+                logger.warning("SQL connection close failed (kind=%s)", self.kind or "default")
+
+    def fetch_query_rows(self, query):
+        """Read a result set, retrying only safe reads on deadlock or disconnect."""
+        safe = _safe_read_query(query)
+        deadlocks = 0
+        reconnected = False
+        while True:
+            if self.connection is None:
+                self.connect()
+            if self.connection is None:
+                raise ConnectionError("SQL Server is not connected; refusing to cache an empty result")
+            cursor = None
+            try:
+                cursor = self.connection.cursor()
+                cursor.execute(query, ())
+                rows = cursor.fetchall()
+                return cursor.description, rows
+            except pyodbc.Error as exc:
+                state = _sqlstate(exc)
+                if safe and _is_deadlock(exc) and deadlocks < 3:
+                    delay = (1, 2, 4)[deadlocks]
+                    deadlocks += 1
+                    self.connection.rollback()
+                    logger.warning("SQL deadlock; retrying read %s/3 (kind=%s)", deadlocks, self.kind or "default")
+                elif safe and state.startswith("08") and not reconnected:
+                    reconnected = True
+                    delay = 1
+                    self.disconnect()
+                    logger.warning("SQL connection lost; reconnecting for read (kind=%s)", self.kind or "default")
+                else:
+                    raise
+            finally:
+                if cursor is not None:
+                    try:
+                        cursor.close()
+                    except pyodbc.Error:
+                        pass
+            time.sleep(delay)
 
     def log_tables(self):
         if not self.connection:
@@ -464,16 +527,11 @@ class Transaction:
             query = query.replace("IN ()", "IN ('0000','00000')")
             query = query.replace("in ()", "in ('0000','00000')")
 
-        if self.sql_conn.connection is None:
-            raise ConnectionError("SQL Server is not connected; refusing to cache an empty result")
-
         resp = 0
         query_started = time.perf_counter()
         try:
-            cursor = self.sql_conn.connection.cursor()
-            cursor.execute(query, ())
-            rows = cursor.fetchall()
-            transactions = [self.row_to_dict(cursor.description, row) for row in rows]
+            description, rows = self.sql_conn.fetch_query_rows(query)
+            transactions = [self.row_to_dict(description, row) for row in rows]
 
             cleaned_resp = self.clean_response(transactions)
             if len(cleaned_resp) == 0:

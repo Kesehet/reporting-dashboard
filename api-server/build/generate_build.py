@@ -81,7 +81,7 @@ def pyinstaller_command(entry, dest, work, specs):
         sys.executable, "-m", "PyInstaller", "--noconfirm", "--clean",
         "--onefile", "--console", "--name", entry,
         "--distpath", str(dest), "--workpath", str(work),
-        "--specpath", str(specs),
+        "--specpath", str(specs), "--hidden-import", "typing_extensions",
     ]
     for package in DYNAMIC_PACKAGES:
         if importlib.util.find_spec(package) is not None:

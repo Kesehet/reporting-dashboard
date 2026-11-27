@@ -1,6 +1,8 @@
 import hashlib
 import os
 import pickle
+import tempfile
+import logging
 from datetime import timedelta, datetime
 from charts import getChartData
 from report_modules.condition_utils import LIST_OF_CHARTS
@@ -39,14 +41,16 @@ def get_cached_item(*args):
 
     # Check if the cache file existsoutlook:\\ReddyS@fnb-corp.com\Junk%20Email
     if os.path.exists(cache_file):
-        with open(cache_file, 'rb') as f:
-            cached_data, timestamp = pickle.load(f)
-        if not is_cache_expired(timestamp):
-            # Cache is valid, return the cached data
-            return cached_data
-        else:
-            # Cache is expired, remove the file
-            os.remove(cache_file)
+        try:
+            with open(cache_file, 'rb') as f:
+                cached_data, timestamp = pickle.load(f)
+            if not is_cache_expired(timestamp):
+                if not (isinstance(cached_data, dict) and
+                        (cached_data.get("error") or cached_data.get("status") == "error")):
+                    return cached_data
+            # Keep the previous file until a successful replacement.
+        except (OSError, EOFError, ValueError, TypeError, pickle.PickleError):
+            logging.getLogger(__name__).warning("Unreadable chart cache %s", cache_key)
 
     return None
 
@@ -58,9 +62,29 @@ def set_cached_item(data, *args):
     cache_key = generate_cache_key(*args)
     cache_file = get_cache_file_path(cache_key)
 
-    # Store the data and the current timestamp in the cache
-    with open(cache_file, 'wb') as f:
-        pickle.dump((data, datetime.now()), f)
+    if data is None or (isinstance(data, dict) and
+                        (data.get("error") or data.get("status") == "error")):
+        return
+    # Replace the previous cache atomically; a failed write leaves it intact.
+    temp_path = None
+    try:
+        with tempfile.NamedTemporaryFile(mode="wb", dir=CACHE_DIR,
+                                         prefix=".chart-cache-", delete=False) as f:
+            temp_path = f.name
+            pickle.dump((data, datetime.now()), f)
+            f.flush()
+            os.fsync(f.fileno())
+        from DB import replace_sql_cache
+        replace_sql_cache(temp_path, cache_file)
+        temp_path = None
+    except OSError:
+        logging.getLogger(__name__).warning("Chart cache write failed for %s", cache_key)
+    finally:
+        if temp_path:
+            try:
+                os.unlink(temp_path)
+            except OSError:
+                pass
     
 # Currently not using this function
 def clear_expired_cache():
