@@ -6,7 +6,7 @@ from types import SimpleNamespace
 from unittest.mock import Mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "api-server"))
-from report_modules.transaction_timeline import build_timeline, load_timeline
+from report_modules.transaction_timeline import build_timeline, load_timeline, merge_job_transactions
 
 
 
@@ -122,3 +122,39 @@ class TransactionTimelineTests(unittest.TestCase):
         job["steps"].append({"name": "Review Application", "status": "Completed"})
         job["txns"].pop()
         self.assertEqual(len(build_timeline(job)["unassigned_tasks"]), 1)
+
+    def test_merge_before_mapping_preserves_submission_key_and_notes(self):
+        job = {"jobRefNumber": "C-ROOT",
+               "steps": [{"name": "Review", "jobActions": [{"submission": "review-key"}]}],
+               "txns": [{"trackingCode": "C-TASK", "comments": [{"message": "Note"}]}]}
+        job["txns"] = merge_job_transactions(job, [
+            {"trackingCode": "C-TASK", "submitKey": "review-key", "job": {"jobRefNumber": "C-ROOT"}},
+            {"trackingCode": "C-OTHER", "job": {"jobRefNumber": "C-OTHER"}},
+        ])
+        result = build_timeline(job)
+        self.assertEqual(result["steps"][0]["tasks"][0]["tracking_code"], "C-TASK")
+        self.assertEqual(result["steps"][0]["tasks"][0]["comments"][0]["message"], "Note")
+        self.assertFalse(result["unassigned_tasks"])
+
+    def test_missing_submission_resolved_from_action_before_mapping(self):
+        workspace = Mock(base_url="https://workspace.example")
+        responses = [
+            {"result": [{"trackingCode": "C-ROOT", "job": {"jobRefNumber": "C-ROOT"}}], "totalCount": 1},
+            {"result": [{"jobRefNumber": "C-ROOT", "steps": [
+                {"name": "Start"},
+                {"name": "Other Review", "jobActions": [{"submission": "review-key"}]},
+            ]}], "totalCount": 1},
+            {"result": [{"trackingCode": "C-TASK", "submitKey": "review-key",
+                         "comments": [{"message": "Note"}]}], "totalCount": 1},
+        ]
+        workspace.session.post.side_effect = [
+            SimpleNamespace(status_code=200, json=lambda payload=payload: payload)
+            for payload in responses
+        ]
+        result = load_timeline(workspace, "C-ROOT")
+        self.assertEqual(result["steps"][0]["tasks"][0]["tracking_code"], "C-ROOT")
+        self.assertEqual(result["steps"][1]["tasks"][0]["tracking_code"], "C-TASK")
+        self.assertEqual(result["mapping_diagnostics"]["mapped_tasks"], 2)
+        self.assertFalse(result["unassigned_tasks"])
+        query = workspace.session.post.call_args_list[-1].kwargs["json"]
+        self.assertEqual(query["filters"][0]["criteria"], ["submitKey IN ('review-key')"])
