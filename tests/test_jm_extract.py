@@ -232,7 +232,7 @@ class BatchExtractorTests(unittest.TestCase):
         self.assertEqual(metrics["manual_xml_pull_summary"]["saved"], 1)
         self.assertEqual(metrics["manual_xml_pull_summary"]["failed"], 0)
 
-    def test_15_day_candidate_window_prioritizes_oldest_unfetched_codes(self):
+    def test_7_day_candidate_window_prioritizes_oldest_unfetched_codes(self):
         class FixedClock:
             @staticmethod
             def now():
@@ -264,7 +264,7 @@ class BatchExtractorTests(unittest.TestCase):
         sql = type("SQL", (), {"connection": object()})()
         self.assertEqual(extract(sql, FakeTxn()), ["old", "new"])
         self.assertEqual(attempted, ["old", "new"])
-        self.assertEqual(window, [("2026-10-08T12:00:00", "2026-10-23T12:00:00")])
+        self.assertEqual(window, [("2026-10-16T12:00:00", "2026-10-23T12:00:00")])
         self.assertIn("ORDER BY AppStartDate ASC", queries[0])
 
     def test_failed_candidate_query_never_claims_success(self):

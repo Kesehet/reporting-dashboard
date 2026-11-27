@@ -101,3 +101,19 @@ class TransactionTimelineTests(unittest.TestCase):
         self.assertEqual({t["tracking_code"] for t in result["transactions"]}, {"C-ROOT", "C-TASK"})
         query = workspace.session.post.call_args_list[-1].kwargs["json"]
         self.assertEqual(query["filters"][0]["criteria"], ["submitKey IN ('review-key')"])
+
+    def test_optional_submission_failure_keeps_available_transactions(self):
+        workspace = Mock(base_url="https://workspace.example")
+        workspace.session.post.side_effect = [
+            SimpleNamespace(status_code=200, json=lambda: {
+                "result": [{"trackingCode": "C-ROOT", "job": {"jobRefNumber": "C-ROOT"}}], "totalCount": 1}),
+            SimpleNamespace(status_code=200, json=lambda: {
+                "result": [{"jobRefNumber": "C-ROOT", "txns": [{"trackingCode": "C-ROOT"},
+                    {"trackingCode": "C-TASK", "comments": [{"message": "Existing note"}]}],
+                    "steps": [{"jobActions": [{"submission": "missing-key"}]}]}], "totalCount": 1}),
+            SimpleNamespace(status_code=400),
+        ]
+        result = load_timeline(workspace, "C-ROOT")
+        self.assertEqual({t["tracking_code"] for t in result["transactions"]}, {"C-ROOT", "C-TASK"})
+        task = next(t for t in result["transactions"] if t["tracking_code"] == "C-TASK")
+        self.assertEqual(task["comments"][0]["message"], "Existing note")

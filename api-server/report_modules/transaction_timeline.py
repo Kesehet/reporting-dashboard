@@ -1,5 +1,6 @@
 """Read-only, on-demand application timeline from Journey Manager Workspaces."""
 import re
+import logging
 from datetime import datetime, timezone
 
 from flask import Blueprint, current_app, jsonify, request
@@ -10,6 +11,7 @@ from role_filter import all_groups
 from report_modules.manual_review import WorkspaceReportError, query_jobs
 
 timeline_api = Blueprint("transaction_timeline", __name__)
+logger = logging.getLogger(__name__)
 CODE = re.compile(r"[A-Za-z0-9_-]{1,128}")
 JOB_ATTRIBUTES = ["jobRefNumber", "status", "steps", "comments", "txns", "txns.comments"]
 TXN_ATTRIBUTES = ["trackingCode", "submitKey", "job", "job.jobRefNumber", "formName", "formStatus",
@@ -264,8 +266,12 @@ def load_timeline(workspace, code):
         job["txns"] = merge_job_transactions(job, txns, actions)
         missing = missing_submission_keys(job, job["txns"])
         if missing:
-            resolved = lookup_submissions(workspace, missing)
-            job["txns"] = merge_job_transactions(job, resolved, actions)
+            try:
+                resolved = lookup_submissions(workspace, missing)
+                job["txns"] = merge_job_transactions(job, resolved, actions)
+            except (WorkspaceReportError, RequestException, ValueError) as exc:
+                # Optional enrichment must not hide an otherwise available job history.
+                logger.warning("Optional timeline submission lookup failed: %s", type(exc).__name__)
         return build_timeline(job)
     if actual_refs:
         raise WorkspaceReportError("The related workflow was not returned by Journey Manager.")
@@ -292,23 +298,40 @@ def transaction_timeline():
     if not CODE.fullmatch(code):
         return jsonify(error="A valid tracking code is required."), 400
 
+    def try_archive():
+        try:
+            from report_modules.workspace_archive import archived_history
+            return archived_history(code)
+        except Exception as exc:
+            current_app.logger.warning("Timeline archive lookup failed: %s", type(exc).__name__)
+            return None
+
     from DB import WorkspaceExtract
-    workspace = WorkspaceExtract(setup_table=False)
+    workspace = None
     try:
+        workspace = WorkspaceExtract(setup_table=False)
         live = load_timeline(workspace, code)
         if not live["transactions"] and not live["application_comments"]:
-            from report_modules.workspace_archive import archived_history
-            saved = archived_history(code)
+            saved = try_archive()
             if saved:
                 return jsonify(saved)
         return jsonify(live)
     except Timeout:
+        saved = try_archive()
+        if saved:
+            return jsonify(saved)
         return jsonify(error="Journey Manager timed out. Retry the timeline."), 504
     except WorkspaceReportError as exc:
+        saved = try_archive()
+        if saved:
+            return jsonify(saved)
         return jsonify(error=str(exc)), 502
     except (RequestException, ValueError, TypeError, AttributeError) as exc:
         current_app.logger.warning("Transaction timeline failed: %s", type(exc).__name__)
+        saved = try_archive()
+        if saved:
+            return jsonify(saved)
         return jsonify(error="Journey Manager could not return the application timeline."), 502
     finally:
-        if workspace.session is not None:
+        if workspace is not None and workspace.session is not None:
             workspace.session.close()
